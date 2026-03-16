@@ -45,6 +45,12 @@
 - AIOS → AgenticOS
 - 与 GitHub 仓库名称一致
 
+**08:46** - MCP Server 实现
+- 选择 MCP Server 而非 Plugin
+- 实现跨工具兼容（Claude Code、Cursor、Codex）
+- 提供 4 个核心工具和 1 个资源
+- 支持可移植和可插拔集成
+
 ### Design Philosophy Evolution
 
 **Phase 1**: 项目管理工具
@@ -61,7 +67,7 @@
 
 ### Next Evolution
 
-- 自动备份机制
-- 项目管理工具（ai-init, ai-switch）
-- MCP Server 开发
-- 跨 Agent 兼容性验证
+- MCP Server 实现完成
+- 测试跨工具兼容性（Cursor、Codex）
+- 发布到 npm
+- 编写完整使用文档

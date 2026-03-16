@@ -1,0 +1,19 @@
+meta:
+  name: "Agentic DevOps"
+  id: "agentic-devops"
+  version: "1.0.0"
+  created: "2026-03-16"
+
+agent_context:
+  quick_start: ".context/quick-start.md"
+  current_state: ".context/state.yaml"
+
+status:
+  phase: "active"
+  last_updated: "2026-03-16T08:21:00Z"
+  next_action: "探索 AI DevOps 转型路径"
+
+tech:
+  languages: ["Markdown", "YAML", "Shell"]
+  platforms: ["macOS", "GitHub", "CI/CD"]
+  tools: ["Claude Code", "Git", "Jenkins", "Kubernetes"]
