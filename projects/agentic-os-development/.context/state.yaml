@@ -14,12 +14,16 @@ working_memory:
     - "AgenticOS 已推送到 GitHub"
     - "目录已重命名为 AgenticOS"
     - "建立了完整的记录系统"
+    - "创建了设计决策、权衡分析、演进历史文档"
   decisions:
     - "元项目放在 projects/ 下（自举设计）"
     - "使用 Git + GitHub 进行版本控制"
+    - "采用分层规范（通用层 + Agent 专用层）"
+    - "建立多层记录系统（对话、日志、记忆、知识）"
   pending:
     - "设计自动备份机制"
     - "开发项目管理工具"
+    - "完善文档"
 
 loaded_context:
   - ".project.yaml"
