@@ -1,0 +1,14 @@
+# AIOS Project Registry
+# This file is maintained by AI Agents
+
+version: "1.0.0"
+last_updated: "2026-03-16T04:14:45Z"
+active_project: "ghostty-optimization"
+
+projects:
+  - id: "ghostty-optimization"
+    name: "Ghostty Optimization"
+    path: "projects/ghostty-optimization"
+    status: "active"
+    created: "2026-03-16"
+    last_accessed: "2026-03-16T04:15:45Z"

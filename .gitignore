@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Agent-specific temporary files
+.context/sessions/

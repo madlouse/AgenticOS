@@ -1,0 +1,20 @@
+meta:
+  name: "Project Name"
+  id: "project-id"
+  version: "1.0.0"
+  created: "YYYY-MM-DD"
+
+agent_context:
+  quick_start: ".context/quick-start.md"
+  current_state: ".context/state.yaml"
+  index: ".context/index.yaml"
+
+status:
+  phase: "planning"  # planning/active/paused/completed
+  last_updated: "YYYY-MM-DD"
+  next_action: "Define project goals"
+
+tech:
+  languages: []
+  platforms: []
+  tools: []
