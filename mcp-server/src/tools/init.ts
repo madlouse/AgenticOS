@@ -1,14 +1,13 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { homedir } from 'os';
 import yaml from 'yaml';
-import { loadRegistry, saveRegistry } from '../utils/registry.js';
+import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
 
 export async function initProject(args: any): Promise<string> {
   const { name, description = '', path: customPath } = args;
   const id = name.toLowerCase().replace(/\s+/g, '-');
 
-  const projectPath = customPath || join(homedir(), 'AgenticOS', 'projects', id);
+  const projectPath = customPath || join(getAgenticOSHome(), 'projects', id);
 
   // Create directory structure
   await mkdir(join(projectPath, '.context', 'conversations'), { recursive: true });
