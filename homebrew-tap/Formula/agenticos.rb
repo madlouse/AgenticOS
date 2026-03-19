@@ -53,6 +53,6 @@ class Agenticos < Formula
   end
 
   test do
-    system "#{bin}/agenticos-mcp", "--version"
+    assert_match "0.1.0", shell_output("#{bin}/agenticos-mcp --version")
   end
 end

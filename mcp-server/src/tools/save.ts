@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { loadRegistry } from '../utils/registry.js';
+import { loadRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
@@ -21,6 +21,7 @@ export async function saveState(args: any): Promise<string> {
   }
 
   const projectPath = project.path;
+  const workspaceRoot = getAgenticOSHome();
 
   try {
     // Update state.yaml with backup timestamp
@@ -33,10 +34,11 @@ export async function saveState(args: any): Promise<string> {
 
     await writeFile(statePath, yaml.stringify(state), 'utf-8');
 
-    // Git operations
-    await execAsync(`cd "${projectPath}" && git add -A`);
-    await execAsync(`cd "${projectPath}" && git commit -m "${message}" || true`);
-    await execAsync(`cd "${projectPath}" && git push || true`);
+    // Run git from the workspace root (the whole AgenticOS workspace is one repo)
+    const gitDir = `cd "${workspaceRoot}"`;
+    await execAsync(`${gitDir} && git add -A`);
+    await execAsync(`${gitDir} && git commit -m "${message}" || true`);
+    await execAsync(`${gitDir} && git push || true`);
 
     return `✅ Saved and backed up project "${project.name}"\n\nCommit: ${message}\nTimestamp: ${state.session.last_backup}`;
   } catch (error: any) {

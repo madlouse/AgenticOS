@@ -1,4 +1,23 @@
 #!/usr/bin/env node
+
+// Handle --version and --help before starting the MCP server
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log('0.1.0');
+  process.exit(0);
+}
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log('agenticos-mcp — AgenticOS MCP Server v0.1.0');
+  console.log('');
+  console.log('Usage: agenticos-mcp [--version] [--help]');
+  console.log('');
+  console.log('Runs as a stdio MCP server. Configure in your AI tool\'s mcp.json:');
+  console.log('  { "command": "agenticos-mcp", "args": [] }');
+  console.log('');
+  console.log('Environment:');
+  console.log('  AGENTICOS_HOME  Workspace root (default: ~/AgenticOS)');
+  process.exit(0);
+}
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -34,7 +53,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           name: { type: 'string', description: 'Project name' },
           description: { type: 'string', description: 'Project description' },
-          path: { type: 'string', description: 'Optional custom path (defaults to ~/AgenticOS/projects/{id})' },
+          path: { type: 'string', description: 'Optional custom path (defaults to $AGENTICOS_HOME/projects/{id}, i.e. ~/AgenticOS/projects/{id})' },
         },
         required: ['name'],
       },
