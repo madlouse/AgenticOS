@@ -1,6 +1,61 @@
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 
+/**
+ * Generate AGENTS.md for Codex CLI and other non-Claude agents.
+ * Mirrors the recording protocol from CLAUDE.md in a tool-agnostic format.
+ */
+export function generateAgentsMd(name: string, description: string): string {
+  return `# AGENTS.md — ${name}
+
+## Recording Protocol (MANDATORY)
+
+This project uses AgenticOS for persistent context management.
+All session activity MUST be recorded via MCP tools.
+
+### How to Record
+
+Call the MCP tool \`agenticos_record\` with:
+- \`summary\` (required): What happened in this session
+- \`decisions\`: Key decisions made
+- \`outcomes\`: What was accomplished
+- \`pending\`: What remains to be done
+- \`current_task\`: { title, status } to update current task
+
+### When to Record
+
+1. After completing any meaningful unit of work
+2. Before ending the session (MANDATORY — context is lost otherwise)
+
+After recording, call \`agenticos_save\` to commit to Git.
+
+### Session Start
+
+On session start, read these files for context:
+1. \`.project.yaml\` — Project metadata
+2. \`.context/state.yaml\` — Current state and working memory
+3. \`.context/conversations/\` — Previous session records
+
+Then greet the user with: project name, last progress, current pending items, suggested next step.
+
+## Project
+
+**Name**: ${name}
+**Description**: ${description || '(not set)'}
+
+## Directory Structure
+
+| Path | Purpose |
+|------|---------|
+| \`.project.yaml\` | Project metadata |
+| \`.context/state.yaml\` | Session state and working memory |
+| \`.context/conversations/\` | Session records (auto-generated) |
+| \`knowledge/\` | Persistent knowledge documents |
+| \`tasks/\` | Task tracking |
+| \`artifacts/\` | Outputs and deliverables |
+`;
+}
+
 const STATE_START = '<!-- AGENT_CONTEXT_START -->';
 const STATE_END = '<!-- AGENT_CONTEXT_END -->';
 
@@ -73,12 +128,42 @@ export function generateClaudeMd(name: string, description: string, state?: Stat
 
   return `# CLAUDE.md — ${name}
 
+## MANDATORY: Recording Protocol
+
+> This is an AgenticOS project. All session activity MUST be recorded.
+> Recording is not optional — it is the core function of this system.
+
+### During Session
+
+After completing any meaningful unit of work (feature, fix, design decision, analysis), call \`agenticos_record\`:
+
+\`\`\`
+agenticos_record({
+  summary: "what happened",
+  decisions: ["decision 1", ...],
+  outcomes: ["outcome 1", ...],
+  pending: ["next step 1", ...],
+  current_task: { title: "task name", status: "in_progress" }
+})
+\`\`\`
+
+### Before Session Ends
+
+When the user signals session end (says goodbye, thanks, done, or stops responding), you MUST:
+
+1. Call \`agenticos_record\` with a complete session summary
+2. Call \`agenticos_save\` to commit to Git
+
+**If you skip this step, all context from this session is permanently lost.**
+
+---
+
 ## Session Start Protocol
 
 When you open this project in a new session, **immediately do the following**:
 
 1. Read the "Current State" section below
-2. Greet the user with a brief status report in this format:
+2. Greet the user with a brief status report:
 
 \`\`\`
 📍 项目：${name}
@@ -117,7 +202,7 @@ ${STATE_END}
 |-----------|------|
 | \`.project.yaml\` | 项目元信息 |
 | \`.context/state.yaml\` | 当前会话状态及工作记忆 |
-| \`.context/quick-start.md\` | 项目概览 |
+| \`.context/conversations/\` | 会话记录（自动生成） |
 | \`knowledge/\` | 持久化知识文档 |
 | \`tasks/\` | 任务追踪 |
 | \`artifacts/\` | 产出物 |

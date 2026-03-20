@@ -1,10 +1,26 @@
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, access } from 'fs/promises';
 import { join, isAbsolute, relative } from 'path';
 import { homedir } from 'os';
+import { existsSync } from 'fs';
 import yaml from 'yaml';
 
+/** Resolve AGENTICOS_HOME with fallback detection */
 export function getAgenticOSHome(): string {
-  return process.env.AGENTICOS_HOME || join(homedir(), 'AgenticOS');
+  // 1. Explicit env var — highest priority
+  if (process.env.AGENTICOS_HOME) return process.env.AGENTICOS_HOME;
+
+  // 2. Default: ~/AgenticOS
+  const defaultHome = join(homedir(), 'AgenticOS');
+
+  // 3. If default doesn't have a registry, check common dev locations
+  if (!existsSync(join(defaultHome, '.agent-workspace', 'registry.yaml'))) {
+    const devHome = join(homedir(), 'dev', 'AgenticOS');
+    if (existsSync(join(devHome, '.agent-workspace', 'registry.yaml'))) {
+      return devHome;
+    }
+  }
+
+  return defaultHome;
 }
 
 /** Convert an absolute path under AGENTICOS_HOME to a relative path for storage */
@@ -22,7 +38,10 @@ export function resolvePath(storedPath: string): string {
   return join(getAgenticOSHome(), storedPath);
 }
 
-const REGISTRY_PATH = join(getAgenticOSHome(), '.agent-workspace', 'registry.yaml');
+/** Lazy registry path — evaluated at call time, not module load time */
+function getRegistryPath(): string {
+  return join(getAgenticOSHome(), '.agent-workspace', 'registry.yaml');
+}
 
 export interface Project {
   id: string;
@@ -31,6 +50,7 @@ export interface Project {
   status: 'active' | 'archived';
   created: string;
   last_accessed: string;
+  last_recorded?: string; // ISO timestamp of last agenticos_record call
 }
 
 export interface Registry {
@@ -42,7 +62,7 @@ export interface Registry {
 
 export async function loadRegistry(): Promise<Registry> {
   try {
-    const content = await readFile(REGISTRY_PATH, 'utf-8');
+    const content = await readFile(getRegistryPath(), 'utf-8');
     const raw: Registry = yaml.parse(content);
     // Resolve relative paths to absolute at load time
     raw.projects = raw.projects.map((p) => ({
@@ -71,5 +91,5 @@ export async function saveRegistry(registry: Registry): Promise<void> {
     })),
   };
   await mkdir(join(getAgenticOSHome(), '.agent-workspace'), { recursive: true });
-  await writeFile(REGISTRY_PATH, yaml.stringify(toStore), 'utf-8');
+  await writeFile(getRegistryPath(), yaml.stringify(toStore), 'utf-8');
 }

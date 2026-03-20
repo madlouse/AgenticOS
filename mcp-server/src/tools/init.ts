@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
-import { generateClaudeMd } from '../utils/distill.js';
+import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
 
 export async function initProject(args: any): Promise<string> {
   const { name, description = '', path: customPath } = args;
@@ -66,20 +66,29 @@ ${description}
 `;
   await writeFile(join(projectPath, '.context', 'quick-start.md'), quickStart, 'utf-8');
 
-  // Generate CLAUDE.md for Agent context bootstrap
+  // Generate Agent instruction files for cross-tool compatibility
   const claudeMd = generateClaudeMd(name, description);
   await writeFile(join(projectPath, 'CLAUDE.md'), claudeMd, 'utf-8');
 
-  // Update registry
+  const agentsMd = generateAgentsMd(name, description);
+  await writeFile(join(projectPath, 'AGENTS.md'), agentsMd, 'utf-8');
+
+  // Update registry (deduplicate: if project ID already exists, update it instead of adding)
   const registry = await loadRegistry();
-  registry.projects.push({
+  const existingIdx = registry.projects.findIndex((p) => p.id === id);
+  const projectEntry = {
     id,
     name,
     path: projectPath,
-    status: 'active',
+    status: 'active' as const,
     created: new Date().toISOString().split('T')[0],
     last_accessed: new Date().toISOString(),
-  });
+  };
+  if (existingIdx >= 0) {
+    registry.projects[existingIdx] = projectEntry;
+  } else {
+    registry.projects.push(projectEntry);
+  }
   registry.active_project = id;
   await saveRegistry(registry);
 

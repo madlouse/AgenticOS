@@ -26,7 +26,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, saveState } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -75,14 +75,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: 'object', properties: {} },
     },
     {
+      name: 'agenticos_record',
+      description: 'Record session activity — conversations, decisions, outcomes. Call this after completing meaningful work and before ending any session. This is how the Agent maintains project memory.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string', description: 'What happened in this session (required)' },
+          decisions: { type: 'array', items: { type: 'string' }, description: 'Key decisions made during this session' },
+          outcomes: { type: 'array', items: { type: 'string' }, description: 'What was accomplished' },
+          pending: { type: 'array', items: { type: 'string' }, description: 'What remains to be done next' },
+          current_task: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Current task title' },
+              status: { type: 'string', enum: ['in_progress', 'completed', 'blocked'], description: 'Task status' },
+            },
+            description: 'Update current task (optional)',
+          },
+        },
+        required: ['summary'],
+      },
+    },
+    {
       name: 'agenticos_save',
-      description: 'Save current state and backup to Git',
+      description: 'Commit current state to Git and push. Call after agenticos_record to persist changes.',
       inputSchema: {
         type: 'object',
         properties: {
           message: { type: 'string', description: 'Optional commit message' },
         },
       },
+    },
+    {
+      name: 'agenticos_status',
+      description: 'Show status of the active project: last recorded time, current task, pending items, recent decisions.',
+      inputSchema: { type: 'object', properties: {} },
     },
   ],
 }));
@@ -98,8 +125,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await switchProject(args) }] };
     case 'agenticos_list':
       return { content: [{ type: 'text', text: await listProjects() }] };
+    case 'agenticos_record':
+      return { content: [{ type: 'text', text: await recordSession(args) }] };
     case 'agenticos_save':
       return { content: [{ type: 'text', text: await saveState(args) }] };
+    case 'agenticos_status':
+      return { content: [{ type: 'text', text: await getStatus() }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
