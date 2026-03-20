@@ -1,26 +1,28 @@
-# AIOS Project Registry
-# This file is maintained by AI Agents
-
-version: "1.0.0"
-last_updated: "2026-03-16T08:24:00Z"
-active_project: "agentic-devops"
-
+version: 1.0.0
+last_updated: 2026-03-20T07:05:35.299Z
+active_project: agentic-os-development
 projects:
-  - id: "ghostty-optimization"
-    name: "Ghostty Optimization"
-    path: "projects/ghostty-optimization"
-    status: "active"
-    created: "2026-03-16"
-    last_accessed: "2026-03-16T04:15:45Z"
-  - id: "agentic-os-development"
-    name: "AgenticOS Development"
-    path: "projects/agentic-os-development"
-    status: "active"
-    created: "2026-03-16"
-    last_accessed: "2026-03-16T04:35:00Z"
-  - id: "agentic-devops"
-    name: "Agentic DevOps"
-    path: "projects/agentic-devops"
-    status: "active"
-    created: "2026-03-16"
-    last_accessed: "2026-03-16T08:24:00Z"
+  - id: ghostty-optimization
+    name: Ghostty Optimization
+    path: projects/ghostty-optimization
+    status: active
+    created: 2026-03-16
+    last_accessed: 2026-03-16T04:15:45Z
+  - id: agentic-os-development
+    name: AgenticOS Development
+    path: projects/agentic-os-development
+    status: active
+    created: 2026-03-16
+    last_accessed: 2026-03-20T07:04:07.050Z
+  - id: agentic-devops
+    name: Agentic DevOps
+    path: projects/agentic-devops
+    status: active
+    created: 2026-03-16
+    last_accessed: 2026-03-16T08:24:00Z
+  - id: agentic-os-development
+    name: agentic-os-development
+    path: projects/agentic-os-development
+    status: active
+    created: 2026-03-20
+    last_accessed: 2026-03-20T07:05:35.299Z

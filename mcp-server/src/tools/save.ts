@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { loadRegistry, getAgenticOSHome } from '../utils/registry.js';
+import { updateClaudeMdState } from '../utils/distill.js';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
@@ -34,13 +35,20 @@ export async function saveState(args: any): Promise<string> {
 
     await writeFile(statePath, yaml.stringify(state), 'utf-8');
 
+    // Distill state.yaml into CLAUDE.md Current State section
+    const claudeMdPath = join(projectPath, 'CLAUDE.md');
+    const distillResult = await updateClaudeMdState(claudeMdPath, state, project.name);
+    const claudeMdNote = distillResult.created
+      ? '\n📝 CLAUDE.md was auto-generated (Project DNA section needs manual enrichment)'
+      : '';
+
     // Run git from the workspace root (the whole AgenticOS workspace is one repo)
     const gitDir = `cd "${workspaceRoot}"`;
     await execAsync(`${gitDir} && git add -A`);
     await execAsync(`${gitDir} && git commit -m "${message}" || true`);
     await execAsync(`${gitDir} && git push || true`);
 
-    return `✅ Saved and backed up project "${project.name}"\n\nCommit: ${message}\nTimestamp: ${state.session.last_backup}`;
+    return `✅ Saved and backed up project "${project.name}"\n\nCommit: ${message}\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
   } catch (error: any) {
     return `⚠️ Partial save completed\n\nError: ${error.message}`;
   }

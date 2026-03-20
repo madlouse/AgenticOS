@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
+import { generateClaudeMd } from '../utils/distill.js';
 
 export async function initProject(args: any): Promise<string> {
   const { name, description = '', path: customPath } = args;
@@ -64,6 +65,10 @@ ${description}
 3. Begin development
 `;
   await writeFile(join(projectPath, '.context', 'quick-start.md'), quickStart, 'utf-8');
+
+  // Generate CLAUDE.md for Agent context bootstrap
+  const claudeMd = generateClaudeMd(name, description);
+  await writeFile(join(projectPath, 'CLAUDE.md'), claudeMd, 'utf-8');
 
   // Update registry
   const registry = await loadRegistry();

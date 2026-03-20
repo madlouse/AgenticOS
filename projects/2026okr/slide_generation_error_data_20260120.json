@@ -1,0 +1,72 @@
+{
+  "error_analysis": {
+    "timestamp": "2026-01-20T15:19:02Z",
+    "source_file": "outline_visual.md",
+    "status": "FAILED",
+    "slides_planned": 14,
+    "slides_generated": 0,
+    "slides_failed": 1,
+    "slides_pending": 13
+  },
+  "primary_error": {
+    "type": "RESOURCE_EXHAUSTED",
+    "code": 429,
+    "message": "No capacity available for model gemini-3-pro-image on the server",
+    "model": "gemini-3-pro-image",
+    "domain": "cloudcode-pa.googleapis.com"
+  },
+  "missing_assets": [
+    "assets/logo.png",
+    "--"
+  ],
+  "presentation_details": {
+    "title": "2026年度OKR汇报",
+    "subtitle": "Deep Bank维度",
+    "author": "金科研发部",
+    "visual_style": "The Glass Garden",
+    "objectives": [
+      {
+        "id": "O1",
+        "title": "DeepBank",
+        "subtitle": "Agent Native信贷超级智能体",
+        "key_results": 3
+      },
+      {
+        "id": "O2",
+        "title": "增效降本",
+        "subtitle": "AI DevOps研发新范式",
+        "key_results": 2
+      },
+      {
+        "id": "O3",
+        "title": "交付稳定性",
+        "subtitle": "高效稳定的服务",
+        "key_results": 1
+      },
+      {
+        "id": "O4",
+        "title": "组织建设",
+        "subtitle": "AI First团队",
+        "key_results": 1
+      }
+    ]
+  },
+  "recommendations": {
+    "immediate": [
+      "Wait and retry after model capacity restoration",
+      "Check alternative image generation models",
+      "Verify all required assets are present"
+    ],
+    "long_term": [
+      "Implement request queuing system",
+      "Develop fallback generation strategies",
+      "Add asset validation before generation",
+      "Set up API capacity monitoring"
+    ]
+  },
+  "file_paths": {
+    "outline": "/Users/jeking/work/01.团队管理/03.目标管理（OKR）/2026/outline_visual.md",
+    "assets": "/Users/jeking/work/01.团队管理/03.目标管理（OKR）/2026/assets/",
+    "output": "/Users/jeking/work/01.团队管理/03.目标管理（OKR）/2026/generated_slides/"
+  }
+}

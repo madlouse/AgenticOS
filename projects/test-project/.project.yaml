@@ -1,0 +1,9 @@
+meta:
+  name: test-project
+  id: test-project
+  description: Test project to verify agenticos_init functionality
+  created: 2026-03-16
+  version: 1.0.0
+agent_context:
+  quick_start: .context/quick-start.md
+  current_state: .context/state.yaml

@@ -1,20 +1,9 @@
 meta:
-  name: "AgenticOS Development"
-  id: "agentic-os-development"
-  version: "1.0.0"
-  created: "2026-03-16"
-
+  name: agentic-os-development
+  id: agentic-os-development
+  description: ""
+  created: 2026-03-20
+  version: 1.0.0
 agent_context:
-  quick_start: ".context/quick-start.md"
-  current_state: ".context/state.yaml"
-  index: ".context/index.yaml"
-
-status:
-  phase: "active"
-  last_updated: "2026-03-16T04:35:00Z"
-  next_action: "Design auto-backup mechanism"
-
-tech:
-  languages: ["YAML", "Markdown", "Shell"]
-  platforms: ["macOS", "GitHub"]
-  tools: ["Git", "gh CLI"]
+  quick_start: .context/quick-start.md
+  current_state: .context/state.yaml
