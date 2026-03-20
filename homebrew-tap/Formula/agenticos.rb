@@ -4,7 +4,7 @@ class Agenticos < Formula
   url "https://registry.npmjs.org/agenticos-mcp/-/agenticos-mcp-0.1.0.tgz"
   # brew tap madlouse/agenticos → points to github.com/madlouse/homebrew-agenticos
   # Update sha256 after publishing to npm: `curl -sL <url> | sha256sum`
-  sha256 "REPLACE_WITH_ACTUAL_SHA256"
+  sha256 "c8d3eae160a892e32837db3dcae515e843e5383fef52b8141940c8bcf8b6d59f"
   license "MIT"
   version "0.1.0"
 
