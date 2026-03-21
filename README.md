@@ -6,16 +6,19 @@ AI-native project management system for Claude Code, Cursor, Codex, and any MCP-
 
 ### Option A — Homebrew (recommended for macOS)
 
-> Note: Requires the `homebrew-agenticos` tap to be published at `github.com/madlouse/homebrew-agenticos`.
-
 ```bash
 brew tap madlouse/agenticos
 brew install agenticos
 ```
 
-### Option B — npx (no install required)
+### Option B — Manual install (from GitHub Releases)
 
-Skip installation entirely — configure your AI tool to run via npx (see MCP Config below).
+```bash
+# Download latest release
+curl -LO https://github.com/madlouse/AgenticOS/releases/latest/download/agenticos-mcp.tgz
+# Install globally
+npm install -g ./agenticos-mcp.tgz
+```
 
 ---
 
@@ -27,17 +30,6 @@ Add to your AI tool's MCP config file:
 **Cursor** — `~/.cursor/mcp.json`
 **Windsurf** — `~/.codeium/windsurf/mcp_config.json`
 
-```json
-{
-  "mcpServers": {
-    "agenticos": {
-      "command": "npx",
-      "args": ["-y", "agenticos-mcp"]
-    }
-  }
-}
-```
-
 If installed via Homebrew, use the binary directly (faster, no npx overhead):
 
 ```json
@@ -46,6 +38,19 @@ If installed via Homebrew, use the binary directly (faster, no npx overhead):
     "agenticos": {
       "command": "agenticos-mcp",
       "args": []
+    }
+  }
+}
+```
+
+If installed via npm/manual download:
+
+```json
+{
+  "mcpServers": {
+    "agenticos": {
+      "command": "npx",
+      "args": ["-y", "agenticos-mcp"]
     }
   }
 }
