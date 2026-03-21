@@ -1,6 +1,6 @@
 {
   "name": "agenticos-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP Server for AgenticOS - AI-native project management system",
   "type": "module",
   "bin": {
@@ -9,7 +9,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "lint": "tsc --noEmit",
+    "test": "echo 'No tests yet' && exit 0"
   },
   "keywords": ["mcp", "ai", "agent", "project-management"],
   "author": "",
