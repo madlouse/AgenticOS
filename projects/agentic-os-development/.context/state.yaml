@@ -2,12 +2,57 @@ session:
   id: session-2026-03-20-001
   started: 2026-03-20T07:05:35.294Z
   agent: claude-sonnet-4.6
-  last_backup: 2026-03-20T07:05:59.232Z
-current_task: null
+  last_backup: 2026-03-21T05:49:33.899Z
+current_task:
+  title: Homebrew Tap + Agent-friendly README
+  status: completed
+  updated: 2026-03-21T05:47:05.571Z
 working_memory:
-  facts: []
-  decisions: []
-  pending: []
+  facts:
+    - zsh-autosuggestions 安装完成
+    - Zed 配置部署到 ~/.config/zed/settings.json
+    - Cmux hooks 部署到 ~/.claude/hooks/cmux-notify-hook.sh
+    - .zshrc 备份到 ~/.config-backup/ghostty-opt-20260321-133433/zshrc.bak
+    - Shell 快捷函数追加完成 (cw/cc/cb/z.)
+    - Ghostty copy-on-select 改为 false
+    - "PR #8 已创建：https://github.com/madlouse/AgenticOS/pull/8（模板版本化）"
+    - distill.ts
+      新增：CURRENT_TEMPLATE_VERSION、extractTemplateVersion()、upgradeClaudeMd()、ensureVersionMarker()
+    - project.ts 新增：switchProject 时检测版本并自动升级（保留用户内容）
+    - 两个 worktree 坑：1) repo 内部 worktree 导致 commit 打 main 2) reset --hard 会
+      revert 未提交的文件
+    - "PR #6 已创建：基础设施（CLAUDE.md/AGENTS.md 修订、模板、LICENSE）"
+    - "PR #8 已创建：MCP Server 模板版本化机制"
+    - "PR #10 已创建：CI lint/test 脚本准备（workflow 文件需手动添加）"
+    - 创建 homebrew-ghostty 仓库 (https://github.com/madlouse/homebrew-ghostty)
+    - ghostty-cmux.rb Formula 完成，SHA256 已验证
+    - README.md 重写为 Agent-friendly 版本并推送
+    - brew tap madlouse/ghostty 测试成功，formula 正常解析
+    - 175 tests pass across 4 test files
+    - SKILL.md v2.5.0 with docs + calendar commands
+    - DEVELOPMENT.md updated with miniapp-cdp.js, docs.js, calendar.js,
+      calendar-parser.test.js
+    - "calendar-parser.test.js: 43 tests for calendar.js exported functions"
+  decisions:
+    - "bootstrap.sh 实际执行: 全部成功，无报错"
+    - Ghostty copy-on-select 改为 false (sed 直接修改)
+    - Worktree 应建立在 repo 外部而非内部，否则 git 命令会混淆
+    - commit 到错误分支后用 `git reset --hard HEAD~1` 撤销，但会同时 revert 文件——需重新应用变更
+    - 最终方案：在 repo 外建立独立 worktree 目录
+    - CI workflow 文件通过 GitHub API 推送需要 workflow scope，OAuth token 不够
+    - 解决方案：在 PR body 中提供 workflow 文件完整内容，用户手动添加
+    - "双仓库架构: ghostty-optimization(配置) + homebrew-ghostty(安装入口)"
+    - "Formula: ghostty-cmux.rb，自动安装 Cmux/Zed/starship 等 + 克隆配置仓库 + 运行 bootstrap"
+    - README 改为 Agent-friendly：明确安装命令、架构图、文件结构、开发状态
+    - Cmux 通过 manaflow-ai/cmux/cmux tap 安装，非直接 cask
+    - tests/helpers.test.js 中 T5T helper 函数应从 helpers.js 导入（非 t5t.js），因为
+      helpers.js 包含完整数据转换函数，t5t.js 只导出 innerText 解析函数
+    - parseCalendarDayFromText 需要 null guard 防止 null 输入导致 TypeError
+    - docs.js 由于跨域 iframe 限制，仅实现 status 动作，这是已知技术约束而非设计缺陷
+  pending:
+    - "E2E manual verification: opencli 360teams docs, opencli 360teams calendar
+      — 需要 360Teams 运行中"
+    - 如果需要，创建 docs-parser.test.js（但 docs.js 目前无可测试的导出函数）
 loaded_context:
   - .project.yaml
   - .context/quick-start.md

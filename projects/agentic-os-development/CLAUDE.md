@@ -77,14 +77,20 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-03-20T07:05:59.232Z
+**Last Updated**: 2026-03-21T05:49:33.899Z
 
-**Current Task**: No active task (status: unknown)
+**Current Task**: Homebrew Tap + Agent-friendly README (status: completed)
 
-**Active Items**: None
+**Active Items**:
+- E2E manual verification: opencli 360teams docs, opencli 360teams calendar — 需要 360Teams 运行中
+- 如果需要，创建 docs-parser.test.js（但 docs.js 目前无可测试的导出函数）
 
+**Recent Decisions**:
+- tests/helpers.test.js 中 T5T helper 函数应从 helpers.js 导入（非 t5t.js），因为 helpers.js 包含完整数据转换函数，t5t.js 只导出 innerText 解析函数
+- parseCalendarDayFromText 需要 null guard 防止 null 输入导致 TypeError
+- docs.js 由于跨域 iframe 限制，仅实现 status 动作，这是已知技术约束而非设计缺陷
 
-**Next Action**: Define next steps
+**Next Action**: E2E manual verification: opencli 360teams docs, opencli 360teams calendar — 需要 360Teams 运行中
 <!-- AGENT_CONTEXT_END -->
 
 ---
