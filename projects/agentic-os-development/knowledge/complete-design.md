@@ -188,8 +188,10 @@ Agent 读取 CLAUDE.md 触发规则
 ### Decision 3: 完整记录机制
 - 对话日志（原始）
 - 项目日志（时间线）
-- 记忆流（结构化）
+- 记忆流（结构化）— 通过 state.yaml 实现
 - 知识库（提炼）
+
+> 注: memory.jsonl 和项目级 changelog.md 已推迟到未来版本，当前 conversations/ + state.yaml + knowledge/ 构成完整的持久化方案。
 
 ### Decision 4: 智能意图识别
 - 显式命令直接执行
@@ -212,6 +214,7 @@ agenticos-mcp/
 │   ├── tools/
 │   │   ├── init.ts        # 创建项目
 │   │   ├── project.ts     # 切换/列出
+│   │   ├── record.ts      # 会话记录
 │   │   └── save.ts        # 保存备份
 │   ├── resources/
 │   │   └── context.ts     # 项目上下文
@@ -312,8 +315,8 @@ Agent: 调用 agenticos_switch → 加载上下文 → 继续工作
 ## 12. 未来演进
 
 ### 短期
-- 测试 MCP Server
-- 发布到 npm
+- ✅ MCP Server 核心完成
+- 通过 GitHub Releases + Homebrew 分发
 - 验证跨工具兼容性
 
 ### 中期
