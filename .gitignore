@@ -1,9 +1,22 @@
 # macOS
 .DS_Store
 
+# Dependencies
+node_modules/
+
+# Build output
+build/
+
+# Environment
+.env
+.env.*
+
 # Temporary files
 *.tmp
 *.log
+
+# Packages
+*.tgz
 
 # IDE
 .vscode/
