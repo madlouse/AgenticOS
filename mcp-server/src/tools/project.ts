@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, saveRegistry } from '../utils/registry.js';
-import { generateClaudeMd, generateAgentsMd, updateClaudeMdState } from '../utils/distill.js';
+import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
 
 export async function switchProject(args: any): Promise<string> {
@@ -22,45 +22,45 @@ export async function switchProject(args: any): Promise<string> {
   found.last_accessed = new Date().toISOString();
   await saveRegistry(registry);
 
-  // Auto-bootstrap: generate CLAUDE.md / AGENTS.md for legacy projects that lack them
+  // Auto-bootstrap: generate or upgrade CLAUDE.md / AGENTS.md
   const bootstrapNotes: string[] = [];
   const claudeMdPath = join(found.path, 'CLAUDE.md');
   const agentsMdPath = join(found.path, 'AGENTS.md');
 
+  let description = '';
+  let state: any = undefined;
+  try {
+    const projYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8'));
+    description = projYaml?.meta?.description || '';
+  } catch {}
+  try {
+    state = yaml.parse(await readFile(join(found.path, '.context', 'state.yaml'), 'utf-8'));
+  } catch {}
+
+  // CLAUDE.md: create if missing, upgrade if stale template version
   if (!existsSync(claudeMdPath)) {
-    // Read project metadata for description
-    let description = '';
-    try {
-      const projYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8'));
-      description = projYaml?.meta?.description || '';
-    } catch {}
-
-    // Read existing state for context
-    let state: any = undefined;
-    try {
-      state = yaml.parse(await readFile(join(found.path, '.context', 'state.yaml'), 'utf-8'));
-    } catch {}
-
-    const claudeMd = generateClaudeMd(found.name, description, state);
-    await writeFile(claudeMdPath, claudeMd, 'utf-8');
-    bootstrapNotes.push('📝 CLAUDE.md auto-generated (enrich Project DNA section when ready)');
-
-    // If state exists, sync it into CLAUDE.md
-    if (state) {
-      await updateClaudeMdState(claudeMdPath, state, found.name);
+    await writeFile(claudeMdPath, generateClaudeMd(found.name, description, state), 'utf-8');
+    bootstrapNotes.push('📝 CLAUDE.md created');
+  } else {
+    const existingContent = await readFile(claudeMdPath, 'utf-8');
+    const existingVersion = extractTemplateVersion(existingContent);
+    if (existingVersion < CURRENT_TEMPLATE_VERSION) {
+      await writeFile(claudeMdPath, upgradeClaudeMd(claudeMdPath, found.name, description, state), 'utf-8');
+      bootstrapNotes.push(`📝 CLAUDE.md upgraded: v${existingVersion} → v${CURRENT_TEMPLATE_VERSION} (user content preserved)`);
     }
   }
 
+  // AGENTS.md: create if missing, upgrade if stale
   if (!existsSync(agentsMdPath)) {
-    let description = '';
-    try {
-      const projYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8'));
-      description = projYaml?.meta?.description || '';
-    } catch {}
-
-    const agentsMd = generateAgentsMd(found.name, description);
-    await writeFile(agentsMdPath, agentsMd, 'utf-8');
-    bootstrapNotes.push('📝 AGENTS.md auto-generated (for Codex CLI compatibility)');
+    await writeFile(agentsMdPath, generateAgentsMd(found.name, description), 'utf-8');
+    bootstrapNotes.push('📝 AGENTS.md created');
+  } else {
+    const existingContent = await readFile(agentsMdPath, 'utf-8');
+    const existingVersion = extractTemplateVersion(existingContent);
+    if (existingVersion < CURRENT_TEMPLATE_VERSION) {
+      await writeFile(agentsMdPath, generateAgentsMd(found.name, description), 'utf-8');
+      bootstrapNotes.push(`📝 AGENTS.md upgraded: v${existingVersion} → v${CURRENT_TEMPLATE_VERSION}`);
+    }
   }
 
   const bootstrap = bootstrapNotes.length > 0 ? '\n\n' + bootstrapNotes.join('\n') : '';
