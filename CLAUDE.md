@@ -1,71 +1,49 @@
-# AgenticOS Development Guide
+# CLAUDE.md — AgenticOS
 
-## Repository Map
+> Read [AGENTS.md](AGENTS.md) first — it is the canonical development guide for this repository.
+> This file adds Claude Code-specific capabilities on top of it.
 
-| Directory | Purpose |
-|-----------|---------|
-| `mcp-server/` | MCP server source (TypeScript) — the core product |
-| `projects/` | User project data — **never modify in feature branches** |
-| `.meta/` | Templates and agent guides |
-| `homebrew-tap/` | Homebrew distribution formula |
-| `tools/` | Utility scripts |
+## Claude Code Workflow
 
-## Development Protocol
+### Worktree Isolation
 
-### Issue-First Rule
-Every code change requires a linked GitHub Issue. No exceptions.
-
-### Branch Naming
-`<type>/<issue-number>-<slug>`
-
-Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`
-
-Examples:
-- `feat/12-export-tool`
-- `fix/3-save-error-handling`
-
-### Workflow
-1. Create or claim a GitHub Issue
-2. Create branch from `main` following naming convention
-3. Develop in isolated worktree (`isolation: "worktree"`)
-4. Build and verify: `cd mcp-server && npm install && npm run build`
-5. Commit using Conventional Commits format
-6. Open PR referencing the issue (`Closes #N`)
-
-## Commit Convention
-
-Format: `<type>(scope): <description>`
-
-Scopes: `mcp-server`, `ci`, `docs`, `meta`
+All development MUST use isolated worktrees:
 
 ```
-feat(mcp-server): add export tool for project artifacts
-fix(mcp-server): resolve race condition in state sync
-docs: update CONTRIBUTING guide
-chore(ci): add Node 22 to test matrix
+# When spawning agents for development tasks:
+Agent(isolation: "worktree", subagent_type: "...")
 ```
 
-Footer: Always include `Closes #<issue-number>` when the PR resolves an issue.
+This creates a separate git worktree so changes never touch `main` directly.
 
-## Build & Test
+### Before Spawning Sub-Agents
+
+Sub-agents start with no project context. Before spawning, read and inject:
+1. This file (`CLAUDE.md`) and `AGENTS.md`
+2. Key knowledge files from `projects/agentic-os-development/knowledge/` relevant to the task
+3. Current project state from the active AgenticOS project
+
+### MCP Tools Available
+
+This project is managed by AgenticOS. Use these MCP tools:
+
+| Tool | When |
+|------|------|
+| `agenticos_record` | After meaningful work (feature, fix, decision, analysis) |
+| `agenticos_save` | Before session ends — commits state to Git |
+| `agenticos_status` | Check current project state |
+
+### Design Artifacts
+
+Persist research, design, and analysis outputs to files immediately:
+- Research reports → `projects/agentic-os-development/knowledge/`
+- Implementation artifacts → `projects/agentic-os-development/artifacts/`
+- Reference file paths in conversation, not inline content
+
+This prevents context loss from conversation compression and enables cross-session access.
+
+### Build & Verify
 
 ```bash
-cd mcp-server
-npm install
-npm run build    # TypeScript compilation (strict mode)
+cd mcp-server && npm install && npm run build
 ```
-
-## Forbidden Operations
-
-- Never commit directly to `main` — always use feature branches + PRs
-- Never force-push to `main`
-- Never modify files under `projects/` in feature branches (user data)
-- Never commit `node_modules/`, `build/`, `.env`, or credentials
-- Never modify `package.json` version field directly (use release process)
-
-## Code Style
-
-- TypeScript strict mode (`strict: true` in tsconfig.json)
-- ES2022 target, Node16 module resolution
-- Avoid `any` in new code where possible
-- Follow existing patterns in `mcp-server/src/`
