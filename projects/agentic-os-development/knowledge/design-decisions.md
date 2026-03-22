@@ -74,6 +74,16 @@
 - ⚠️ 需要维护多个文件
 - ⚠️ 可能有信息重复
 
+#### v0.2.0 Status Update
+
+| Layer | Status | Notes |
+|-------|--------|-------|
+| conversations/ | Implemented | Via `agenticos_record` tool |
+| knowledge/ | Implemented | Manual agent-written files |
+| state.yaml | Implemented | Structured session state, auto-synced to CLAUDE.md |
+| memory.jsonl | Deferred | Conversation records in conversations/ serve this purpose for now |
+| changelog.md | Deferred | Git log is the changelog; no separate project-level file needed |
+
 ---
 
 ### Decision 4: 智能意图识别 + 双层激活机制

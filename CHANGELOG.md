@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [0.2.0] — 2026-03-22
+
 ### Added
-- Claude Code slash commands: `/develop`, `/review`, `/release` for standardized development workflow
+- Claude Code slash commands: `/develop`, `/review`, `/release`
+- `agenticos_record` tool for session recording
+- `agenticos_status` tool for project status
+- Template versioning with auto-upgrade on project switch
+- GitHub Actions CI pipeline (lint, build)
+- Open-source development workflow (CONTRIBUTING.md, AGENTS.md)
+
+### Fixed
+- Init idempotency: duplicate project detection and handling (#2)
+- Save error handling: phased git status reporting (#3)
+- Version consistency across package.json, index.ts, formula (#16)
+
+### Changed
+- Distribution via GitHub Releases + Homebrew (not npm)
+- Narrowed scope: deferred memory.jsonl and changelog.md to future versions
 
 ## [0.1.0] — 2026-03-19
 
