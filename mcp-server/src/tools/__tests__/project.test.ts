@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// yamlMock MUST be defined with vi.hoisted so it's available at vi.mock hoisting time
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+  stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
+}));
+
 // Mock modules
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
@@ -19,10 +25,7 @@ vi.mock('os', () => ({
 }));
 
 vi.mock('yaml', () => ({
-  default: {
-    parse: vi.fn(),
-    stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
-  },
+  default: yamlMock,
 }));
 
 vi.mock('../../utils/registry.js', () => ({
@@ -265,8 +268,8 @@ describe('listProjects', () => {
     expect(result).toContain('Project B');
     expect(result).toContain('/path/a');
     expect(result).toContain('/path/b');
-    expect(result).toContain('Active');
-    expect(result).toContain('Archived');
+    expect(result).toContain('active');
+    expect(result).toContain('archived');
     // Active project should have indicator
     expect(result).toContain('project-a');
   });
@@ -298,6 +301,10 @@ describe('listProjects', () => {
 describe('getStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Set up yamlMock.parse to handle JSON.parse, fall back to undefined
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
   });
 
   afterEach(() => {

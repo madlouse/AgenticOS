@@ -1,4 +1,37 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as yaml from 'yaml';
+
+// yamlMock MUST be defined with vi.hoisted so it's available at vi.mock hoisting time
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+  stringify: vi.fn((obj: unknown): string => {
+    // Return a YAML-like string that preserves all field values
+    const serialize = (o: unknown): string => {
+      if (o === null) return 'null';
+      if (o === undefined) return '';
+      if (typeof o !== 'object') return String(o);
+      if (Array.isArray(o)) {
+        return o.map((item) => `- ${serialize(item)}`).join('\n');
+      }
+      const entries = Object.entries(o as Record<string, unknown>);
+      if (entries.length === 0) return '{}';
+      return entries
+        .map(([k, v]) => {
+          const val =
+            typeof v === 'object' && v !== null
+              ? '\n' +
+                serialize(v)
+                  .split('\n')
+                  .map((l) => `  ${l}`)
+                  .join('\n')
+              : ` ${serialize(v)}`;
+          return `${k}:${val}`;
+        })
+        .join('\n');
+    };
+    return serialize(obj);
+  }),
+}));
 
 // Mock modules before importing the module under test
 vi.mock('fs/promises', () => ({
@@ -19,10 +52,7 @@ vi.mock('os', () => ({
 }));
 
 vi.mock('yaml', () => ({
-  default: {
-    parse: vi.fn(),
-    stringify: vi.fn((obj: unknown) => `yaml:${JSON.stringify(obj)}`),
-  },
+  default: yamlMock,
 }));
 
 // Must import after mocks are set up
@@ -86,7 +116,15 @@ describe('registry utilities', () => {
   // -------------------------------------------------------------------------
 
   describe('loadRegistry', () => {
+    beforeEach(() => {
+      // Reset yaml mocks between tests
+      yamlMock.parse.mockReset();
+      yamlMock.stringify.mockReset();
+    });
+
+
     it('returns default registry when file does not exist', async () => {
+      yamlMock.parse.mockRejectedValue(new Error('ENOENT'));
       fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
       osMock.homedir.mockReturnValue('/home/testuser');
       fsMock.existsSync.mockReturnValue(false);
@@ -99,7 +137,6 @@ describe('registry utilities', () => {
     });
 
     it('parses valid YAML and resolves relative paths', async () => {
-      const yaml = await import('yaml');
       const storedYaml = {
         version: '1.0.0',
         last_updated: '2025-01-01T00:00:00.000Z',
@@ -115,7 +152,8 @@ describe('registry utilities', () => {
           },
         ],
       };
-      (yaml.default.parse as ReturnType<typeof vi.fn>).mockReturnValue(storedYaml);
+      yamlMock.parse.mockReturnValue(storedYaml as any);
+      fsPromisesMock.readFile.mockResolvedValue('version: 1.0.0\nactive_project: my-project');
       osMock.homedir.mockReturnValue('/home/testuser');
       fsMock.existsSync.mockReturnValue(true);
 
@@ -126,7 +164,8 @@ describe('registry utilities', () => {
     });
 
     it('returns default registry when YAML parse fails', async () => {
-      fsPromisesMock.readFile.mockRejectedValue(new Error('parse error'));
+      yamlMock.parse.mockRejectedValue(new Error('parse error'));
+      fsPromisesMock.readFile.mockResolvedValue('invalid: yaml: content:');
       osMock.homedir.mockReturnValue('/home/testuser');
       fsMock.existsSync.mockReturnValue(false);
 
@@ -143,9 +182,7 @@ describe('registry utilities', () => {
 
   describe('saveRegistry', () => {
     it('converts absolute paths to relative before writing', async () => {
-      const yaml = await import('yaml');
-      (yaml.default.stringify as ReturnType<typeof vi.fn>).mockReturnValue('yaml output');
-
+      // The yaml mock at module level already returns YAML with field values
       osMock.homedir.mockReturnValue('/home/testuser');
       fsMock.existsSync.mockReturnValue(true);
 
@@ -178,9 +215,6 @@ describe('registry utilities', () => {
     });
 
     it('stores non-absolute paths as-is', async () => {
-      const yaml = await import('yaml');
-      (yaml.default.stringify as ReturnType<typeof vi.fn>).mockReturnValue('yaml output');
-
       osMock.homedir.mockReturnValue('/home/testuser');
       fsMock.existsSync.mockReturnValue(true);
 

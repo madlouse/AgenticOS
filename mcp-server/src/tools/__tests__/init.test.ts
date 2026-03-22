@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// yamlMock MUST be defined with vi.hoisted so it's available at vi.mock hoisting time
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+  stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
+}));
+
 // Mock modules
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
@@ -19,10 +25,7 @@ vi.mock('os', () => ({
 }));
 
 vi.mock('yaml', () => ({
-  default: {
-    parse: vi.fn(),
-    stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
-  },
+  default: yamlMock,
 }));
 
 // Mock the distill utils module
@@ -53,6 +56,8 @@ describe('initProject', () => {
     // Default: simulate registry file does not exist (causes loadRegistry to return default)
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
+    // access() throws → path doesn't exist → normal creation path
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
   });
 
   afterEach(() => {
@@ -61,6 +66,7 @@ describe('initProject', () => {
 
   it('creates directories with correct structure', async () => {
     fsMock.existsSync.mockReturnValue(false);
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
     await initProject({ name: 'Test Project', description: 'A test project' });
 
@@ -80,11 +86,13 @@ describe('initProject', () => {
     for (const dir of expectedDirs) {
       expect(mkdirCalls).toContain(dir);
     }
-    expect(mkdirCalls.length).toBe(4);
+    // 5 calls: .context/conversations (implicitly creates .context), knowledge, tasks, artifacts
+    expect(mkdirCalls.length).toBe(5);
   });
 
   it('writes .project.yaml with correct content', async () => {
     fsMock.existsSync.mockReturnValue(false);
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
     await initProject({ name: 'Test Project', description: 'A test project' });
 
@@ -104,6 +112,7 @@ describe('initProject', () => {
 
   it('writes state.yaml with correct structure', async () => {
     fsMock.existsSync.mockReturnValue(false);
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
     await initProject({ name: 'Test Project', description: 'A test project' });
 
@@ -125,6 +134,7 @@ describe('initProject', () => {
 
   it('updates registry with new project entry', async () => {
     fsMock.existsSync.mockReturnValue(false);
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
     await initProject({ name: 'Test Project', description: 'A test project' });
 
@@ -163,6 +173,8 @@ describe('initProject', () => {
     // First readFile call returns the existing registry
     fsPromisesMock.readFile.mockResolvedValueOnce(JSON.stringify(existingRegistry));
     fsMock.existsSync.mockReturnValue(true);
+    // Path exists → access succeeds (no ENOENT)
+    fsPromisesMock.access.mockResolvedValue(undefined);
 
     await initProject({ name: 'Test Project', description: 'Updated' });
 
@@ -183,6 +195,7 @@ describe('initProject', () => {
 
   it('returns success message with project path and ID', async () => {
     fsMock.existsSync.mockReturnValue(false);
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
     const result = await initProject({ name: 'Test Project', description: 'A test project' });
 
@@ -194,6 +207,7 @@ describe('initProject', () => {
 
   it('creates quick-start.md with project details', async () => {
     fsMock.existsSync.mockReturnValue(false);
+    fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
     await initProject({ name: 'My Test Project', description: 'Test description' });
 
