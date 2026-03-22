@@ -1,12 +1,12 @@
 class Agenticos < Formula
   desc "AI-native project management MCP server for Claude Code, Cursor, and Codex"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://registry.npmjs.org/agenticos-mcp/-/agenticos-mcp-0.1.0.tgz"
-  # brew tap madlouse/agenticos → points to github.com/madlouse/homebrew-agenticos
-  # Update sha256 after publishing to npm: `curl -sL <url> | sha256sum`
-  sha256 "c8d3eae160a892e32837db3dcae515e843e5383fef52b8141940c8bcf8b6d59f"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.2.0/agenticos-mcp.tgz"
+  # Update sha256 after the v0.2.0 release is published:
+  #   curl -sL https://github.com/madlouse/AgenticOS/releases/download/v0.2.0/agenticos-mcp.tgz | sha256sum
+  sha256 "PLACEHOLDER_UPDATE_AFTER_RELEASE"
   license "MIT"
-  version "0.1.0"
+  version "0.2.0"
 
   depends_on "node"
 
@@ -53,6 +53,6 @@ class Agenticos < Formula
   end
 
   test do
-    assert_match "0.1.0", shell_output("#{bin}/agenticos-mcp --version")
+    assert_match version.to_s, shell_output("#{bin}/agenticos-mcp --version")
   end
 end
