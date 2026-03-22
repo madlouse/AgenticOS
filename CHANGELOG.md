@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.2.1] — 2026-03-22
+
+### Added
+- Unit test suite with 42 passing vitest tests (#19)
+
+### Fixed
+- CI: replace `npm ci` with `npm install` to fix lock file sync issues (#21)
+- Release workflow: same `npm ci` → `npm install` fix
+
 ## [0.2.0] — 2026-03-22
 
 ### Added

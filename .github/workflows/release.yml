@@ -21,7 +21,7 @@ jobs:
       - name: Install and build
         working-directory: mcp-server
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: Create npm tarball
