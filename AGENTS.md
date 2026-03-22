@@ -24,11 +24,30 @@ npm run build
 ## Development Rules
 
 1. **Issue-First**: Every change requires a GitHub Issue
-2. **Branch**: `<type>/<issue-number>-<slug>` from `main`
+2. **Branch**: `<type>/<issue-number>-<slug>` from `main` — see [Git Flow](#git-flow)
 3. **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) — `<type>(scope): <description>`
 4. **PR**: Link issue with `Closes #N`, never push directly to `main`
+5. **CI**: Use `npm install` (never `npm ci`) in all workflows
+6. **Release**: Tag `v*` → triggers Release workflow → update Homebrew sha256
 
 Full details → [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## Git Flow
+
+**GitHub Flow** — single `main` branch, short-lived feature branches, continuous releases.
+
+```
+main  (CI required, no review required for solo)
+  ↑
+feat/* | fix/* | test/* | docs/* | chore/*
+```
+
+Branch protection on `main`:
+- Required reviews: **0** (GitHub blocks self-review — don't set to 1 on solo projects)
+- Required CI: ✅
+- Admin bypass: ✅
+
+Release trigger: push a `vX.Y.Z` tag → GitHub Actions builds and publishes automatically.
 
 ## Architecture
 
