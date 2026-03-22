@@ -1,12 +1,10 @@
 class Agenticos < Formula
   desc "AI-native project management MCP server for Claude Code, Cursor, and Codex"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://github.com/madlouse/AgenticOS/releases/download/v0.2.0/agenticos-mcp.tgz"
-  # Update sha256 after the v0.2.0 release is published:
-  #   curl -sL https://github.com/madlouse/AgenticOS/releases/download/v0.2.0/agenticos-mcp.tgz | sha256sum
-  sha256 "PLACEHOLDER_UPDATE_AFTER_RELEASE"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.2.1/agenticos-mcp.tgz"
+  sha256 "f87d5e1a14442ac327f474a133cfafca32e6dd418cc48ab26e4f71fee72d501e"
   license "MIT"
-  version "0.2.0"
+  version "0.2.1"
 
   depends_on "node"
 
