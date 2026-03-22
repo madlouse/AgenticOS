@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')).version;
+
 // Handle --version and --help before starting the MCP server
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
-  console.log('0.1.0');
+  console.log(VERSION);
   process.exit(0);
 }
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log('agenticos-mcp — AgenticOS MCP Server v0.1.0');
+  console.log(`agenticos-mcp — AgenticOS MCP Server v${VERSION}`);
   console.log('');
   console.log('Usage: agenticos-mcp [--version] [--help]');
   console.log('');
@@ -32,7 +40,7 @@ import { getProjectContext } from './resources/index.js';
 const server = new Server(
   {
     name: 'agenticos-mcp',
-    version: '0.1.0',
+    version: VERSION,
   },
   {
     capabilities: {

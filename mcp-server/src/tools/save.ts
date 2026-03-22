@@ -62,11 +62,42 @@ export async function saveState(args: any): Promise<string> {
 
     // Project-scoped git: only stage this project's files + registry
     const gitCmd = `git -C "${gitRoot}"`;
-    await execAsync(`${gitCmd} add "${projectPath}/"`);
-    await execAsync(`${gitCmd} commit -m "${commitMessage}" || true`);
-    await execAsync(`${gitCmd} push || true`);
 
-    return `✅ Saved and backed up project "${project.name}"\n\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
+    // Phase 1: git add
+    await execAsync(`${gitCmd} add "${projectPath}/"`);
+
+    // Phase 2: git commit
+    let committed = false;
+    try {
+      await execAsync(`${gitCmd} commit -m "${commitMessage}"`);
+      committed = true;
+    } catch (e: any) {
+      const msg = (e.stderr || e.stdout || e.message || '').toString();
+      if (msg.includes('nothing to commit')) {
+        committed = false; // not an error
+      } else {
+        return `⚠️ State saved locally but git commit failed\n\nError: ${e.message}\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
+      }
+    }
+
+    // Phase 3: git push
+    let pushed = false;
+    if (committed) {
+      try {
+        await execAsync(`${gitCmd} push`);
+        pushed = true;
+      } catch { /* push failure is degraded, not fatal */ }
+    }
+
+    // Build structured status
+    const phases: string[] = [];
+    phases.push('✅ State saved locally');
+    if (committed) phases.push('📦 Git commit created');
+    else phases.push('📦 No new changes to commit');
+    if (pushed) phases.push('☁️ Pushed to remote');
+    else if (committed) phases.push('⚠️ Push failed (committed locally, not synced)');
+
+    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
   } catch (error: any) {
     return `⚠️ Partial save completed\n\nError: ${error.message}`;
   }

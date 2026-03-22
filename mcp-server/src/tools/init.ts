@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, writeFile, access } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
@@ -9,6 +9,50 @@ export async function initProject(args: any): Promise<string> {
   const id = name.toLowerCase().replace(/\s+/g, '-');
 
   const projectPath = customPath || join(getAgenticOSHome(), 'projects', id);
+
+  // Check idempotency: does the project already exist on disk or in registry?
+  let pathExists = false;
+  try {
+    await access(join(projectPath, '.project.yaml'));
+    pathExists = true;
+  } catch {
+    pathExists = false;
+  }
+
+  const registry = await loadRegistry();
+  const existingIdx = registry.projects.findIndex((p) => p.id === id);
+  const registryHasId = existingIdx >= 0;
+
+  if (pathExists && registryHasId) {
+    // Both exist — project is already fully set up
+    registry.active_project = id;
+    await saveRegistry(registry);
+    return `Project '${name}' already exists at ${projectPath}. Use \`agenticos_switch\` to activate it.`;
+  }
+
+  if (pathExists && !registryHasId) {
+    // Orphan recovery: files exist but registry entry is missing
+    const projectEntry = {
+      id,
+      name,
+      path: projectPath,
+      status: 'active' as const,
+      created: new Date().toISOString().split('T')[0],
+      last_accessed: new Date().toISOString(),
+    };
+    registry.projects.push(projectEntry);
+    registry.active_project = id;
+    await saveRegistry(registry);
+    return `Re-registered existing project '${name}'.`;
+  }
+
+  if (!pathExists && registryHasId) {
+    // Stale registry entry: remove it and proceed with fresh creation
+    registry.projects.splice(existingIdx, 1);
+    await saveRegistry(registry);
+  }
+
+  // Normal creation (neither exists, or stale registry was cleaned up)
 
   // Create directory structure
   await mkdir(join(projectPath, '.context', 'conversations'), { recursive: true });
@@ -73,9 +117,7 @@ ${description}
   const agentsMd = generateAgentsMd(name, description);
   await writeFile(join(projectPath, 'AGENTS.md'), agentsMd, 'utf-8');
 
-  // Update registry (deduplicate: if project ID already exists, update it instead of adding)
-  const registry = await loadRegistry();
-  const existingIdx = registry.projects.findIndex((p) => p.id === id);
+  // Update registry — reuse the registry loaded earlier (stale entry already removed if needed)
   const projectEntry = {
     id,
     name,
@@ -84,11 +126,7 @@ ${description}
     created: new Date().toISOString().split('T')[0],
     last_accessed: new Date().toISOString(),
   };
-  if (existingIdx >= 0) {
-    registry.projects[existingIdx] = projectEntry;
-  } else {
-    registry.projects.push(projectEntry);
-  }
+  registry.projects.push(projectEntry);
   registry.active_project = id;
   await saveRegistry(registry);
 
