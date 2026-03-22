@@ -29,12 +29,16 @@ export async function switchProject(args: any): Promise<string> {
 
   let description = '';
   let state: any = undefined;
+  let quickStart = '';
   try {
     const projYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8'));
     description = projYaml?.meta?.description || '';
   } catch {}
   try {
     state = yaml.parse(await readFile(join(found.path, '.context', 'state.yaml'), 'utf-8'));
+  } catch {}
+  try {
+    quickStart = await readFile(join(found.path, '.context', 'quick-start.md'), 'utf-8');
   } catch {}
 
   // CLAUDE.md: create if missing, upgrade if stale template version
@@ -65,7 +69,73 @@ export async function switchProject(args: any): Promise<string> {
 
   const bootstrap = bootstrapNotes.length > 0 ? '\n\n' + bootstrapNotes.join('\n') : '';
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${found.path}/.context/quick-start.md\n- ${found.path}/.context/state.yaml${bootstrap}`;
+  // Build inline context summary
+  const sep = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+  const contextLines: string[] = [sep];
+
+  // Project description: prefer .project.yaml, fall back to quick-start.md first paragraph
+  let projectDescription = description;
+  if (!projectDescription && quickStart) {
+    // Extract first non-heading, non-empty paragraph from quick-start.md
+    const paragraphs = quickStart
+      .split('\n')
+      .filter((line) => line.trim() && !line.startsWith('#'));
+    if (paragraphs.length > 0) {
+      projectDescription = paragraphs[0].trim();
+    }
+  }
+  if (projectDescription) {
+    contextLines.push(`📖 项目简介\n${projectDescription}\n`);
+  }
+
+  // Current task
+  if (state?.current_task) {
+    const task = state.current_task;
+    contextLines.push(`🎯 当前任务：${task.title || 'Untitled'} (${task.status || 'unknown'})\n`);
+  }
+
+  // Last recorded
+  if (found.last_recorded) {
+    const recordedDate = new Date(found.last_recorded).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    contextLines.push(`📍 上次记录：${recordedDate}\n`);
+  }
+
+  // Pending items
+  const pending: string[] = state?.working_memory?.pending || [];
+  if (pending.length > 0) {
+    contextLines.push(`📋 待办 (${pending.length}):`);
+    for (const item of pending.slice(0, 5)) {
+      contextLines.push(`  - ${item}`);
+    }
+    contextLines.push('');
+  }
+
+  // Recent decisions
+  const decisions: string[] = state?.working_memory?.decisions || [];
+  if (decisions.length > 0) {
+    const recent = decisions.slice(-3);
+    contextLines.push(`✅ 最近决策 (${recent.length}):`);
+    for (const item of recent) {
+      contextLines.push(`  - ${item}`);
+    }
+    contextLines.push('');
+  }
+
+  // Next step suggestion: first pending item
+  if (pending.length > 0) {
+    contextLines.push(`💡 建议下一步：${pending[0]}`);
+  }
+
+  // New project fallback
+  if (!state?.current_task && pending.length === 0 && decisions.length === 0) {
+    contextLines.push('新项目 — 尚无记录');
+  }
+
+  contextLines.push(sep);
+
+  const inlineContext = '\n' + contextLines.join('\n');
+
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}${inlineContext}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
