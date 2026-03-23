@@ -1,0 +1,168 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+  stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
+}));
+
+vi.mock('fs/promises', () => ({
+  access: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+}));
+
+vi.mock('yaml', () => ({
+  default: yamlMock,
+}));
+
+vi.mock('../registry.js', () => ({
+  loadRegistry: vi.fn(),
+}));
+
+import { access, readFile, writeFile } from 'fs/promises';
+import { loadRegistry } from '../registry.js';
+import { persistGuardrailEvidence } from '../guardrail-evidence.js';
+
+const accessMock = access as unknown as ReturnType<typeof vi.fn>;
+const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
+const writeFileMock = writeFile as unknown as ReturnType<typeof vi.fn>;
+const loadRegistryMock = loadRegistry as unknown as ReturnType<typeof vi.fn>;
+
+describe('persistGuardrailEvidence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    yamlMock.parse.mockImplementation((content: string) => {
+      try {
+        return JSON.parse(content);
+      } catch {
+        return undefined;
+      }
+    });
+    yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'agenticos',
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active',
+          created: '2026-03-23',
+          last_accessed: '2026-03-23T00:00:00.000Z',
+        },
+      ],
+    });
+    accessMock.mockResolvedValue(undefined);
+    readFileMock.mockResolvedValue(JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } }));
+    writeFileMock.mockResolvedValue(undefined);
+  });
+
+  it('persists latest preflight evidence into the matching managed project state', async () => {
+    const result = await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '62',
+        result: { status: 'PASS', summary: 'preflight passed' },
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.project_id).toBe('agenticos');
+    expect(writeFileMock).toHaveBeenCalledTimes(1);
+
+    const [, content] = writeFileMock.mock.calls[0];
+    const writtenState = JSON.parse(content as string);
+    expect(writtenState.guardrail_evidence.last_command).toBe('agenticos_preflight');
+    expect(writtenState.guardrail_evidence.preflight.issue_id).toBe('62');
+    expect(writtenState.guardrail_evidence.preflight.result.status).toBe('PASS');
+  });
+
+  it('overwrites the previous latest entry for the same command instead of appending', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      guardrail_evidence: {
+        last_command: 'agenticos_preflight',
+        preflight: {
+          command: 'agenticos_preflight',
+          recorded_at: '2026-03-23T09:00:00.000Z',
+          issue_id: '36',
+          result: { status: 'BLOCK' },
+        },
+        pr_scope_check: {
+          command: 'agenticos_pr_scope_check',
+          issue_id: '36',
+          result: { status: 'PASS' },
+        },
+      },
+    }));
+
+    await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '62',
+        result: { status: 'PASS', summary: 'preflight passed' },
+      },
+    });
+
+    const [, content] = writeFileMock.mock.calls[0];
+    const writtenState = JSON.parse(content as string);
+    expect(writtenState.guardrail_evidence.preflight.issue_id).toBe('62');
+    expect(writtenState.guardrail_evidence.preflight.result.status).toBe('PASS');
+    expect(writtenState.guardrail_evidence.pr_scope_check.issue_id).toBe('36');
+  });
+
+  it('falls back to the nearest on-disk project root when registry does not contain the repo path', async () => {
+    loadRegistryMock.mockResolvedValue({
+      active_project: null,
+      projects: [],
+    });
+    accessMock
+      .mockRejectedValueOnce(new Error('missing repo-level .project.yaml'))
+      .mockRejectedValueOnce(new Error('missing repo-level state'))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    readFileMock
+      .mockResolvedValueOnce(JSON.stringify({ meta: { id: 'local-agenticos' } }))
+      .mockResolvedValueOnce(JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } }));
+
+    const result = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path: '/workspace/source/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '62',
+        result: { status: 'CREATED', branch_name: 'feat/62-guardrail-evidence' },
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.project_id).toBe('local-agenticos');
+
+    const [statePath, content] = writeFileMock.mock.calls[0];
+    expect(statePath).toBe('/workspace/source/projects/agenticos/.context/state.yaml');
+    const writtenState = JSON.parse(content as string);
+    expect(writtenState.guardrail_evidence.branch_bootstrap.issue_id).toBe('62');
+  });
+
+  it('does not write state when repo_path is outside managed projects', async () => {
+    loadRegistryMock.mockResolvedValue({
+      active_project: null,
+      projects: [],
+    });
+    accessMock.mockRejectedValue(new Error('missing'));
+    readFileMock.mockRejectedValue(new Error('missing'));
+
+    const result = await persistGuardrailEvidence({
+      command: 'agenticos_pr_scope_check',
+      repo_path: '/external/repo',
+      payload: {
+        issue_id: '62',
+        result: { status: 'BLOCK' },
+      },
+    });
+
+    expect(result.persisted).toBe(false);
+    expect(result.reason).toContain('not within a resolvable AgenticOS project');
+    expect(writeFileMock).not.toHaveBeenCalled();
+  });
+});

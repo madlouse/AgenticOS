@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 
 const execAsync = promisify(exec);
 
@@ -39,6 +40,7 @@ interface PreflightResult {
     workspace_type: WorkspaceType;
     commit_subjects_since_base: string[];
   };
+  persistence?: GuardrailPersistenceResult;
 }
 
 async function runGit(repoPath: string, args: string): Promise<string> {
@@ -151,7 +153,22 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     result.evidence.workspace_type = await detectWorkspaceType(repo_path);
   } catch {
     result.block_reasons.push('failed to resolve git repository identity or remote base');
-    return JSON.stringify(finalizeResult(result), null, 2);
+    const finalized = finalizeResult(result);
+    finalized.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path,
+      payload: {
+        issue_id: issue_id || null,
+        task_type,
+        declared_target_files,
+        structural_move,
+        worktree_required,
+        root_scoped_exceptions,
+        clean_reproducibility_gate,
+        result: finalized,
+      },
+    });
+    return JSON.stringify(finalized, null, 2);
   }
 
   if (worktree_required) {
@@ -204,5 +221,32 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     result.reproducibility_gate_defined = true;
   }
 
-  return JSON.stringify(finalizeResult(result), null, 2);
+  const finalized = finalizeResult(result);
+  finalized.persistence = await persistGuardrailEvidence({
+    command: 'agenticos_preflight',
+    repo_path,
+    payload: {
+      issue_id: issue_id || null,
+      task_type,
+      declared_target_files,
+      structural_move,
+      worktree_required,
+      root_scoped_exceptions,
+      clean_reproducibility_gate,
+      result: {
+        status: finalized.status,
+        summary: finalized.summary,
+        repo_identity_confirmed: finalized.repo_identity_confirmed,
+        branch_ancestry_verified: finalized.branch_ancestry_verified,
+        branch_based_on_intended_remote: finalized.branch_based_on_intended_remote,
+        worktree_ok: finalized.worktree_ok,
+        scope_ok: finalized.scope_ok,
+        reproducibility_gate_defined: finalized.reproducibility_gate_defined,
+        block_reasons: finalized.block_reasons,
+        redirect_actions: finalized.redirect_actions,
+        evidence: finalized.evidence,
+      },
+    },
+  });
+  return JSON.stringify(finalized, null, 2);
 }

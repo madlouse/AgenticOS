@@ -12,6 +12,17 @@ vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
 }));
 
+const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue({
+  attempted: true,
+  persisted: true,
+  project_id: 'agenticos',
+  state_path: '/repo/.context/state.yaml',
+}));
+
+vi.mock('../../utils/guardrail-evidence.js', () => ({
+  persistGuardrailEvidence: persistGuardrailEvidenceMock,
+}));
+
 vi.mock('fs/promises', () => ({
   access: accessMock,
   mkdir: mkdirMock,
@@ -24,6 +35,12 @@ describe('runBranchBootstrap', () => {
     vi.clearAllMocks();
     accessMock.mockRejectedValue(new Error('missing'));
     mkdirMock.mockResolvedValue(undefined);
+    persistGuardrailEvidenceMock.mockResolvedValue({
+      attempted: true,
+      persisted: true,
+      project_id: 'agenticos',
+      state_path: '/repo/.context/state.yaml',
+    });
   });
 
   it('returns CREATED and issues git worktree add from the intended remote base', async () => {
@@ -47,7 +64,7 @@ describe('runBranchBootstrap', () => {
       repo_path: '/repo/mcp-server',
       remote_base_branch: 'origin/main',
       worktree_root: '/tmp/worktrees',
-    })) as { status: string; branch_name: string; base_commit: string; worktree_path: string; notes: string[] };
+    })) as { status: string; branch_name: string; base_commit: string; worktree_path: string; notes: string[]; persistence?: { persisted: boolean } };
 
     expect(result.status).toBe('CREATED');
     expect(result.branch_name).toBe('feat/36-guardrail-helper');
@@ -55,6 +72,8 @@ describe('runBranchBootstrap', () => {
     expect(result.worktree_path).toBe('/tmp/worktrees/mcp-server-36-guardrail-helper');
     expect(result.notes.join(' ')).toContain('origin/main');
     expect(mkdirMock).toHaveBeenCalledWith('/tmp/worktrees', { recursive: true });
+    expect(result.persistence?.persisted).toBe(true);
+    expect(persistGuardrailEvidenceMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns BLOCK when the target branch already exists', async () => {

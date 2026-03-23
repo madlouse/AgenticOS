@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 
 const execAsync = promisify(exec);
 
@@ -23,6 +24,7 @@ interface PrScopeCheckResult {
   branch_fork_point: string;
   expected_issue_scope: string;
   block_reasons: string[];
+  persistence?: GuardrailPersistenceResult;
 }
 
 async function runGit(repoPath: string, args: string): Promise<string> {
@@ -104,6 +106,29 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
 
   if (result.block_reasons.length > 0 || !repo_path || !issue_id || declared_target_files.length === 0) {
     result.summary = result.block_reasons.join('; ');
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_pr_scope_check',
+      repo_path,
+      payload: {
+        issue_id: issue_id || null,
+        remote_base_branch,
+        declared_target_files,
+        expected_issue_scope,
+        result: {
+          status: result.status,
+          summary: result.summary,
+          commit_count: result.commit_count,
+          changed_files: result.changed_files,
+          unexpected_files: result.unexpected_files,
+          unrelated_commit_subjects: result.unrelated_commit_subjects,
+          branch_ancestry_verified: result.branch_ancestry_verified,
+          remote_base_branch: result.remote_base_branch,
+          branch_fork_point: result.branch_fork_point,
+          expected_issue_scope: result.expected_issue_scope,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
@@ -114,6 +139,29 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   } catch {
     result.block_reasons.push(`current branch is not comparable to ${remote_base_branch}`);
     result.summary = result.block_reasons.join('; ');
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_pr_scope_check',
+      repo_path,
+      payload: {
+        issue_id,
+        remote_base_branch,
+        declared_target_files,
+        expected_issue_scope,
+        result: {
+          status: result.status,
+          summary: result.summary,
+          commit_count: result.commit_count,
+          changed_files: result.changed_files,
+          unexpected_files: result.unexpected_files,
+          unrelated_commit_subjects: result.unrelated_commit_subjects,
+          branch_ancestry_verified: result.branch_ancestry_verified,
+          remote_base_branch: result.remote_base_branch,
+          branch_fork_point: result.branch_fork_point,
+          expected_issue_scope: result.expected_issue_scope,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
@@ -140,10 +188,56 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   if (result.block_reasons.length > 0) {
     result.status = 'BLOCK';
     result.summary = result.block_reasons.join('; ');
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_pr_scope_check',
+      repo_path,
+      payload: {
+        issue_id,
+        remote_base_branch,
+        declared_target_files,
+        expected_issue_scope,
+        result: {
+          status: result.status,
+          summary: result.summary,
+          commit_count: result.commit_count,
+          changed_files: result.changed_files,
+          unexpected_files: result.unexpected_files,
+          unrelated_commit_subjects: result.unrelated_commit_subjects,
+          branch_ancestry_verified: result.branch_ancestry_verified,
+          remote_base_branch: result.remote_base_branch,
+          branch_fork_point: result.branch_fork_point,
+          expected_issue_scope: result.expected_issue_scope,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
   result.status = 'PASS';
   result.summary = 'pr scope check passed';
+  result.persistence = await persistGuardrailEvidence({
+    command: 'agenticos_pr_scope_check',
+    repo_path,
+    payload: {
+      issue_id,
+      remote_base_branch,
+      declared_target_files,
+      expected_issue_scope,
+      result: {
+        status: result.status,
+        summary: result.summary,
+        commit_count: result.commit_count,
+        changed_files: result.changed_files,
+        unexpected_files: result.unexpected_files,
+        unrelated_commit_subjects: result.unrelated_commit_subjects,
+        branch_ancestry_verified: result.branch_ancestry_verified,
+        remote_base_branch: result.remote_base_branch,
+        branch_fork_point: result.branch_fork_point,
+        expected_issue_scope: result.expected_issue_scope,
+        block_reasons: result.block_reasons,
+      },
+    },
+  });
   return JSON.stringify(result, null, 2);
 }

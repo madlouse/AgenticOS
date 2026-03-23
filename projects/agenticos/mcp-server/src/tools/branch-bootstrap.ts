@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import { access, mkdir } from 'fs/promises';
 import { basename, join } from 'path';
 import { promisify } from 'util';
+import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 
 const execAsync = promisify(exec);
 
@@ -21,6 +22,7 @@ interface BranchBootstrapResult {
   worktree_path: string;
   notes: string[];
   block_reasons: string[];
+  persistence?: GuardrailPersistenceResult;
 }
 
 async function runGit(repoPath: string, args: string): Promise<string> {
@@ -82,12 +84,50 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   }
 
   if (result.block_reasons.length > 0 || !slug || !repo_path || !worktree_root || !issue_id) {
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path,
+      payload: {
+        issue_id: issue_id || null,
+        branch_type,
+        slug: slug || null,
+        remote_base_branch,
+        requested_worktree_root: worktree_root || null,
+        result: {
+          status: result.status,
+          branch_name: result.branch_name,
+          base_commit: result.base_commit,
+          worktree_path: result.worktree_path,
+          notes: result.notes,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
   const sanitizedSlug = sanitizeSegment(slug);
   if (!sanitizedSlug) {
     result.block_reasons.push('slug must contain at least one alphanumeric character');
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path,
+      payload: {
+        issue_id,
+        branch_type,
+        slug,
+        remote_base_branch,
+        requested_worktree_root: worktree_root,
+        result: {
+          status: result.status,
+          branch_name: result.branch_name,
+          base_commit: result.base_commit,
+          worktree_path: result.worktree_path,
+          notes: result.notes,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
@@ -99,6 +139,25 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     result.base_commit = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
   } catch {
     result.block_reasons.push(`failed to resolve remote base ${remote_base_branch}`);
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path,
+      payload: {
+        issue_id,
+        branch_type,
+        slug,
+        remote_base_branch,
+        requested_worktree_root: worktree_root,
+        result: {
+          status: result.status,
+          branch_name: result.branch_name,
+          base_commit: result.base_commit,
+          worktree_path: result.worktree_path,
+          notes: result.notes,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
@@ -114,6 +173,25 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   }
 
   if (result.block_reasons.length > 0) {
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path,
+      payload: {
+        issue_id,
+        branch_type,
+        slug,
+        remote_base_branch,
+        requested_worktree_root: worktree_root,
+        result: {
+          status: result.status,
+          branch_name: result.branch_name,
+          base_commit: result.base_commit,
+          worktree_path: result.worktree_path,
+          notes: result.notes,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
     return JSON.stringify(result, null, 2);
   }
 
@@ -126,5 +204,24 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   result.status = 'CREATED';
   result.notes.push(`created branch ${result.branch_name} from ${remote_base_branch}`);
   result.notes.push(`created isolated worktree at ${result.worktree_path}`);
+  result.persistence = await persistGuardrailEvidence({
+    command: 'agenticos_branch_bootstrap',
+    repo_path,
+    payload: {
+      issue_id,
+      branch_type,
+      slug,
+      remote_base_branch,
+      requested_worktree_root: worktree_root,
+      result: {
+        status: result.status,
+        branch_name: result.branch_name,
+        base_commit: result.base_commit,
+        worktree_path: result.worktree_path,
+        notes: result.notes,
+        block_reasons: result.block_reasons,
+      },
+    },
+  });
   return JSON.stringify(result, null, 2);
 }
