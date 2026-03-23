@@ -1,0 +1,433 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// yamlMock MUST be defined with vi.hoisted so it's available at vi.mock hoisting time
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+  stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
+}));
+
+// Mock modules
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
+  access: vi.fn(),
+}));
+
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+  default: {},
+}));
+
+vi.mock('os', () => ({
+  homedir: vi.fn(() => '/home/testuser'),
+  default: {},
+}));
+
+vi.mock('yaml', () => ({
+  default: yamlMock,
+}));
+
+vi.mock('../../utils/registry.js', () => ({
+  loadRegistry: vi.fn(),
+  saveRegistry: vi.fn(),
+  getAgenticOSHome: vi.fn(() => '/home/testuser/AgenticOS'),
+  resolvePath: vi.fn((p: string) => p),
+}));
+
+vi.mock('../../utils/distill.js', () => ({
+  generateClaudeMd: vi.fn(() => '# CLAUDE.md\n\nMocked'),
+  generateAgentsMd: vi.fn(() => '# AGENTS.md\n\nMocked'),
+  updateClaudeMdState: vi.fn().mockResolvedValue({ updated: true, created: false }),
+  upgradeClaudeMd: vi.fn(() => '# CLAUDE.md\n\nUpgraded'),
+  CURRENT_TEMPLATE_VERSION: 2,
+  extractTemplateVersion: vi.fn(() => 2),
+}));
+
+import { switchProject, listProjects, getStatus } from '../project.js';
+import * as fsPromises from 'fs/promises';
+import * as registry from '../../utils/registry.js';
+import * as fs from 'fs';
+
+const fsPromisesMock = fsPromises as typeof fsPromises & {
+  readFile: ReturnType<typeof vi.fn>;
+  writeFile: ReturnType<typeof vi.fn>;
+};
+const registryMock = registry as typeof registry & {
+  loadRegistry: ReturnType<typeof vi.fn>;
+  saveRegistry: ReturnType<typeof vi.fn>;
+};
+const fsMock = fs as typeof fs & { existsSync: ReturnType<typeof vi.fn> };
+
+describe('switchProject', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // By default, mock existsSync to return false (no CLAUDE.md/AGENTS.md)
+    fsMock.existsSync.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('finds project by ID', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    // Mock readFile for .project.yaml and state.yaml
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('Switched to project');
+    expect(result).toContain('My Project');
+    expect(result).toContain('/test/path');
+    expect(registryMock.saveRegistry).toHaveBeenCalled();
+  });
+
+  it('finds project by name', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+
+    const result = await switchProject({ project: 'My Project' });
+
+    expect(result).toContain('Switched to project');
+    expect(result).toContain('My Project');
+  });
+
+  it('returns error with available list when project not found', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'project-b',
+          name: 'Project B',
+          path: '/path/b',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await switchProject({ project: 'non-existent' });
+
+    expect(result).toContain('not found');
+    expect(result).toContain('Project A');
+    expect(result).toContain('Project B');
+    expect(result).toContain('project-a');
+    expect(result).toContain('project-b');
+  });
+
+  it('updates last_accessed timestamp on switch', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+
+    await switchProject({ project: 'my-project' });
+
+    expect(registryMock.saveRegistry).toHaveBeenCalled();
+    const savedRegistry = registryMock.saveRegistry.mock.calls[0][0];
+    const switchedProject = savedRegistry.projects.find((p: any) => p.id === 'my-project');
+    expect(switchedProject.last_accessed).not.toBe('2020-01-01T00:00:00.000Z');
+  });
+
+  it('creates CLAUDE.md if missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+
+    await switchProject({ project: 'my-project' });
+
+    // find writeFile calls for CLAUDE.md
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const claudeMdCall = writeCalls.find((c) => c[0].endsWith('CLAUDE.md'));
+    expect(claudeMdCall).toBeDefined();
+  });
+});
+
+describe('listProjects', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('formats empty registry', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [],
+    });
+
+    const result = await listProjects();
+
+    expect(result).toContain('No projects found');
+    expect(result).toContain('agenticos_init');
+  });
+
+  it('formats registry with projects', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'project-a',
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+          last_recorded: '2025-01-01T12:00:00.000Z',
+        },
+        {
+          id: 'project-b',
+          name: 'Project B',
+          path: '/path/b',
+          status: 'archived' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await listProjects();
+
+    expect(result).toContain('AgenticOS Projects');
+    expect(result).toContain('Project A');
+    expect(result).toContain('Project B');
+    expect(result).toContain('/path/a');
+    expect(result).toContain('/path/b');
+    expect(result).toContain('active');
+    expect(result).toContain('archived');
+    // Active project should have indicator
+    expect(result).toContain('project-a');
+  });
+
+  it('shows Never for last recorded when not set', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+          // no last_recorded
+        },
+      ],
+    });
+
+    const result = await listProjects();
+
+    expect(result).toContain('Never');
+  });
+});
+
+describe('getStatus', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Set up yamlMock.parse to handle JSON.parse, fall back to undefined
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns error when no active project', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [],
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('No active project');
+    expect(result).toContain('agenticos_switch');
+  });
+
+  it('returns error when active project not found in registry', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'non-existent',
+      projects: [],
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('not found in registry');
+  });
+
+  it('returns status for active project', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+          last_recorded: '2025-01-02T10:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        current_task: { title: 'Implement X', status: 'in_progress' },
+        working_memory: {
+          pending: ['task 1', 'task 2', 'task 3'],
+          decisions: ['decision 1', 'decision 2'],
+        },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Test Project');
+    expect(result).toContain('Implement X');
+    expect(result).toContain('in_progress');
+    expect(result).toContain('task 1');
+    expect(result).toContain('decision 1');
+  });
+
+  it('handles project with no state.yaml', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
+
+    const result = await getStatus();
+
+    expect(result).toContain('Failed to read state.yaml');
+  });
+
+  it('shows None for current task when not set', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+          last_recorded: '2025-01-02T10:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('None');
+    expect(result).toContain('Test Project');
+  });
+});

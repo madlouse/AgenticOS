@@ -1,0 +1,18 @@
+session:
+  id: "session-001"
+  started: "YYYY-MM-DDTHH:MM:SSZ"
+  agent: "claude-sonnet-4.6"
+
+current_task:
+  id: null
+  title: null
+  status: "pending"
+  next_step: null
+
+working_memory:
+  facts: []
+  decisions: []
+  pending: []
+
+loaded_context:
+  - ".project.yaml"
