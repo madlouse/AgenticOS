@@ -9,6 +9,7 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 - [ ] create `.context/state.yaml`
 - [ ] create `tasks/templates/agent-preflight-checklist.yaml`
 - [ ] create `tasks/templates/issue-design-brief.md`
+- [ ] create `tasks/templates/non-code-evaluation-rubric.yaml`
 - [ ] create `tasks/templates/submission-evidence.md`
 
 ## Generated Agent Instructions
