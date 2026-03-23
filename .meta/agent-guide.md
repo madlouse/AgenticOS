@@ -1,5 +1,9 @@
 # Agent Guide for AIOS
 
+> Legacy note: this file predates the self-hosting and guardrail standard-kit model.
+> Canonical downstream packaging rules now live in `.meta/standard-kit/README.md`.
+> If guidance here conflicts with the standard kit, the standard kit wins.
+
 ## For All AI Agents
 
 This guide helps any AI Agent (Claude, Gemini, Cursor, etc.) work with AIOS projects.

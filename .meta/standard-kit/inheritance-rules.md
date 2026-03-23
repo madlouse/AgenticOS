@@ -1,0 +1,70 @@
+# Inheritance Rules
+
+## Rule 1: Generated Files vs Copied Templates
+
+There are two inheritance modes.
+
+### Generated files
+
+- `AGENTS.md`
+- `CLAUDE.md`
+
+These are generated or upgraded by the distillation layer.
+
+Implication:
+- downstream projects should not treat them as free-form scratch files
+- local project-specific content may exist, but upgrades must preserve the canonical guardrail protocol and template marker
+
+### Copied templates
+
+- `.project.yaml`
+- `.context/quick-start.md`
+- `.context/state.yaml`
+- `tasks/templates/agent-preflight-checklist.yaml`
+- `tasks/templates/issue-design-brief.md`
+- `tasks/templates/submission-evidence.md`
+
+These are copied into each project and then become project-owned working files.
+
+Implication:
+- downstream projects are expected to customize them
+- later upgrades should be explicit and reviewable, not silently overwritten
+
+## Rule 2: Repository-Root Infrastructure Is Not Part Of The Project Kit
+
+The downstream standard kit is project-scoped.
+
+It does not include:
+- `.github/`
+- release workflows
+- root-only CI policies
+- local runtime directories such as `.runtime/` or `.claude/worktrees/`
+
+These belong to repository or local runtime layers, not to the project-scoped standard package.
+
+## Rule 3: Standards History Is Reference Material, Not Default Payload
+
+`projects/agenticos/standards/` is the design and product-definition area.
+
+Downstream projects should consume:
+- the generated instructions
+- the execution templates
+- the packaging rules
+
+They should not need the full internal standards history unless they are doing standards work themselves.
+
+## Rule 4: Upgrade Safety
+
+Generated files:
+- may be upgraded automatically when template markers change
+- must preserve user-extended sections where supported by the generator
+
+Copied templates:
+- must not be silently replaced after project adoption
+- should be reviewed against canonical sources during explicit upgrade work
+
+## Rule 5: Package Conflicts Resolve Toward The Kit
+
+If older guidance elsewhere in `.meta/` conflicts with this package:
+- the standard kit wins
+- the conflicting file should be treated as legacy until updated

@@ -1,5 +1,9 @@
 # AIOS Collaboration Rules
 
+> Legacy note: this file predates the executable guardrail and standard-kit packaging model.
+> Canonical downstream packaging and inheritance rules now live in `.meta/standard-kit/`.
+> If guidance here conflicts with the standard kit, the standard kit wins.
+
 ## Core Principles
 
 1. **Agent Autonomy** - AI Agents manage project structure and content
