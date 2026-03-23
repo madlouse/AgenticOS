@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -170,6 +170,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['issue_id', 'slug', 'repo_path', 'worktree_root'],
       },
     },
+    {
+      name: 'agenticos_pr_scope_check',
+      description: 'Validate that the current branch diff is scoped to the intended issue relative to the intended remote base.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
+          repo_path: { type: 'string', description: 'Absolute repository or worktree path to evaluate' },
+          remote_base_branch: { type: 'string', description: 'Remote base branch to compare against (default: origin/main)' },
+          declared_target_files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Files or path globs the task intends to touch',
+          },
+          expected_issue_scope: { type: 'string', description: 'Short label describing the expected scope of the issue branch' },
+        },
+        required: ['issue_id', 'repo_path', 'declared_target_files'],
+      },
+    },
   ],
 }));
 
@@ -194,6 +213,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
     case 'agenticos_branch_bootstrap':
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
+    case 'agenticos_pr_scope_check':
+      return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

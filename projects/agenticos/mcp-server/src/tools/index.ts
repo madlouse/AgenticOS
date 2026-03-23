@@ -4,3 +4,4 @@ export { saveState } from './save.js';
 export { recordSession } from './record.js';
 export { runPreflight } from './preflight.js';
 export { runBranchBootstrap } from './branch-bootstrap.js';
+export { runPrScopeCheck } from './pr-scope-check.js';
