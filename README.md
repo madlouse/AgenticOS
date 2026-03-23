@@ -111,6 +111,13 @@ Each project is a self-contained directory:
 
 The global registry lives at `~/AgenticOS/.agent-workspace/registry.yaml` and tracks all projects with relative paths — making the whole workspace portable.
 
+Runtime-only byproducts should not be treated as canonical source:
+
+- `.runtime/` is reserved for local runtime state
+- `.claude/worktrees/` is an agent worktree area, not product source
+
+If you are developing AgenticOS itself from a Git checkout, keep that source checkout separate from your live `AGENTICOS_HOME` workspace.
+
 ---
 
 ## Environment Variable
@@ -121,6 +128,11 @@ By default, AgenticOS stores everything in `~/AgenticOS`. Override with:
 # Add to ~/.zshrc or ~/.bashrc
 export AGENTICOS_HOME="$HOME/my-custom-path"
 ```
+
+Recommended layout:
+
+- product source checkout: any normal development path such as `~/src/AgenticOS`
+- live workspace: `AGENTICOS_HOME`, such as `~/AgenticOS`
 
 ---
 

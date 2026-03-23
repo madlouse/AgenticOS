@@ -13,7 +13,7 @@ Thank you for your interest in contributing to AgenticOS!
 
 ```bash
 git clone https://github.com/madlouse/AgenticOS.git
-cd AgenticOS/mcp-server
+cd AgenticOS/projects/agenticos/mcp-server
 npm install     # use npm install, NOT npm ci (see Pitfalls section)
 npm run build
 npm test
@@ -94,7 +94,7 @@ AgenticOS follows [Semantic Versioning](https://semver.org/):
 # 1. Update version in package.json
 # 2. Update CHANGELOG.md (add new version section, clear [Unreleased])
 # 3. Commit
-git add mcp-server/package.json CHANGELOG.md
+git add projects/agenticos/mcp-server/package.json CHANGELOG.md
 git commit -m "chore(release): bump version to v0.2.1"
 
 # 4. Push to main
@@ -106,7 +106,7 @@ git push origin v0.2.1
 
 # 6. Update Homebrew formula sha256 (after release artifact is published)
 curl -sL https://github.com/madlouse/AgenticOS/releases/download/vX.Y.Z/agenticos-mcp.tgz | shasum -a 256
-# Update homebrew-tap/Formula/agenticos.rb with new url, sha256, and version
+# Update projects/agenticos/homebrew-tap/Formula/agenticos.rb with new url, sha256, and version
 ```
 
 > **Important**: Update the Homebrew formula immediately after every release. Never leave `sha256` as a placeholder — it will break `brew install`.
@@ -114,7 +114,7 @@ curl -sL https://github.com/madlouse/AgenticOS/releases/download/vX.Y.Z/agentico
 ## Code Style
 
 - TypeScript with strict mode enabled
-- Follow existing patterns in `mcp-server/src/`
+- Follow existing patterns in `projects/agenticos/mcp-server/src/`
 - Avoid `any` types in new code where possible
 
 ## Common Pitfalls
