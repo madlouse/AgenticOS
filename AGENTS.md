@@ -5,7 +5,7 @@ AI-native project management system. MCP server that persists context across ses
 ## Quick Start
 
 ```bash
-cd mcp-server
+cd projects/agenticos/mcp-server
 npm install
 npm run build
 ```
@@ -14,12 +14,17 @@ npm run build
 
 | Path | Purpose |
 |------|---------|
-| `mcp-server/src/` | MCP server source (TypeScript, strict mode) |
-| `mcp-server/src/tools/` | Tool implementations: init, switch, list, record, save, status |
-| `mcp-server/src/utils/` | Shared utilities: registry management, state distillation |
-| `projects/` | User project data — **do not modify in feature branches** |
-| `.meta/` | Templates and agent protocol guides |
-| `homebrew-tap/` | Homebrew distribution formula |
+| `projects/agenticos/mcp-server/src/` | MCP server source (TypeScript, strict mode) |
+| `projects/agenticos/mcp-server/src/tools/` | Tool implementations: init, switch, list, record, save, status |
+| `projects/agenticos/mcp-server/src/utils/` | Shared utilities: registry management, state distillation |
+| `projects/` | Managed projects and workspace data |
+| `projects/agenticos/` | AgenticOS product-source project inside the workspace |
+| `projects/agenticos/standards/` | AgenticOS standards and product-definition area |
+| `projects/agenticos/.meta/` | Templates and agent protocol guides |
+| `projects/agenticos/homebrew-tap/` | Homebrew distribution formula |
+| `.github/` | Repository-level automation that must stay at root |
+| `.runtime/` | Runtime-only local state, not canonical source |
+| `.claude/worktrees/` | Agent worktree area, not product source |
 
 ## Development Rules
 
@@ -29,6 +34,7 @@ npm run build
 4. **PR**: Link issue with `Closes #N`, never push directly to `main`
 5. **CI**: Use `npm install` (never `npm ci`) in all workflows
 6. **Release**: Tag `v*` → triggers Release workflow → update Homebrew sha256
+7. **Runtime separation**: Treat `.runtime/` and `.claude/worktrees/` as runtime-only, never as product source
 
 Full details → [CONTRIBUTING.md](CONTRIBUTING.md)
 
@@ -49,6 +55,8 @@ Branch protection on `main`:
 
 Release trigger: push a `vX.Y.Z` tag → GitHub Actions builds and publishes automatically.
 
+When developing AgenticOS itself, the product source checkout and the live `AGENTICOS_HOME` workspace should be treated as separate roles even if they happen to live on the same machine.
+
 ## Architecture
 
 Three-layer design:
@@ -62,8 +70,8 @@ Key constraint: paths stored as relative in registry, resolved to absolute at ru
 
 | Topic | File |
 |-------|------|
-| Architecture details | `projects/agentic-os-development/knowledge/architecture.md` |
-| Design decisions (5) | `projects/agentic-os-development/knowledge/design-decisions.md` |
-| Full system design | `projects/agentic-os-development/knowledge/complete-design.md` |
-| Why MCP over CLI | `projects/agentic-os-development/knowledge/cli-vs-mcp-analysis.md` |
-| Workflow research | `projects/agentic-os-development/knowledge/open-source-workflow-research.md` |
+| Architecture details | `projects/agenticos/standards/knowledge/architecture.md` |
+| Design decisions (5) | `projects/agenticos/standards/knowledge/design-decisions.md` |
+| Full system design | `projects/agenticos/standards/knowledge/complete-design.md` |
+| Why MCP over CLI | `projects/agenticos/standards/knowledge/cli-vs-mcp-analysis.md` |
+| Workflow research | `projects/agenticos/standards/knowledge/open-source-workflow-research.md` |

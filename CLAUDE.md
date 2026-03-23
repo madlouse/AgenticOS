@@ -16,11 +16,14 @@ Agent(isolation: "worktree", subagent_type: "...")
 
 This creates a separate git worktree so changes never touch `main` directly.
 
+Treat `.claude/worktrees/` and `.runtime/` as runtime-only areas.
+They are not canonical product source and should stay outside structural product-source moves.
+
 ### Before Spawning Sub-Agents
 
 Sub-agents start with no project context. Before spawning, read and inject:
 1. This file (`CLAUDE.md`) and `AGENTS.md`
-2. Key knowledge files from `projects/agentic-os-development/knowledge/` relevant to the task
+2. Key knowledge files from `projects/agenticos/standards/knowledge/` relevant to the task
 3. Current project state from the active AgenticOS project
 
 ### MCP Tools Available
@@ -36,8 +39,8 @@ This project is managed by AgenticOS. Use these MCP tools:
 ### Design Artifacts
 
 Persist research, design, and analysis outputs to files immediately:
-- Research reports → `projects/agentic-os-development/knowledge/`
-- Implementation artifacts → `projects/agentic-os-development/artifacts/`
+- Research reports → `projects/agenticos/standards/knowledge/`
+- Implementation artifacts → `projects/agenticos/standards/artifacts/`
 - Reference file paths in conversation, not inline content
 
 This prevents context loss from conversation compression and enables cross-session access.
@@ -45,5 +48,5 @@ This prevents context loss from conversation compression and enables cross-sessi
 ### Build & Verify
 
 ```bash
-cd mcp-server && npm install && npm run build
+cd projects/agenticos/mcp-server && npm install && npm run build
 ```

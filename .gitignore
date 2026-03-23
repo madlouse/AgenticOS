@@ -24,3 +24,7 @@ build/
 
 # Agent-specific temporary files
 .context/sessions/
+
+# Runtime-only workspace state
+.runtime/
+.claude/worktrees/

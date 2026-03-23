@@ -19,17 +19,17 @@ jobs:
           node-version: 22
 
       - name: Install and build
-        working-directory: mcp-server
+        working-directory: projects/agenticos/mcp-server
         run: |
           npm install
           npm run build
 
       - name: Create npm tarball
-        working-directory: mcp-server
+        working-directory: projects/agenticos/mcp-server
         run: npm pack
 
       - name: Move tarball to root
-        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
+        run: mv projects/agenticos/mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
