@@ -5,3 +5,4 @@ export { recordSession } from './record.js';
 export { runPreflight } from './preflight.js';
 export { runBranchBootstrap } from './branch-bootstrap.js';
 export { runPrScopeCheck } from './pr-scope-check.js';
+export { runStandardKitAdopt, runStandardKitUpgradeCheck } from './standard-kit.js';

@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: finalize retirement of the standalone standards repo after the first consolidation wave
+  title: add first-class standard-kit adopt and upgrade-check commands
   status: in_progress
-  updated: 2026-03-23T12:45:00.000Z
+  updated: 2026-03-23T13:45:00.000Z
 
 working_memory:
   facts:
@@ -24,14 +24,19 @@ working_memory:
     - runtime-project-extraction-closure-report-2026-03-23.md is the last remaining high-signal standalone-only report worth canonical merge
     - the remaining standalone-only runtime extraction reports are superseded by canonical main-repo planning and execution documents
     - self-hosting-migration-resolution-draft-2026-03-23.md is superseded by self-hosting-migration-resolution-v1-2026-03-23.md
+    - issue #72 tracks first-class standard-kit commands for adopt and upgrade-check
+    - standard-kit v1 now has a design document at knowledge/standard-kit-command-design-v1-2026-03-23.md
+    - the implementation slice adds agenticos_standard_kit_adopt and agenticos_standard_kit_upgrade_check to the MCP tool surface
+    - standard-kit v1 now restores generated navigation consistency by listing tasks/templates/non-code-evaluation-rubric.yaml
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
     - keep the archive read-only and use it only for provenance or later selective recovery
     - preserve the live .context/.last_record marker because current tooling still uses it
     - no second broad merge wave is needed for the retired standalone standards repo
+    - standard-kit v1 should ship adopt plus upgrade-check before any destructive copied-template upgrade flow
   pending:
-    - decide whether standard-kit adoption and upgrade should become first-class commands
+    - merge issue #72 so adopt and upgrade-check become part of the canonical tool surface
     - decide whether live status surfaces should summarize the latest guardrail evidence more explicitly
     - stop treating the standalone repo as a live writable standards source
 
@@ -45,4 +50,6 @@ loaded_context:
   - knowledge/agent-preflight-and-execution-protocol-2026-03-23.md
   - knowledge/guardrail-flow-wiring-report-2026-03-23.md
   - knowledge/downstream-standard-kit-implementation-report-2026-03-23.md
+  - knowledge/standard-kit-command-design-v1-2026-03-23.md
+  - knowledge/standard-kit-command-implementation-report-2026-03-23.md
   - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
