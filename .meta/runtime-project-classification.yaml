@@ -42,25 +42,26 @@ tracked_projects:
     live_workspace_path: /Users/jeking/AgenticOS/projects/ghostty-optimization
     execution_note: Wave 2 copied the external standalone repository into AGENTICOS_HOME and overlaid source-only shadow artifacts without overwriting the external canonical files.
 
-  - path: projects/okr-management
-    classification: runtime_project
-    extraction_priority: high
-    note: Real managed project with its own repository and local environment content.
-    execution_status: gitlink_pending
-    execution_note: Tracked as a gitlink residue without a valid .gitmodules mapping; requires separate resolution before extraction.
-
-  - path: projects/t5t
-    classification: runtime_project
-    extraction_priority: high
-    note: Real managed project with its own repository and cached runtime material.
-    execution_status: gitlink_pending
-    execution_note: Tracked as a gitlink residue without a valid .gitmodules mapping; requires separate resolution before extraction.
-
   - path: projects/test-project
     classification: fixture_example
     extraction_priority: low
     note: Minimal initialization artifact created to verify agenticos_init behavior; may remain as fixture or be regenerated later.
     execution_status: unchanged
+
+removed_orphaned_residues:
+  - path: projects/okr-management
+    previous_classification: runtime_project
+    resolution_status: removed_from_source_repo
+    resolution_note: >
+      Removed by issue #56 after verification showed the path was only an orphaned
+      gitlink residue with no valid .gitmodules mapping and no canonical content source.
+
+  - path: projects/t5t
+    previous_classification: runtime_project
+    resolution_status: removed_from_source_repo
+    resolution_note: >
+      Removed by issue #56 after verification showed the path was only an orphaned
+      gitlink residue with no valid .gitmodules mapping and no canonical content source.
 
 root_scoped_exclusions:
   - .github/
@@ -71,3 +72,4 @@ decision_rules:
   - Only projects/agenticos is canonical product source.
   - Non-agenticos tracked entries under projects/ default to runtime or fixture content, not product source.
   - Runtime projects should be extracted before relying on the source repo as a clean reference checkout.
+  - Orphaned gitlink residues without valid mappings or canonical content should be removed rather than treated as runtime projects.
