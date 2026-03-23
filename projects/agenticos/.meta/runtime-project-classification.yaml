@@ -14,36 +14,51 @@ tracked_projects:
     classification: runtime_project
     extraction_priority: high
     note: Real managed project content and historical working material.
+    execution_status: extracted_to_live_workspace
+    live_workspace_path: /Users/jeking/AgenticOS/projects/2026okr
+    execution_note: First safe-wave extraction completed on 2026-03-23.
 
   - path: projects/360teams
     classification: runtime_project
     extraction_priority: high
     note: Real managed project with its own repository, dependencies, coverage, and runtime byproducts.
+    execution_status: extracted_to_live_workspace
+    live_workspace_path: /Users/jeking/AgenticOS/projects/360teams
+    execution_note: First safe-wave extraction completed on 2026-03-23.
 
   - path: projects/agentic-devops
     classification: runtime_project
     extraction_priority: high
     note: Real managed project, not part of AgenticOS product source.
+    execution_status: split_brain_pending
+    execution_note: Source repo carries AgenticOS-managed metadata while a separate external directory already exists on disk.
 
   - path: projects/ghostty-optimization
     classification: runtime_project
     extraction_priority: high
     note: Real managed project, not part of AgenticOS product source.
+    execution_status: split_brain_pending
+    execution_note: Registry already points to an external repository; source repo copy appears to be an older managed-project shadow.
 
   - path: projects/okr-management
     classification: runtime_project
     extraction_priority: high
     note: Real managed project with its own repository and local environment content.
+    execution_status: gitlink_pending
+    execution_note: Tracked as a gitlink residue without a valid .gitmodules mapping; requires separate resolution before extraction.
 
   - path: projects/t5t
     classification: runtime_project
     extraction_priority: high
     note: Real managed project with its own repository and cached runtime material.
+    execution_status: gitlink_pending
+    execution_note: Tracked as a gitlink residue without a valid .gitmodules mapping; requires separate resolution before extraction.
 
   - path: projects/test-project
     classification: fixture_example
     extraction_priority: low
     note: Minimal initialization artifact created to verify agenticos_init behavior; may remain as fixture or be regenerated later.
+    execution_status: unchanged
 
 root_scoped_exclusions:
   - .github/
