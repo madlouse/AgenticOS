@@ -136,6 +136,9 @@ For downstream project inheritance, the executable workflow standard kit lives i
 
 - `projects/agenticos/.meta/standard-kit/`
 
+Within this repository, only `projects/agenticos/` should be treated as canonical product source.
+Other currently tracked entries under `projects/` are legacy runtime or fixture content pending extraction into the live workspace model.
+
 ---
 
 ## Environment Variable
