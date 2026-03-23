@@ -1,0 +1,82 @@
+version: 1
+kit_id: downstream-standard-kit
+kit_version: 0.1.0
+status: active
+purpose: >
+  Package the executable AgenticOS workflow standard for downstream projects.
+
+layers:
+  generated_files:
+    description: Files generated or upgraded by the distillation layer.
+    entries:
+      - path: AGENTS.md
+        canonical_source: projects/agenticos/mcp-server/src/utils/distill.ts
+        inheritance: generated
+        customizable: limited
+      - path: CLAUDE.md
+        canonical_source: projects/agenticos/mcp-server/src/utils/distill.ts
+        inheritance: generated
+        customizable: limited
+
+  copied_templates:
+    description: Files copied into a downstream project and then edited in-project.
+    entries:
+      - path: .project.yaml
+        canonical_source: projects/agenticos/.meta/templates/.project.yaml
+        inheritance: copied_template
+        customizable: yes
+      - path: .context/quick-start.md
+        canonical_source: projects/agenticos/.meta/templates/quick-start.md
+        inheritance: copied_template
+        customizable: yes
+      - path: .context/state.yaml
+        canonical_source: projects/agenticos/.meta/templates/state.yaml
+        inheritance: copied_template
+        customizable: yes
+      - path: tasks/templates/agent-preflight-checklist.yaml
+        canonical_source: projects/agenticos/.meta/templates/agent-preflight-checklist.yaml
+        inheritance: copied_template
+        customizable: yes
+      - path: tasks/templates/issue-design-brief.md
+        canonical_source: projects/agenticos/.meta/templates/issue-design-brief.md
+        inheritance: copied_template
+        customizable: yes
+      - path: tasks/templates/submission-evidence.md
+        canonical_source: projects/agenticos/.meta/templates/submission-evidence.md
+        inheritance: copied_template
+        customizable: yes
+
+  excluded_root_infra:
+    description: Root-scoped repository infrastructure that downstream projects must not inherit as project-scoped standards.
+    entries:
+      - path: .github/
+        reason: repository_root_infrastructure
+      - path: .runtime/
+        reason: local_runtime_state
+      - path: .claude/worktrees/
+        reason: local_runtime_state
+
+upgrade_rules:
+  template_marker_version:
+    AGENTS.md: 3
+    CLAUDE.md: 3
+  compatibility_rule: >
+    Generated files may be upgraded in place by distill when the template marker version changes.
+  copied_template_rule: >
+    Copied templates are project-owned after adoption. Upgrades should be opt-in and compare against canonical sources.
+
+adoption:
+  required_files:
+    - AGENTS.md
+    - CLAUDE.md
+    - .project.yaml
+    - .context/quick-start.md
+    - .context/state.yaml
+    - tasks/templates/agent-preflight-checklist.yaml
+    - tasks/templates/issue-design-brief.md
+    - tasks/templates/submission-evidence.md
+  required_behavior:
+    - implementation_preflight
+    - issue_first_branching
+    - isolated_worktree_execution
+    - pr_scope_validation

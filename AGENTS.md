@@ -21,6 +21,7 @@ npm run build
 | `projects/agenticos/` | AgenticOS product-source project inside the workspace |
 | `projects/agenticos/standards/` | AgenticOS standards and product-definition area |
 | `projects/agenticos/.meta/` | Templates and agent protocol guides |
+| `projects/agenticos/.meta/standard-kit/` | Downstream reusable workflow standard package |
 | `projects/agenticos/homebrew-tap/` | Homebrew distribution formula |
 | `.github/` | Repository-level automation that must stay at root |
 | `.runtime/` | Runtime-only local state, not canonical source |
@@ -86,3 +87,4 @@ Key constraint: paths stored as relative in registry, resolved to absolute at ru
 | Full system design | `projects/agenticos/standards/knowledge/complete-design.md` |
 | Why MCP over CLI | `projects/agenticos/standards/knowledge/cli-vs-mcp-analysis.md` |
 | Workflow research | `projects/agenticos/standards/knowledge/open-source-workflow-research.md` |
+| Downstream standard kit | `projects/agenticos/.meta/standard-kit/README.md` |

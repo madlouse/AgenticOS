@@ -132,6 +132,10 @@ Runtime-only byproducts should not be treated as canonical source:
 
 If you are developing AgenticOS itself from a Git checkout, keep that source checkout separate from your live `AGENTICOS_HOME` workspace.
 
+For downstream project inheritance, the executable workflow standard kit lives in:
+
+- `projects/agenticos/.meta/standard-kit/`
+
 ---
 
 ## Environment Variable
