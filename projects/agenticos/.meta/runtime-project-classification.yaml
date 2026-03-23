@@ -30,15 +30,17 @@ tracked_projects:
     classification: runtime_project
     extraction_priority: high
     note: Real managed project, not part of AgenticOS product source.
-    execution_status: split_brain_pending
-    execution_note: Source repo carries AgenticOS-managed metadata while a separate external directory already exists on disk.
+    execution_status: extracted_to_live_workspace
+    live_workspace_path: /Users/jeking/AgenticOS/projects/agentic-devops
+    execution_note: Wave 2 combined the external project tree with the source metadata shadow into AGENTICOS_HOME.
 
   - path: projects/ghostty-optimization
     classification: runtime_project
     extraction_priority: high
     note: Real managed project, not part of AgenticOS product source.
-    execution_status: split_brain_pending
-    execution_note: Registry already points to an external repository; source repo copy appears to be an older managed-project shadow.
+    execution_status: extracted_to_live_workspace
+    live_workspace_path: /Users/jeking/AgenticOS/projects/ghostty-optimization
+    execution_note: Wave 2 copied the external standalone repository into AGENTICOS_HOME and overlaid source-only shadow artifacts without overwriting the external canonical files.
 
   - path: projects/okr-management
     classification: runtime_project
