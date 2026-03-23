@@ -1,51 +1,37 @@
-# AGENTS.md — AgenticOS Development
+# AGENTS.md — AgenticOS Standards
 
-## Recording Protocol (MANDATORY)
+## Canonical Standards Note
 
-This project uses AgenticOS for persistent context management.
-All session activity MUST be recorded via MCP tools.
+- all ongoing standards work for AgenticOS must be recorded in this main repository under `projects/agenticos/standards/`
+- the retired standalone snapshot lives under `archive/standalone-agentic-os-development-2026-03-23/`
+- archive contents are legacy reference material only; they are not the live canonical source
 
-### How to Record
+## Session Start
 
-Call the MCP tool `agenticos_record` with:
-- `summary` (required): What happened in this session
-- `decisions`: Key decisions made
-- `outcomes`: What was accomplished
-- `pending`: What remains to be done
-- `current_task`: { title, status } to update current task
+Before doing standards work, read:
 
-### When to Record
+1. `.project.yaml`
+2. `.context/quick-start.md`
+3. `.context/state.yaml`
+4. the specific `knowledge/` documents relevant to the issue you are working on
 
-1. After completing any meaningful unit of work
-2. Before ending the session (MANDATORY — context is lost otherwise)
+Treat archived standalone material as read-only historical evidence, not as the authoritative current state.
 
-After recording, call `agenticos_save` to commit to Git.
+## Working Rules
 
-### Session Start
-
-On session start, read these files for context:
-1. `.project.yaml` — Project metadata
-2. `.context/state.yaml` — Current state and working memory
-3. `.context/conversations/` — Previous session records
-
-Then greet the user with: project name, last progress, current pending items, suggested next step.
-
-## Project
-
-**Name**: AgenticOS Development
-**Description**: Agent-first project management OS — AI Agent autonomously manages project state, cross-session context recovery, and cross-tool collaboration.
+1. Standards work follows the main AgenticOS workflow: issue first, isolated branch/worktree, verification before merge.
+2. Use `knowledge/` for durable decisions, execution reports, migration reports, and protocol changes.
+3. Keep `.context/quick-start.md` and `.context/state.yaml` current enough that another agent can resume without chat history.
+4. Do not create a second active standards repo or write new canonical records into `projects/agentic-os-development`.
+5. Prefer canonical template surfaces under `projects/agenticos/.meta/templates/` and `projects/agenticos/.meta/standard-kit/` over ad hoc local template copies.
 
 ## Directory Structure
 
 | Path | Purpose |
 |------|---------|
-| `.project.yaml` | Project metadata |
-| `.context/state.yaml` | Session state and working memory |
-| `.context/conversations/` | Session records (auto-generated) |
-| `knowledge/` | Persistent knowledge: architecture, decisions, trade-offs |
-| `knowledge/architecture.md` | Three-layer architecture design |
-| `knowledge/design-decisions.md` | 5 key design decisions with rationale |
-| `knowledge/complete-design.md` | Complete system design document |
-| `tasks/` | Task tracking |
-| `artifacts/` | Outputs and deliverables |
-| `changelog.md` | Project changelog |
+| `.project.yaml` | Standards area metadata |
+| `.context/quick-start.md` | Human-readable entry status for this standards area |
+| `.context/state.yaml` | Structured current state and working memory |
+| `knowledge/` | Canonical standards reasoning, design history, and execution reports |
+| `archive/` | Retired standalone standards snapshots kept only for provenance |
+| `changelog.md` | Historical change log carried forward from the standalone phase |

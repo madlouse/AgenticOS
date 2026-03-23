@@ -39,6 +39,7 @@ These live under `projects/agenticos/.meta/templates/`:
 - `state.yaml`
 - `agent-preflight-checklist.yaml`
 - `issue-design-brief.md`
+- `non-code-evaluation-rubric.yaml`
 - `submission-evidence.md`
 
 ### Standards reference area

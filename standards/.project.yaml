@@ -1,7 +1,7 @@
 meta:
-  name: agentic-os-development
-  id: agentic-os-development
-  description: ""
+  name: agenticos-standards
+  id: agenticos-standards
+  description: Canonical standards and protocol area inside the main AgenticOS product repository.
   created: 2026-03-20
   version: 1.0.0
 agent_context:
