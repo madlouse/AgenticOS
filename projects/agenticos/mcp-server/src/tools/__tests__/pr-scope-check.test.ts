@@ -10,6 +10,17 @@ vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
 }));
 
+const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue({
+  attempted: true,
+  persisted: true,
+  project_id: 'agenticos',
+  state_path: '/repo/.context/state.yaml',
+}));
+
+vi.mock('../../utils/guardrail-evidence.js', () => ({
+  persistGuardrailEvidence: persistGuardrailEvidenceMock,
+}));
+
 import { runPrScopeCheck } from '../pr-scope-check.js';
 
 function mockGitResponses(responses: Record<string, string>): void {
@@ -26,6 +37,12 @@ function mockGitResponses(responses: Record<string, string>): void {
 describe('runPrScopeCheck', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    persistGuardrailEvidenceMock.mockResolvedValue({
+      attempted: true,
+      persisted: true,
+      project_id: 'agenticos',
+      state_path: '/repo/.context/state.yaml',
+    });
   });
 
   it('returns PASS when commits and files stay within the intended issue scope', async () => {
@@ -41,11 +58,13 @@ describe('runPrScopeCheck', () => {
       repo_path: '/repo',
       declared_target_files: ['projects/agenticos/mcp-server/src/tools/**', 'projects/agenticos/mcp-server/src/index.ts'],
       expected_issue_scope: 'single_guardrail_feature',
-    })) as { status: string; unexpected_files: string[]; unrelated_commit_subjects: string[] };
+    })) as { status: string; unexpected_files: string[]; unrelated_commit_subjects: string[]; persistence?: { persisted: boolean } };
 
     expect(result.status).toBe('PASS');
     expect(result.unexpected_files).toEqual([]);
     expect(result.unrelated_commit_subjects).toEqual([]);
+    expect(result.persistence?.persisted).toBe(true);
+    expect(persistGuardrailEvidenceMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns BLOCK when commit subjects do not match the current issue', async () => {

@@ -10,6 +10,17 @@ vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
 }));
 
+const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue({
+  attempted: true,
+  persisted: true,
+  project_id: 'agenticos',
+  state_path: '/repo/.context/state.yaml',
+}));
+
+vi.mock('../../utils/guardrail-evidence.js', () => ({
+  persistGuardrailEvidence: persistGuardrailEvidenceMock,
+}));
+
 import { runPreflight } from '../preflight.js';
 
 function mockGitResponses(responses: Record<string, string>): void {
@@ -26,6 +37,12 @@ function mockGitResponses(responses: Record<string, string>): void {
 describe('runPreflight', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    persistGuardrailEvidenceMock.mockResolvedValue({
+      attempted: true,
+      persisted: true,
+      project_id: 'agenticos',
+      state_path: '/repo/.context/state.yaml',
+    });
   });
 
   it('returns PASS for a correctly isolated implementation branch', async () => {
@@ -45,11 +62,13 @@ describe('runPreflight', () => {
       repo_path: '/repo',
       declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
       worktree_required: true,
-    })) as { status: string; worktree_ok: boolean; branch_based_on_intended_remote: boolean };
+    })) as { status: string; worktree_ok: boolean; branch_based_on_intended_remote: boolean; persistence?: { persisted: boolean } };
 
     expect(result.status).toBe('PASS');
     expect(result.worktree_ok).toBe(true);
     expect(result.branch_based_on_intended_remote).toBe(true);
+    expect(result.persistence?.persisted).toBe(true);
+    expect(persistGuardrailEvidenceMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns REDIRECT when implementation starts on main workspace', async () => {
