@@ -6,7 +6,7 @@
 
 **Theme**: Core infrastructure + developer workflow
 
-- [x] MCP Server with 6 tools (init, switch, list, record, save, status) + 1 resource
+- [x] MCP Server with 9 tools (init, switch, list, status, record, save, preflight, branch bootstrap, pr scope check) + 1 resource
 - [x] Three-layer architecture: Universal Protocol → MCP Server → Agent-Specific Config
 - [x] Session recording: conversations/ + state.yaml auto-sync to CLAUDE.md
 - [x] Template versioning with auto-upgrade on project switch

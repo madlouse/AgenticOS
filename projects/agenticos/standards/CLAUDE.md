@@ -62,7 +62,7 @@ When you open this project in a new session, **immediately do the following**:
 
 **三层架构**:
 1. **通用层** (Universal): `.project.yaml` + `.context/state.yaml` + `knowledge/` + `tasks/` — 纯文本+结构化数据，无工具依赖
-2. **MCP 层**: `agenticos-mcp` npm 包，5 个工具 (init/switch/list/record/save) + 1 个资源
+2. **MCP 层**: `agenticos-mcp` npm 包，9 个工具 (init/switch/list/status/record/save/preflight/branch_bootstrap/pr_scope_check) + 1 个资源
 3. **Agent 适配层**: `CLAUDE.md` / `CURSOR.md` — 每个工具的专用配置和行为指令
 
 **技术栈**: TypeScript, Node.js (ES2022), MCP SDK, YAML, Git

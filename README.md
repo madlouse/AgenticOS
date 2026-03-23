@@ -85,7 +85,21 @@ The agent will call `agenticos_init` and set up the project structure automatica
 | `agenticos_init` | Create a new project | `name` (required), `description`, `path` |
 | `agenticos_switch` | Switch active project | `project` (ID or name) |
 | `agenticos_list` | List all projects | — |
+| `agenticos_status` | Show active project status | — |
+| `agenticos_preflight` | Evaluate implementation/PR guardrails | `task_type`, `repo_path`, `issue_id`, `declared_target_files` |
+| `agenticos_branch_bootstrap` | Create issue branch + isolated worktree from `origin/main` | `issue_id`, `slug`, `repo_path`, `worktree_root` |
+| `agenticos_pr_scope_check` | Validate commit/file scope before PR | `issue_id`, `repo_path`, `declared_target_files` |
+| `agenticos_record` | Record session progress | `summary`, `decisions`, `outcomes`, `pending`, `current_task` |
 | `agenticos_save` | Save state + git backup | `message` (commit message) |
+
+### Implementation Guardrail Flow
+
+For implementation work in AgenticOS-managed repositories:
+
+1. call `agenticos_preflight`
+2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap`
+3. implement in the returned isolated worktree
+4. call `agenticos_pr_scope_check` before opening or merging a PR
 
 ### MCP Resource
 
