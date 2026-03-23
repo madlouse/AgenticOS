@@ -169,6 +169,8 @@ git ls-remote https://github.com/madlouse/AgenticOS.git HEAD
 
 If the failure is specific to proxied Git HTTPS transport, use a command-scoped direct push with a temporary `GIT_ASKPASS` helper instead of embedding tokens in the remote URL. The canonical operator procedure lives in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+If the no-proxy retry still fails with `LibreSSL SSL_connect: SSL_ERROR_SYSCALL`, retry once more with command-scoped `-c http.version=HTTP/1.1` rather than changing global Git transport defaults.
+
 ---
 
 ## Cross-Machine Migration
