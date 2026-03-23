@@ -1,0 +1,56 @@
+version: 1
+status: active
+purpose: >
+  Classify tracked entries under projects/ so runtime extraction can proceed without
+  re-opening host-product versus runtime boundary questions.
+
+canonical_host_project:
+  path: projects/agenticos
+  classification: host_product
+  note: AgenticOS product source project after the landed self-hosting migration.
+
+tracked_projects:
+  - path: projects/2026okr
+    classification: runtime_project
+    extraction_priority: high
+    note: Real managed project content and historical working material.
+
+  - path: projects/360teams
+    classification: runtime_project
+    extraction_priority: high
+    note: Real managed project with its own repository, dependencies, coverage, and runtime byproducts.
+
+  - path: projects/agentic-devops
+    classification: runtime_project
+    extraction_priority: high
+    note: Real managed project, not part of AgenticOS product source.
+
+  - path: projects/ghostty-optimization
+    classification: runtime_project
+    extraction_priority: high
+    note: Real managed project, not part of AgenticOS product source.
+
+  - path: projects/okr-management
+    classification: runtime_project
+    extraction_priority: high
+    note: Real managed project with its own repository and local environment content.
+
+  - path: projects/t5t
+    classification: runtime_project
+    extraction_priority: high
+    note: Real managed project with its own repository and cached runtime material.
+
+  - path: projects/test-project
+    classification: fixture_example
+    extraction_priority: low
+    note: Minimal initialization artifact created to verify agenticos_init behavior; may remain as fixture or be regenerated later.
+
+root_scoped_exclusions:
+  - .github/
+  - .runtime/
+  - .claude/worktrees/
+
+decision_rules:
+  - Only projects/agenticos is canonical product source.
+  - Non-agenticos tracked entries under projects/ default to runtime or fixture content, not product source.
+  - Runtime projects should be extracted before relying on the source repo as a clean reference checkout.
