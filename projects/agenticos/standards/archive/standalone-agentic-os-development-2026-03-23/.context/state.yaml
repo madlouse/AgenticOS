@@ -1,0 +1,176 @@
+session:
+  id: session-2026-03-22-001
+  started: 2026-03-22T06:00:00.000Z
+  agent: codex
+  last_backup: 2026-03-23T03:42:30.000Z
+
+current_task:
+  title: record completion of guardrail execution evidence persistence after issue #62 landed
+  status: in_progress
+  updated: 2026-03-23T10:03:00.000Z
+
+working_memory:
+  facts:
+    - agentic-os-development is the standards and product-definition project for AgenticOS itself
+    - AgenticOS should remain one main product and one main source repository
+    - agentic-os-development should be treated as the standards or meta area inside the broader AgenticOS product effort
+    - mcp-server belongs to the product implementation layer, not to the standards project
+    - the top-level AgenticOS repository currently mixes standards, implementation, runtime workspace projects, and runtime byproducts
+    - ordinary projects under projects/ should be treated as runtime workspace projects by default
+    - projects/agentic-os-development should remain distinct from ordinary runtime projects
+    - .claude/worktrees should be treated as runtime or ephemeral state, not canonical source
+    - .agent-workspace/registry.yaml should be treated as workspace metadata
+    - the immediate practical rule is that the AgenticOS source repo and live AGENTICOS_HOME workspace should be separate
+    - GitHub issue #37 tracks the separation of product source, workspace, and runtime layers
+    - GitHub issue #38 tracks extraction of tracked runtime workspace projects from the product source repository
+    - GitHub issue #39 tracks evaluation of a self-hosting workspace model where AgenticOS itself becomes a managed project under projects/
+    - GitHub issue #40 tracks planning the phased self-hosting migration sequence
+    - GitHub issue #41 tracks the baseline isolation procedure before self-hosting migration execution
+    - GitHub issue #42 tracks the operator checklist for self-hosting migration baseline isolation
+    - a self-hosting migration needs phased execution, path rewrites, verification gates, and rollback boundaries
+    - the migration should primarily target the AgenticOS host product while keeping existing runtime projects largely unaffected
+    - self-hosting resolution v1 freezes projects/agenticos as the canonical managed product project path
+    - self-hosting resolution v1 freezes projects/agenticos/standards as the target standards location
+    - self-hosting resolution v1 freezes .runtime/ as the target runtime-only root
+    - Phase 2 now requires an explicit path relocation checklist for product-source paths, standards paths, and reference rewrites
+    - Phase 3 must be verification-first: each step needs preconditions, immediate verification, and a local rollback boundary
+    - current root build baseline is green for mcp-server, but the top-level repository worktree is not clean
+    - baseline isolation is required before any real structural move because the current main worktree mixes unrelated changes
+    - operator checklist v1 proposes base commit fc401332bea49fdecdc2f4e489e30545d5061043, branch feat/self-hosting-migration, and external worktree /Users/jeking/worktrees/agenticos-self-hosting
+    - baseline backups were exported to /Users/jeking/worktrees/agenticos-self-hosting-baseline/2026-03-23 before migration execution
+    - a clean external worktree now exists at /Users/jeking/worktrees/agenticos-self-hosting on branch feat/self-hosting-migration
+    - the isolated worktree is clean and points at fc401332bea49fdecdc2f4e489e30545d5061043
+    - the clean reproducibility gate failed in the isolated worktree because mcp-server/package.json and package-lock.json are out of sync
+    - npm ci failed in the isolated worktree with missing vitest-related lock entries
+    - GitHub issue #43 tracks restoration of a reproducible clean-install baseline before self-hosting migration resumes
+    - the initial #43 PR (#44) was closed because it was based on a local branch ahead of origin/main and included unrelated commits
+    - the corrected #43 replacement PR (#45) was cut directly from origin/main and merged
+    - self-hosting migration was then re-established on a fresh clean worktree and merged as PR #46
+    - the landed repository layout now uses projects/agenticos as the product-source project path
+    - the landed repository layout now uses projects/agenticos/standards as the standards path
+    - execution proved that .github must remain at repository root because GitHub Actions workflow discovery is root-scoped
+    - the relocated product still builds and tests successfully from projects/agenticos/mcp-server
+    - post-self-hosting follow-up work is now centered on guardrails, downstream standards packaging, and runtime project extraction
+    - GitHub issues #35, #36, #37, and #38 were updated with execution-backed corrections after self-hosting landed
+    - guardrail v1 is now documented as a four-layer machine-checkable model: task, repository, scope, and reproducibility gates
+    - the preflight checklist template has been expanded to include remote-base ancestry checks, scope-control fields, and clean reproducibility gates
+    - guardrail command contracts now exist for agenticos_preflight, agenticos_branch_bootstrap, and agenticos_pr_scope_check
+    - the first executable guardrail slice has now landed as PR #47 in the main AgenticOS repository
+    - agenticos_preflight is now implemented in projects/agenticos/mcp-server and returns PASS, BLOCK, or REDIRECT
+    - the landed preflight slice validates repo identity, worktree state, remote-base ancestry, scope declaration, structural-move exceptions, and reproducibility-gate declaration
+    - the isolated implementation worktree for the guardrail slice passed npm install, npm run build, and npm test before PR #47 merged
+    - agenticos_branch_bootstrap has now landed as PR #48 in the main AgenticOS repository
+    - agenticos_branch_bootstrap creates an issue branch and isolated worktree from the intended remote base and blocks when branch or worktree targets already exist unexpectedly
+    - agenticos_pr_scope_check has now landed as PR #49 in the main AgenticOS repository
+    - agenticos_pr_scope_check validates commit subjects and changed files against the intended issue scope relative to the remote base
+    - PR #50 wired the first guardrail command trio into root repo guidance, Claude command entry points, reusable templates, and distill-generated project templates
+    - the distillation template version is now v3 and includes the guardrail protocol
+    - guardrail issue #36 is complete for v1 because command implementation and execution-flow wiring now both exist
+    - PR #51 added a downstream standard kit under projects/agenticos/.meta/standard-kit/
+    - the downstream standard kit now defines canonical generated files, copied templates, root-scoped exclusions, and upgrade rules
+    - issue #35 is complete for the initial downstream packaging milestone
+    - PR #52 added a machine-readable runtime project classification manifest and a concrete extraction plan
+    - runtime projects under projects/ are now explicitly classified instead of implicitly mixed with product source
+    - issue #38 is complete for the planning milestone, but actual filesystem extraction remains follow-up execution work
+    - GitHub issue #53 now tracks the actual runtime-project extraction execution step
+    - GitHub issue #37 is now closed because the product/workspace/runtime layer model has been explicitly defined
+    - issue #53 wave 1 has copied projects/2026okr into /Users/jeking/AgenticOS/projects/2026okr
+    - issue #53 wave 1 has copied projects/360teams into /Users/jeking/AgenticOS/projects/360teams
+    - the live workspace registry now points 2026okr and 360teams to /Users/jeking/AgenticOS/projects/*
+    - the issue #53 execution worktree is /Users/jeking/worktrees/agenticos-runtime-extraction-53 on branch feat/53-runtime-project-extraction
+    - the local wave-1 extraction commit is 9638a99 feat(meta): execute runtime extraction wave 1 (#53)
+    - PR #54 has been merged and origin/main is now ahead to a6929dfb4508db0abbf22e47f732c0139a41e08b
+    - PR #55 has been merged for the wave-2 extraction of agentic-devops and ghostty-optimization
+    - the live workspace registry now points agentic-devops and ghostty-optimization to /Users/jeking/AgenticOS/projects/*
+    - PR #57 has been merged to remove the orphaned gitlink residues okr-management and t5t
+    - okr-management and t5t were verified to be empty mode-160000 gitlink residues with no valid .gitmodules mapping and no canonical content source
+    - GitHub issue #56 is now closed
+    - GitHub issue #53 is now closed
+    - clean origin/main now contains only projects/agenticos and projects/test-project under projects/
+    - clean origin/main no longer fails git submodule status --recursive because of okr-management or t5t
+    - the live workspace registry no longer contains entries for okr-management or t5t
+    - the original Git publication failure was caused by Git using the globally configured http/https proxy at 127.0.0.1:7897
+    - GitHub itself was reachable; git -c http.proxy= -c https.proxy= ls-remote to the repository succeeded immediately
+    - SSH push is still unavailable in this environment because git@github.com does not have configured public-key access here
+    - PR #59 has been merged to document the GitHub transport fallback in the main product repository
+    - GitHub issue #58 is now closed
+    - the main repository now documents a command-scoped no-proxy plus temporary GIT_ASKPASS operator procedure instead of token-in-URL push guidance
+    - publishing PR #59 still required command-scoped -c http.version=HTTP/1.1 to avoid LibreSSL SSL_ERROR_SYSCALL during git push
+    - PR #61 has been merged to refine the Git transport fallback with the HTTP/1.1 compatibility retry
+    - GitHub issue #60 is now closed
+    - the main repository now documents the full observed operator sequence for this machine: no-proxy, temporary GIT_ASKPASS, and command-scoped http.version=HTTP/1.1 when needed
+    - PR #65 has been merged to persist bounded guardrail execution evidence into project context
+    - GitHub issue #62 is now closed
+    - guardrail command results are now persisted into a dedicated state.yaml section: guardrail_evidence
+    - guardrail evidence now resolves target projects first by registered managed path and then by nearest on-disk .project.yaml plus .context/state.yaml root
+    - repeated guardrail runs now overwrite latest evidence per command instead of appending unbounded logs into working memory
+  decisions:
+    - keep AgenticOS as one main product with internal work domains rather than splitting it into separate products
+    - separate product source, user workspace, and runtime artifacts as a portability requirement
+    - exclude runtime artifacts from product source control where possible
+    - create a dedicated migration plan for already tracked runtime projects
+    - if self-hosting is adopted, migrate in phases instead of mixing source relocation, standards relocation, and runtime relocation in one step
+    - keep the public product identity as AgenticOS while using projects/agenticos as the canonical managed product project path
+    - freeze the target model before structural moves begin so later planning does not re-open the same naming and role questions
+    - split Phase 2 into path classification, reference rewrite inventory, and later execution sequencing
+    - prioritize verification over move speed during migration planning and execution
+    - require baseline isolation before any real structural move begins
+    - use a fresh dedicated external worktree for migration execution rather than the current root worktree
+    - freeze concrete operator inputs before execution so migration does not improvise branch names or worktree paths
+    - stop structural migration immediately if clean-checkout reproducibility fails in the isolated worktree
+    - use npm ci rather than npm install for the clean-baseline verification gate in mcp-server
+    - keep the lockfile repair on its own issue branch rather than mixing it into the migration branch
+    - keep .github at repository root as repo-automation infrastructure even after self-hosting migration lands
+    - use the landed self-hosting model as the baseline for future standards packaging and runtime extraction work
+    - treat wrong-base branch ancestry and PR diff-scope leakage as first-class guardrail problems
+    - separate checker commands from mutating helper commands in the guardrail layer
+    - implement guardrails incrementally, starting with preflight checks before moving to branch bootstrap and PR scope enforcement
+    - keep #36 open after the command trio lands until invocation and workflow integration rules are executable
+    - treat automatic persistence of guardrail execution evidence as a follow-up enhancement rather than a blocker for closing #36
+    - treat the initial standard-kit package model as sufficient to close #35 even before adoption/upgrade automation exists
+    - treat #38 as complete for planning once classification, extraction sequence, and de-tracking strategy are explicitly landed
+    - split runtime-project extraction into a closed planning issue and a separate execution issue so later filesystem changes have their own guardrailed work item
+    - codify the Git proxy and credential workaround as a repository-level operator procedure rather than leaving it only in execution notes
+    - keep transport troubleshooting guidance command-scoped and diagnostic rather than turning it into blanket global Git configuration advice
+    - keep guardrail execution evidence in a dedicated state section instead of mixing it into working_memory
+  pending:
+    - decide how Git history and repo boundaries are preserved during relocation
+    - decide whether projects/test-project should be kept as a fixture/example or extracted as runtime content
+    - define migration steps for already tracked runtime workspace projects in the top-level product repository
+    - define how Homebrew initialization should create a clean workspace separate from the product source checkout
+    - update the canonical migration and layering documents to reflect the root-level .github exception
+    - continue downstream packaging, guardrails, boundary enforcement, and memory-layer contract work
+    - decide whether standard-kit adoption and upgrade should become first-class commands
+    - decide whether the standards-repo history should now be cleaned up and committed under its own issue-first flow
+    - decide whether project status surfaces should summarize the latest guardrail evidence in a more human-readable way
+
+loaded_context:
+  - .project.yaml
+  - .context/quick-start.md
+  - knowledge/product-positioning-and-design-review-2026-03-22.md
+  - knowledge/repository-layering-and-portability-plan-2026-03-23.md
+  - knowledge/self-hosting-workspace-model-2026-03-23.md
+  - knowledge/self-hosting-migration-plan-2026-03-23.md
+  - knowledge/self-hosting-migration-resolution-v1-2026-03-23.md
+  - knowledge/phase2-path-relocation-checklist-2026-03-23.md
+  - knowledge/phase3-execution-sequence-2026-03-23.md
+  - knowledge/command-level-migration-playbook-v1-2026-03-23.md
+  - knowledge/baseline-isolation-plan-2026-03-23.md
+  - knowledge/operator-checklist-v1-2026-03-23.md
+  - knowledge/baseline-isolation-execution-report-2026-03-23.md
+  - knowledge/self-hosting-migration-execution-report-2026-03-23.md
+  - knowledge/post-self-hosting-follow-up-plan-2026-03-23.md
+  - knowledge/agent-guardrail-design-v1-2026-03-23.md
+  - knowledge/agent-guardrail-command-contracts-v1-2026-03-23.md
+  - knowledge/guardrail-preflight-implementation-report-2026-03-23.md
+  - knowledge/guardrail-command-trio-implementation-report-2026-03-23.md
+  - knowledge/guardrail-flow-wiring-report-2026-03-23.md
+  - knowledge/downstream-standard-kit-implementation-report-2026-03-23.md
+  - knowledge/runtime-project-extraction-planning-report-2026-03-23.md
+  - knowledge/runtime-project-extraction-execution-follow-up-2026-03-23.md
+  - knowledge/runtime-project-extraction-wave1-report-2026-03-23.md
+  - knowledge/runtime-project-extraction-wave2-report-2026-03-23.md
+  - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
+  - knowledge/git-transport-fallback-documentation-report-2026-03-23.md
+  - knowledge/git-transport-http11-refinement-report-2026-03-23.md
+  - knowledge/guardrail-evidence-persistence-implementation-report-2026-03-23.md

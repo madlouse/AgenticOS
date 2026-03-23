@@ -41,6 +41,10 @@ layers:
         canonical_source: projects/agenticos/.meta/templates/issue-design-brief.md
         inheritance: copied_template
         customizable: yes
+      - path: tasks/templates/non-code-evaluation-rubric.yaml
+        canonical_source: projects/agenticos/.meta/templates/non-code-evaluation-rubric.yaml
+        inheritance: copied_template
+        customizable: yes
       - path: tasks/templates/submission-evidence.md
         canonical_source: projects/agenticos/.meta/templates/submission-evidence.md
         inheritance: copied_template
@@ -74,6 +78,7 @@ adoption:
     - .context/state.yaml
     - tasks/templates/agent-preflight-checklist.yaml
     - tasks/templates/issue-design-brief.md
+    - tasks/templates/non-code-evaluation-rubric.yaml
     - tasks/templates/submission-evidence.md
   required_behavior:
     - implementation_preflight

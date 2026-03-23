@@ -1,72 +1,44 @@
 session:
-  id: session-2026-03-22-001
-  started: 2026-03-22T06:00:00.000Z
-  agent: claude-sonnet-4.6
-  last_backup: 2026-03-22T07:15:31.962Z
+  id: standards-main-2026-03-23-001
+  started: 2026-03-23T09:30:00.000Z
+  agent: codex
+  last_backup: 2026-03-23T10:35:00.000Z
+
 current_task:
-  title: v0.2.1 发布 + 文档规范更新
-  status: completed
-  updated: 2026-03-22T07:30:00.000Z
+  title: execute the first consolidation wave for the retired standalone standards repo inside the main AgenticOS repository
+  status: in_progress
+  updated: 2026-03-23T10:35:00.000Z
+
 working_memory:
   facts:
-    - zsh-autosuggestions 安装完成
-    - Zed 配置部署到 ~/.config/zed/settings.json
-    - Cmux hooks 部署到 ~/.claude/hooks/cmux-notify-hook.sh
-    - .zshrc 备份到 ~/.config-backup/ghostty-opt-20260321-133433/zshrc.bak
-    - Shell 快捷函数追加完成 (cw/cc/cb/z.)
-    - Ghostty copy-on-select 改为 false
-    - "PR #8 已创建：https://github.com/madlouse/AgenticOS/pull/8（模板版本化）"
-    - distill.ts 新增：CURRENT_TEMPLATE_VERSION、extractTemplateVersion()、upgradeClaudeMd()、ensureVersionMarker()
-    - project.ts 新增：switchProject 时检测版本并自动升级（保留用户内容）
-    - 两个 worktree 坑：1) repo 内部 worktree 导致 commit 打 main 2) reset --hard 会 revert 未提交的文件
-    - "PR #6 已创建：基础设施（CLAUDE.md/AGENTS.md 修订、模板、LICENSE）"
-    - "PR #8 已创建：MCP Server 模板版本化机制"
-    - "PR #10 已创建：CI lint/test 脚本准备（workflow 文件需手动添加）"
-    - 创建 homebrew-ghostty 仓库 (https://github.com/madlouse/homebrew-ghostty)
-    - ghostty-cmux.rb Formula 完成，SHA256 已验证
-    - README.md 重写为 Agent-friendly 版本并推送
-    - brew tap madlouse/ghostty 测试成功，formula 正常解析
-    - 175 tests pass across 4 test files
-    - SKILL.md v2.5.0 with docs + calendar commands
-    - DEVELOPMENT.md updated with miniapp-cdp.js, docs.js, calendar.js, calendar-parser.test.js
-    - "calendar-parser.test.js: 43 tests for calendar.js exported functions"
-    - "docs --action shared 正常列出 20 份文档"
-    - "docs --action read 对文字文档（docs/ 和 docx/ 路径）成功读取内容"
-    - "Canvas 表格（sheets/）返回明确提示，不再报 Document not found"
-    - "固定了 ~/.opencli/clis/360teams/ 与项目 clis/ 不同步的问题"
-    - 合并 PR #19（vitest 单测）和 PR #21（CI 修复）到 main
-    - 关闭 Issue #1 #2 #3 #13 #14 #15 #16（全部清零）
-    - 发布 v0.2.1：单测套件 + CI 修复
-    - 更新 Homebrew Formula sha256 为 v0.2.1 实际值 f87d5e1a...
-    - 更新 CONTRIBUTING.md：GitHub Flow 规范、发布流程、常见陷阱
-    - 更新 AGENTS.md：同步 Git Flow 规范
+    - projects/agenticos/standards is now the only canonical location for ongoing AgenticOS standards work
+    - the standalone repo projects/agentic-os-development is now a retired transitional snapshot, not an active canonical repo
+    - issue #66 was merged as PR #67 to freeze the canonical standards location and define merge/archive/discard rules
+    - issue #68 tracks the first real consolidation wave after the audit
+    - the first consolidation wave backfills missing high-signal standards knowledge documents into the main standards knowledge area
+    - the retired standalone raw context, conversations, entry files, and local issue drafts are archived under archive/standalone-agentic-os-development-2026-03-23/
+    - active standards entry files must point only to the main standards area, not to the retired standalone repo
+    - reusable downstream templates are canonically surfaced under projects/agenticos/.meta/templates/
+    - reusable downstream packaging rules are canonically surfaced under projects/agenticos/.meta/standard-kit/
+    - non-code-evaluation-rubric.yaml has been restored into the main template surface as part of issue #68
   decisions:
-    - "bootstrap.sh 实际执行: 全部成功，无报错"
-    - Ghostty copy-on-select 改为 false (sed 直接修改)
-    - Worktree 应建立在 repo 外部而非内部，否则 git 命令会混淆
-    - commit 到错误分支后用 `git reset --hard HEAD~1` 撤销，但会同时 revert 文件——需重新应用变更
-    - 最终方案：在 repo 外建立独立 worktree 目录
-    - CI workflow 文件通过 GitHub API 推送需要 workflow scope，OAuth token 不够
-    - 解决方案：在 PR body 中提供 workflow 文件完整内容，用户手动添加
-    - "双仓库架构: ghostty-optimization(配置) + homebrew-ghostty(安装入口)"
-    - "Formula: ghostty-cmux.rb，自动安装 Cmux/Zed/starship 等 + 克隆配置仓库 + 运行 bootstrap"
-    - README 改为 Agent-friendly：明确安装命令、架构图、文件结构、开发状态
-    - Cmux 通过 manaflow-ai/cmux/cmux tap 安装，非直接 cask
-    - tests/helpers.test.js 中 T5T helper 函数应从 helpers.js 导入（非 t5t.js），因为 helpers.js 包含完整数据转换函数，t5t.js 只导出 innerText 解析函数
-    - parseCalendarDayFromText 需要 null guard 防止 null 输入导致 TypeError
-    - docs.js 由于跨域 iframe 限制，仅实现 status 动作，这是已知技术约束而非设计缺陷
-    - refreshIframeContext 从 miniapp-cdp.js 导入而非本地定义，避免重复代码和 bug
-    - canvas 文档返回特定提示而非报错，保持命令稳定性
-    - 导航使用 setTimeout 推迟 50ms，避免 context 在返回前被销毁
-    - iframe 导航使用 parent frame 的 iframe.src 设置，绕过跨域限制
-    - 使用 GitHub Flow（单 main 分支）替代 Git Flow，适合单人/AI-agent 协作项目
-    - branch protection 去掉 required reviews（GitHub 不允许自审），只保留 CI required
-    - 所有 workflow 用 npm install 替换 npm ci，避免 lock file 不同步问题
-    - Homebrew formula sha256 必须在每次 release 后立即更新，不留 placeholder
+    - keep one main AgenticOS product repository and one canonical standards area inside it
+    - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
+    - keep the archive read-only and use it only for provenance or later selective recovery
+    - preserve the live .context/.last_record marker because current tooling still uses it
   pending:
-    - Homebrew tap 是否需要独立仓库发布（目前在主 repo 内）
-    - "Node.js 20 actions deprecation 警告（2026-06-02 前需升级到 Node 24）"
-    - agenticos_record 存在 bug：JSON 数组字符串被逐字符展开写入 YAML，需修复序列化逻辑
+    - commit, push, and open the first consolidation-wave PR for issue #68
+    - decide whether archived standalone material needs a second merge wave or can remain archive-only
+    - decide whether standard-kit adoption and upgrade should become first-class commands
+    - decide whether live status surfaces should summarize the latest guardrail evidence more explicitly
+
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
+  - knowledge/standalone-standards-repo-consolidation-audit-2026-03-23.md
+  - knowledge/standalone-standards-first-consolidation-wave-2026-03-23.md
+  - knowledge/product-positioning-and-design-review-2026-03-22.md
+  - knowledge/agent-preflight-and-execution-protocol-2026-03-23.md
+  - knowledge/guardrail-flow-wiring-report-2026-03-23.md
+  - knowledge/downstream-standard-kit-implementation-report-2026-03-23.md
+  - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
