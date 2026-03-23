@@ -42,6 +42,7 @@ Repository boundary rule:
 5. **CI**: Use `npm install` (never `npm ci`) in all workflows
 6. **Release**: Tag `v*` → triggers Release workflow → update Homebrew sha256
 7. **Runtime separation**: Treat `.runtime/` and `.claude/worktrees/` as runtime-only, never as product source
+8. **Git transport fallback**: If HTTPS push breaks because of local proxy or credential plumbing, use the documented command-scoped no-proxy + `GIT_ASKPASS` fallback in `CONTRIBUTING.md`; do not embed tokens in remote URLs
 
 ## Guardrail Flow
 

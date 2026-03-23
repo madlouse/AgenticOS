@@ -157,6 +157,18 @@ Recommended layout:
 - product source checkout: any normal development path such as `~/src/AgenticOS`
 - live workspace: `AGENTICOS_HOME`, such as `~/AgenticOS`
 
+## GitHub Publish Troubleshooting
+
+If branch pushes fail but GitHub itself is reachable, check for broken Git proxy configuration before changing credentials:
+
+```bash
+gh auth status
+git config --global --get-regexp '^(http|https)\\.proxy$' || true
+git ls-remote https://github.com/madlouse/AgenticOS.git HEAD
+```
+
+If the failure is specific to proxied Git HTTPS transport, use a command-scoped direct push with a temporary `GIT_ASKPASS` helper instead of embedding tokens in the remote URL. The canonical operator procedure lives in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Cross-Machine Migration
