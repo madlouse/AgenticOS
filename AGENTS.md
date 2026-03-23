@@ -27,6 +27,10 @@ npm run build
 | `.runtime/` | Runtime-only local state, not canonical source |
 | `.claude/worktrees/` | Agent worktree area, not product source |
 
+Repository boundary rule:
+- `projects/agenticos/` is the only canonical product-source project under `projects/`
+- other tracked `projects/*` entries are legacy runtime or fixture content pending extraction to the live workspace model
+
 ## Development Rules
 
 1. **Issue-First**: Every change requires a GitHub Issue
