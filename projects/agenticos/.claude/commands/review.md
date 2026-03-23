@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review the current branch's diff against main for convention compliance. Run without arguments to check the current branch.
+description: Review the current branch's diff against origin/main for convention compliance and guardrail scope compliance. Run without arguments to check the current branch.
 allowed-tools:
   - Bash
   - Read
@@ -28,9 +28,9 @@ git branch --show-current
 ```
 
 ### 2. Commit Convention
-Check commits follow Conventional Commits:
+Check commits follow Conventional Commits and remain linked to the intended issue:
 ```bash
-git log main..HEAD --oneline
+git log origin/main..HEAD --oneline
 ```
 
 Expected format: `<type>(scope): <description>`
@@ -44,19 +44,18 @@ gh pr list --head $(git branch --show-current) --state open
 ### 4. Build Pass
 Verify the code compiles:
 ```bash
-cd mcp-server && npm run build
+cd projects/agenticos/mcp-server && npm install && npm run build && npm test
 ```
 
-### 5. No Forbidden Changes
-Check no files under `projects/` were modified:
-```bash
-git diff main --stat | grep "projects/"
-```
+### 5. Guardrail Scope Check
+Run the MCP guardrail scope validator before merge:
+- call `agenticos_pr_scope_check`
+- verify it returns `PASS`
 
 ### 6. No Sensitive Files
 Check for accidental commits:
 ```bash
-git diff main --name-only | grep -E "node_modules|build/|\.env|package-lock"
+git diff origin/main --name-only | grep -E "node_modules|build/|\.env"
 ```
 
 ## Output Format

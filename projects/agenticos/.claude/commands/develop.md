@@ -1,6 +1,6 @@
 ---
 name: develop
-description: Given a GitHub issue number, create a worktree branch, implement the change, and open a PR. Usage: /develop <issue-number> or /develop <issue-url>
+description: Given a GitHub issue number, run guardrail preflight, create a compliant worktree branch if needed, implement the change, and open a PR. Usage: /develop <issue-number> or /develop <issue-url>
 allowed-tools:
   - Bash
   - Read
@@ -28,31 +28,42 @@ Given a GitHub issue, implement it following the Issue-First workflow.
 ### 1. Understand the Issue
 - Fetch the issue details with `gh issue view <number> --json title,body,labels`
 - Read the acceptance criteria carefully
+- Load root `AGENTS.md` and `CLAUDE.md`
+- Read standards context from `projects/agenticos/standards/knowledge/` when the issue changes workflow, templates, standards, or repository structure
 - Ask clarifying questions if the requirements are unclear
 
-### 2. Create Branch
-- Create a branch following the naming convention: `<type>/<issue-number>-<slug>`
-  where type is derived from labels (feat/fix/docs/chore/ci/refactor/test)
-  and slug is a short lowercase description of the issue
-- Use a **separate worktree directory** (not inside the repo):
-  ```bash
-  git worktree add /path/to/worktree -b branch-name
-  ```
+### 2. Run Guardrail Preflight
+- Classify the task
+- Draft the intended file scope
+- Call `agenticos_preflight` before editing anything
+- If preflight returns:
+  - `PASS`: continue
+  - `REDIRECT`: call `agenticos_branch_bootstrap` and move to the returned worktree
+  - `BLOCK`: stop and resolve the blocking reasons first
 
-### 3. Implement
+### 3. Create Or Confirm Branch
+- Branch name must follow `<type>/<issue-number>-<slug>`
+- The branch must be derived from `origin/main`, not the local current branch
+- Use an **isolated worktree directory** outside the source checkout
+- Prefer `agenticos_branch_bootstrap` over raw `git worktree add`
+
+### 4. Implement
 - Read CLAUDE.md and AGENTS.md at the repo root for development rules
 - Implement the change following the conventions:
   - TypeScript strict mode
   - Conventional Commits format
   - No direct commits to main
-- Build and verify: `cd mcp-server && npm run build`
+- For non-trivial work, complete the design/critique loop before editing
+- Build and verify from the self-hosted product path: `cd projects/agenticos/mcp-server && npm install && npm run build && npm test`
 
-### 4. Record & Commit
+### 5. Record & Commit
 - Call `agenticos_record()` with session summary
 - Commit using Conventional Commits: `<type>(scope): <description>`
-- Always include `Closes #<issue-number>` in the commit message
+- Keep the issue number in the commit subject so `agenticos_pr_scope_check` can validate branch intent
 
-### 5. Open PR
+### 6. Validate Scope And Open PR
+- Call `agenticos_pr_scope_check`
+- If scope check returns `BLOCK`, stop and fix the scope problem before PR creation
 - Push branch to origin
 - Create PR with `gh pr create`
 - Reference the issue: `Closes #<issue-number>`
@@ -70,5 +81,7 @@ Given a GitHub issue, implement it following the Issue-First workflow.
 
 - Never push directly to `main`
 - Never commit `node_modules/`, `build/`, `.env`
-- Never modify files under `projects/` (user data)
+- Never skip guardrail preflight for implementation work
+- Never open a PR without running `agenticos_pr_scope_check`
+- Never modify runtime workspace projects under `projects/` unless the issue explicitly targets them
 - Never skip the PR — even for small changes

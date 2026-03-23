@@ -32,9 +32,23 @@ This project is managed by AgenticOS. Use these MCP tools:
 
 | Tool | When |
 |------|------|
+| `agenticos_preflight` | Before implementation or PR work to evaluate guardrail status |
+| `agenticos_branch_bootstrap` | When preflight returns `REDIRECT` and a correct issue branch/worktree must be created |
+| `agenticos_pr_scope_check` | Before opening or merging a PR to verify diff scope |
 | `agenticos_record` | After meaningful work (feature, fix, decision, analysis) |
 | `agenticos_save` | Before session ends — commits state to Git |
 | `agenticos_status` | Check current project state |
+
+### Mandatory Guardrail Sequence For Implementation
+
+Before implementation-affecting edits:
+1. call `agenticos_preflight`
+2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+3. if the result is `BLOCK`, stop and resolve the block reason first
+
+Before PR submission or merge:
+1. call `agenticos_pr_scope_check`
+2. do not proceed if it returns `BLOCK`
 
 ### Design Artifacts
 

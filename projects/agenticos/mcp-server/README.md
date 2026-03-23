@@ -171,6 +171,45 @@ Save state and backup to Git.
 
 **Returns**: Backup confirmation with timestamp
 
+### agenticos_status
+Show the status of the active project.
+
+**Returns**: Current task, pending items, and recent decisions
+
+### agenticos_preflight
+Run machine-checkable guardrail preflight before implementation or PR creation.
+
+**Parameters**:
+- `task_type` (required)
+- `repo_path` (required)
+- `issue_id` (required for implementation work)
+- `declared_target_files` (required for implementation work)
+
+**Returns**: JSON with `PASS`, `BLOCK`, or `REDIRECT`
+
+### agenticos_branch_bootstrap
+Create an issue branch and isolated worktree from the intended remote base.
+
+**Parameters**:
+- `issue_id` (required)
+- `slug` (required)
+- `repo_path` (required)
+- `worktree_root` (required)
+- `remote_base_branch` (optional, default `origin/main`)
+
+**Returns**: JSON with `CREATED` or `BLOCK`
+
+### agenticos_pr_scope_check
+Validate that the current branch diff stays within the intended issue scope.
+
+**Parameters**:
+- `issue_id` (required)
+- `repo_path` (required)
+- `declared_target_files` (required)
+- `remote_base_branch` (optional, default `origin/main`)
+
+**Returns**: JSON with `PASS` or `BLOCK`
+
 ---
 
 ## 📦 Resources Reference

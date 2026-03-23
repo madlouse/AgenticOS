@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'fs/promises';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 2;
+export const CURRENT_TEMPLATE_VERSION = 3;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -29,6 +29,16 @@ function ensureVersionMarker(content: string): string {
 export function generateAgentsMd(name: string, description: string): string {
   return `${VERSION_MARKER}
 # AGENTS.md — ${name}
+
+## Guardrail Protocol (MANDATORY)
+
+Implementation work must use the executable guardrail flow:
+
+1. call \`agenticos_preflight\` before editing
+2. if preflight returns \`REDIRECT\`, call \`agenticos_branch_bootstrap\`
+3. do not submit a PR before running \`agenticos_pr_scope_check\`
+
+If any guardrail returns \`BLOCK\`, stop and resolve the blocking reason first.
 
 ## Recording Protocol (MANDATORY)
 
@@ -55,8 +65,9 @@ After recording, call \`agenticos_save\` to commit to Git.
 
 On session start, read these files for context:
 1. \`.project.yaml\` — Project metadata
-2. \`.context/state.yaml\` — Current state and working memory
-3. \`.context/conversations/\` — Previous session records
+2. \`.context/quick-start.md\` — human-readable project summary
+3. \`.context/state.yaml\` — Current state and working memory
+4. \`.context/conversations/\` — Previous session records
 
 Then greet the user with: project name, last progress, current pending items, suggested next step.
 
@@ -70,10 +81,14 @@ Then greet the user with: project name, last progress, current pending items, su
 | Path | Purpose |
 |------|---------|
 | \`.project.yaml\` | Project metadata |
+| \`.context/quick-start.md\` | Quick project summary |
 | \`.context/state.yaml\` | Session state and working memory |
 | \`.context/conversations/\` | Session records (auto-generated) |
 | \`knowledge/\` | Persistent knowledge documents |
 | \`tasks/\` | Task tracking |
+| \`tasks/templates/agent-preflight-checklist.yaml\` | Preflight checklist template |
+| \`tasks/templates/issue-design-brief.md\` | Design-loop template |
+| \`tasks/templates/submission-evidence.md\` | Submission evidence template |
 | \`artifacts/\` | Outputs and deliverables |
 `;
 }
@@ -146,10 +161,20 @@ function buildClaudeMdContent(name: string, description: string, state?: StateYa
 
   const nav = userContent?.navigation
     ? `## Navigation\n\n${userContent.navigation}\n`
-    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`.context/state.yaml\` | 当前会话状态及工作记忆 |\n| \`.context/conversations/\` | 会话记录（自动生成） |\n| \`knowledge/\` | 持久化知识文档 |\n| \`tasks/\` | 任务追踪 |\n| \`artifacts/\` | 产出物 |\n`;
+    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`.context/quick-start.md\` | 快速项目概览 |\n| \`.context/state.yaml\` | 当前会话状态及工作记忆 |\n| \`.context/conversations/\` | 会话记录（自动生成） |\n| \`knowledge/\` | 持久化知识文档 |\n| \`tasks/\` | 任务追踪 |\n| \`tasks/templates/agent-preflight-checklist.yaml\` | preflight 模板 |\n| \`tasks/templates/issue-design-brief.md\` | 设计循环模板 |\n| \`tasks/templates/submission-evidence.md\` | 提交证据模板 |\n| \`artifacts/\` | 产出物 |\n`;
 
   return `${VERSION_MARKER}
 # CLAUDE.md — ${name}
+
+## Guardrail Protocol (MANDATORY)
+
+For implementation-affecting work:
+
+1. call \`agenticos_preflight\` before editing
+2. if the result is \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
+3. before PR creation or merge, call \`agenticos_pr_scope_check\`
+
+If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.
 
 ## MANDATORY: Recording Protocol
 
