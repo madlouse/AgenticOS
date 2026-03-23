@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -154,6 +154,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['task_type', 'repo_path'],
       },
     },
+    {
+      name: 'agenticos_branch_bootstrap',
+      description: 'Create an issue branch and isolated worktree from the intended remote base. Returns JSON with CREATED or BLOCK.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
+          branch_type: { type: 'string', description: 'Branch prefix such as feat, fix, or chore' },
+          slug: { type: 'string', description: 'Short task slug used to derive branch and worktree names' },
+          repo_path: { type: 'string', description: 'Absolute repository path where the branch should be created' },
+          remote_base_branch: { type: 'string', description: 'Remote base branch to branch from (default: origin/main)' },
+          worktree_root: { type: 'string', description: 'Absolute root directory under which the new worktree should be created' },
+        },
+        required: ['issue_id', 'slug', 'repo_path', 'worktree_root'],
+      },
+    },
   ],
 }));
 
@@ -176,6 +192,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await getStatus() }] };
     case 'agenticos_preflight':
       return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
+    case 'agenticos_branch_bootstrap':
+      return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
