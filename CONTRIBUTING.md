@@ -176,10 +176,26 @@ GIT_ASKPASS_REQUIRE=force \
 git -c credential.helper= -c http.proxy= -c https.proxy= push -u origin <branch>
 ```
 
+If that still fails with `LibreSSL SSL_connect: SSL_ERROR_SYSCALL`, retry with a command-scoped HTTP transport compatibility override:
+
+```bash
+GIT_TERMINAL_PROMPT=0 \
+GIT_ASKPASS=/tmp/agenticos-gh-askpass.sh \
+GIT_ASKPASS_REQUIRE=force \
+git -c credential.helper= -c http.proxy= -c https.proxy= -c http.version=HTTP/1.1 push -u origin <branch>
+```
+
+Interpretation:
+
+- no-proxy failure usually means GitHub itself or the network path is unavailable
+- no-proxy success plus push failure usually means the remaining problem is credentials or Git HTTPS transport compatibility
+- `-c http.version=HTTP/1.1` is a command-scoped compatibility step, not a recommendation to rewrite global Git config
+
 Rules:
 
 - Prefer command-scoped `-c http.proxy=` / `-c https.proxy=` over changing global proxy config
 - Prefer a temporary `GIT_ASKPASS` helper over embedding tokens in the remote URL
+- Prefer command-scoped `-c http.version=HTTP/1.1` over changing global transport defaults
 - Remove the temporary helper after use if you no longer need it: `rm -f /tmp/agenticos-gh-askpass.sh`
 
 ### Homebrew formula sha256
@@ -197,7 +213,7 @@ If you are an AI agent, read `CLAUDE.md` or `AGENTS.md` at the repository root b
 Key rules for AI agents:
 - All work in isolated worktrees (`Agent(isolation: "worktree", ...)`)
 - Record every session with `agenticos_record` before ending
-- If HTTPS push fails, use the documented command-scoped no-proxy + `GIT_ASKPASS` fallback instead of embedding tokens in remote URLs
+- If HTTPS push fails, use the documented command-scoped no-proxy + `GIT_ASKPASS` fallback, and add `-c http.version=HTTP/1.1` if the first retry still fails with `SSL_ERROR_SYSCALL`
 
 ## License
 
