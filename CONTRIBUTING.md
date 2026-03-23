@@ -133,14 +133,54 @@ This applies to **both** `.github/workflows/ci.yml` and `.github/workflows/relea
 - Push a new commit (even an empty one), or
 - Wait for GitHub to auto-trigger the `pull_request` event (usually within a few seconds of a push)
 
-### HTTPS push authentication
+### GitHub transport fallback
 
-If `git push` fails with "could not read Username", inject the token directly:
+If `git push` fails even though GitHub itself is reachable, diagnose before changing any global config.
+
+Start with these checks:
 
 ```bash
-GH_TOKEN=$(gh auth token)
-git push https://madlouse:${GH_TOKEN}@github.com/madlouse/AgenticOS.git main
+gh auth status
+git config --global --get-regexp '^(http|https)\\.proxy$' || true
+git ls-remote https://github.com/madlouse/AgenticOS.git HEAD
 ```
+
+Common failure pattern on this machine:
+
+- `curl https://github.com` works
+- `gh auth status` is healthy
+- `git push` over HTTPS fails because global `http.proxy` / `https.proxy` points to a broken local proxy
+
+If direct Git works but proxied Git does not, use a command-scoped fallback instead of editing the remote URL or mutating global proxy settings.
+
+Create a temporary askpass helper:
+
+```bash
+cat >/tmp/agenticos-gh-askpass.sh <<'EOF'
+#!/bin/sh
+case "$1" in
+  *Username*) echo "madlouse" ;;
+  *Password*) gh auth token ;;
+  *) echo "" ;;
+esac
+EOF
+chmod 700 /tmp/agenticos-gh-askpass.sh
+```
+
+Then push with direct Git transport and explicit non-interactive credentials:
+
+```bash
+GIT_TERMINAL_PROMPT=0 \
+GIT_ASKPASS=/tmp/agenticos-gh-askpass.sh \
+GIT_ASKPASS_REQUIRE=force \
+git -c credential.helper= -c http.proxy= -c https.proxy= push -u origin <branch>
+```
+
+Rules:
+
+- Prefer command-scoped `-c http.proxy=` / `-c https.proxy=` over changing global proxy config
+- Prefer a temporary `GIT_ASKPASS` helper over embedding tokens in the remote URL
+- Remove the temporary helper after use if you no longer need it: `rm -f /tmp/agenticos-gh-askpass.sh`
 
 ### Homebrew formula sha256
 
@@ -157,7 +197,7 @@ If you are an AI agent, read `CLAUDE.md` or `AGENTS.md` at the repository root b
 Key rules for AI agents:
 - All work in isolated worktrees (`Agent(isolation: "worktree", ...)`)
 - Record every session with `agenticos_record` before ending
-- Push changes via `https://user:$TOKEN@github.com/...` if SSH is unavailable
+- If HTTPS push fails, use the documented command-scoped no-proxy + `GIT_ASKPASS` fallback instead of embedding tokens in remote URLs
 
 ## License
 
