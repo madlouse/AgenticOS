@@ -5,38 +5,42 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: execute the first consolidation wave for the retired standalone standards repo inside the main AgenticOS repository
+  title: finalize retirement of the standalone standards repo after the first consolidation wave
   status: in_progress
-  updated: 2026-03-23T10:35:00.000Z
+  updated: 2026-03-23T12:45:00.000Z
 
 working_memory:
   facts:
     - projects/agenticos/standards is now the only canonical location for ongoing AgenticOS standards work
-    - the standalone repo projects/agentic-os-development is now a retired transitional snapshot, not an active canonical repo
+    - the standalone repo projects/agentic-os-development is now a retired archive-only snapshot, not an active canonical repo
     - issue #66 was merged as PR #67 to freeze the canonical standards location and define merge/archive/discard rules
-    - issue #68 tracks the first real consolidation wave after the audit
-    - the first consolidation wave backfills missing high-signal standards knowledge documents into the main standards knowledge area
+    - issue #68 was merged as PR #69 to execute the first real consolidation wave after the audit
+    - the first consolidation wave backfilled missing high-signal standards knowledge documents into the main standards knowledge area
     - the retired standalone raw context, conversations, entry files, and local issue drafts are archived under archive/standalone-agentic-os-development-2026-03-23/
     - active standards entry files must point only to the main standards area, not to the retired standalone repo
     - reusable downstream templates are canonically surfaced under projects/agenticos/.meta/templates/
     - reusable downstream packaging rules are canonically surfaced under projects/agenticos/.meta/standard-kit/
     - non-code-evaluation-rubric.yaml has been restored into the main template surface as part of issue #68
+    - runtime-project-extraction-closure-report-2026-03-23.md is the last remaining high-signal standalone-only report worth canonical merge
+    - the remaining standalone-only runtime extraction reports are superseded by canonical main-repo planning and execution documents
+    - self-hosting-migration-resolution-draft-2026-03-23.md is superseded by self-hosting-migration-resolution-v1-2026-03-23.md
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
     - keep the archive read-only and use it only for provenance or later selective recovery
     - preserve the live .context/.last_record marker because current tooling still uses it
+    - no second broad merge wave is needed for the retired standalone standards repo
   pending:
-    - commit, push, and open the first consolidation-wave PR for issue #68
-    - decide whether archived standalone material needs a second merge wave or can remain archive-only
     - decide whether standard-kit adoption and upgrade should become first-class commands
     - decide whether live status surfaces should summarize the latest guardrail evidence more explicitly
+    - stop treating the standalone repo as a live writable standards source
 
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
   - knowledge/standalone-standards-repo-consolidation-audit-2026-03-23.md
   - knowledge/standalone-standards-first-consolidation-wave-2026-03-23.md
+  - knowledge/standalone-standards-retirement-resolution-2026-03-23.md
   - knowledge/product-positioning-and-design-review-2026-03-22.md
   - knowledge/agent-preflight-and-execution-protocol-2026-03-23.md
   - knowledge/guardrail-flow-wiring-report-2026-03-23.md
