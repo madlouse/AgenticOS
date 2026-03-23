@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -119,6 +119,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: 'Show status of the active project: last recorded time, current task, pending items, recent decisions.',
       inputSchema: { type: 'object', properties: {} },
     },
+    {
+      name: 'agenticos_preflight',
+      description: 'Run machine-checkable guardrail preflight before implementation or PR creation. Returns JSON with PASS, BLOCK, or REDIRECT.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
+          task_type: {
+            type: 'string',
+            enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bootstrap'],
+            description: 'Classified task type',
+          },
+          repo_path: { type: 'string', description: 'Absolute repository or worktree path to evaluate' },
+          remote_base_branch: { type: 'string', description: 'Remote base branch to compare against (default: origin/main)' },
+          declared_target_files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Files or path globs the task intends to touch',
+          },
+          structural_move: { type: 'boolean', description: 'Whether the task changes repository structure' },
+          worktree_required: { type: 'boolean', description: 'Whether isolated worktree execution is mandatory' },
+          root_scoped_exceptions: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repository-root infrastructure exceptions such as .github/',
+          },
+          clean_reproducibility_gate: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Required clean baseline verification commands such as npm ci and npm run build',
+          },
+        },
+        required: ['task_type', 'repo_path'],
+      },
+    },
   ],
 }));
 
@@ -139,6 +174,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await saveState(args) }] };
     case 'agenticos_status':
       return { content: [{ type: 'text', text: await getStatus() }] };
+    case 'agenticos_preflight':
+      return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
