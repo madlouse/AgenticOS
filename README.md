@@ -137,8 +137,9 @@ For downstream project inheritance, the executable workflow standard kit lives i
 - `projects/agenticos/.meta/standard-kit/`
 
 Within this repository, only `projects/agenticos/` should be treated as canonical product source.
-The first two runtime extraction waves have already moved `2026okr`, `360teams`, `agentic-devops`, and `ghostty-optimization` into the live workspace.
-Any remaining non-`agenticos` entries still tracked under `projects/` should be treated as residual runtime or fixture content pending later extraction, not product source.
+The runtime extraction program has already moved `2026okr`, `360teams`, `agentic-devops`, and `ghostty-optimization` into the live workspace.
+The orphaned gitlink residues `okr-management` and `t5t` have been removed from the source repo rather than treated as real runtime projects.
+Any remaining non-`agenticos` tracked entry under `projects/` should now be treated as explicit fixture content, not product source.
 
 ---
 

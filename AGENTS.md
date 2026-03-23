@@ -30,7 +30,8 @@ npm run build
 Repository boundary rule:
 - `projects/agenticos/` is the only canonical product-source project under `projects/`
 - `2026okr`, `360teams`, `agentic-devops`, and `ghostty-optimization` have already been extracted into the live workspace
-- any remaining tracked non-`agenticos` `projects/*` entries are residual runtime or fixture content pending later extraction
+- orphaned gitlink residues `okr-management` and `t5t` are not real runtime projects and are removed by issue #56
+- any remaining tracked non-`agenticos` `projects/*` entry should be treated as explicit fixture content rather than runtime product data
 
 ## Development Rules
 
