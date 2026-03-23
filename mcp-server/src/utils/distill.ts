@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 
 /**
  * Current template version. Increment when templates change.
@@ -88,6 +89,7 @@ Then greet the user with: project name, last progress, current pending items, su
 | \`tasks/\` | Task tracking |
 | \`tasks/templates/agent-preflight-checklist.yaml\` | Preflight checklist template |
 | \`tasks/templates/issue-design-brief.md\` | Design-loop template |
+| \`tasks/templates/non-code-evaluation-rubric.yaml\` | Non-code evaluation rubric |
 | \`tasks/templates/submission-evidence.md\` | Submission evidence template |
 | \`artifacts/\` | Outputs and deliverables |
 `;
@@ -161,7 +163,7 @@ function buildClaudeMdContent(name: string, description: string, state?: StateYa
 
   const nav = userContent?.navigation
     ? `## Navigation\n\n${userContent.navigation}\n`
-    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`.context/quick-start.md\` | 快速项目概览 |\n| \`.context/state.yaml\` | 当前会话状态及工作记忆 |\n| \`.context/conversations/\` | 会话记录（自动生成） |\n| \`knowledge/\` | 持久化知识文档 |\n| \`tasks/\` | 任务追踪 |\n| \`tasks/templates/agent-preflight-checklist.yaml\` | preflight 模板 |\n| \`tasks/templates/issue-design-brief.md\` | 设计循环模板 |\n| \`tasks/templates/submission-evidence.md\` | 提交证据模板 |\n| \`artifacts/\` | 产出物 |\n`;
+    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`.context/quick-start.md\` | 快速项目概览 |\n| \`.context/state.yaml\` | 当前会话状态及工作记忆 |\n| \`.context/conversations/\` | 会话记录（自动生成） |\n| \`knowledge/\` | 持久化知识文档 |\n| \`tasks/\` | 任务追踪 |\n| \`tasks/templates/agent-preflight-checklist.yaml\` | preflight 模板 |\n| \`tasks/templates/issue-design-brief.md\` | 设计循环模板 |\n| \`tasks/templates/non-code-evaluation-rubric.yaml\` | 非代码评估模板 |\n| \`tasks/templates/submission-evidence.md\` | 提交证据模板 |\n| \`artifacts/\` | 产出物 |\n`;
 
   return `${VERSION_MARKER}
 # CLAUDE.md — ${name}
@@ -243,7 +245,7 @@ export function generateClaudeMd(name: string, description: string, state?: Stat
 
 /** Upgrade an existing CLAUDE.md to current template version, preserving user content. */
 export function upgradeClaudeMd(claudeMdPath: string, name: string, description: string, state?: StateYaml): string {
-  const content = readFile(claudeMdPath, 'utf-8').toString();
+  const content = readFileSync(claudeMdPath, 'utf-8');
   return buildClaudeMdContent(name, description, state, extractUserContent(content));
 }
 

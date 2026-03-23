@@ -13,6 +13,7 @@ describe('distill templates', () => {
     expect(content).toContain('agenticos_pr_scope_check');
     expect(content).toContain('.context/quick-start.md');
     expect(content).toContain('tasks/templates/agent-preflight-checklist.yaml');
+    expect(content).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
   });
 
   it('generates CLAUDE.md with guardrail flow and template navigation', () => {
@@ -24,5 +25,6 @@ describe('distill templates', () => {
     expect(content).toContain('agenticos_pr_scope_check');
     expect(content).toContain('.context/quick-start.md');
     expect(content).toContain('tasks/templates/submission-evidence.md');
+    expect(content).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
   });
 });

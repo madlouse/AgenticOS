@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runStandardKitAdopt, runStandardKitUpgradeCheck } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -189,6 +189,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['issue_id', 'repo_path', 'declared_target_files'],
       },
     },
+    {
+      name: 'agenticos_standard_kit_adopt',
+      description: 'Adopt the canonical AgenticOS downstream standard kit into a project by creating missing copied templates and generated guidance.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses the active project from the registry.' },
+          project_name: { type: 'string', description: 'Project name to use when creating missing .project.yaml or generated guidance.' },
+          project_description: { type: 'string', description: 'Optional project description used for generated guidance.' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_standard_kit_upgrade_check',
+      description: 'Check a project against the canonical AgenticOS downstream standard kit and report missing, stale, or diverged files without mutating them.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses the active project from the registry.' },
+          project_name: { type: 'string', description: 'Optional project name override used for reporting when .project.yaml is missing.' },
+          project_description: { type: 'string', description: 'Optional project description override used for reporting.' },
+        },
+      },
+    },
   ],
 }));
 
@@ -215,6 +239,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
     case 'agenticos_pr_scope_check':
       return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
+    case 'agenticos_standard_kit_adopt':
+      return { content: [{ type: 'text', text: await runStandardKitAdopt(args ?? {}) }] };
+    case 'agenticos_standard_kit_upgrade_check':
+      return { content: [{ type: 'text', text: await runStandardKitUpgradeCheck(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
