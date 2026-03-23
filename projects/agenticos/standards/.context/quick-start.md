@@ -26,6 +26,9 @@ Its job is to define and evolve:
   - `projects/agenticos/.meta/templates/`
   - `projects/agenticos/.meta/standard-kit/`
 - `non-code-evaluation-rubric.yaml` has been restored into the main template surface as part of this consolidation wave
+- issue `#72` is now implementing first-class standard-kit commands for adopt and upgrade-check
+- `knowledge/standard-kit-command-design-v1-2026-03-23.md` records the command contract for the first slice
+- `knowledge/standard-kit-command-implementation-report-2026-03-23.md` records the landed implementation scope and verification
 
 ## Recommended Entry Documents
 
@@ -37,10 +40,12 @@ Start here:
 4. `knowledge/product-positioning-and-design-review-2026-03-22.md`
 5. `knowledge/agent-preflight-and-execution-protocol-2026-03-23.md`
 6. `knowledge/guardrail-flow-wiring-report-2026-03-23.md`
+7. `knowledge/standard-kit-command-design-v1-2026-03-23.md`
+8. `knowledge/standard-kit-command-implementation-report-2026-03-23.md`
 
 ## Next Steps
 
 1. Stop writing new canonical standards records into the retired standalone repo
-2. Decide whether standard-kit adoption and upgrade should become first-class commands
+2. Land issue `#72` so standard-kit adoption and upgrade-check become first-class commands
 3. Decide whether status surfaces should summarize latest guardrail evidence more explicitly
 4. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap

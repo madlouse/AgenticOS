@@ -56,6 +56,16 @@ See:
 - `inheritance-rules.md`
 - `adoption-checklist.md`
 
+## Operational Commands
+
+The standard kit is also exposed through first-class MCP commands:
+
+- `agenticos_standard_kit_adopt`
+- `agenticos_standard_kit_upgrade_check`
+
+Use `agenticos_standard_kit_adopt` to materialize the kit into a downstream project.
+Use `agenticos_standard_kit_upgrade_check` to compare an adopted project against the current canonical kit without mutating project-owned templates.
+
 ## Packaging Rule
 
 If there is a conflict between older `.meta` guidance and this package:

@@ -4,6 +4,7 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 
 ## Project Files
 
+- [ ] run `agenticos_standard_kit_adopt` or follow its equivalent workflow
 - [ ] copy `.project.yaml` from the canonical template
 - [ ] create `.context/quick-start.md`
 - [ ] create `.context/state.yaml`
@@ -33,6 +34,7 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 
 ## Upgrade Readiness
 
+- [ ] run `agenticos_standard_kit_upgrade_check` to inspect drift against the canonical kit
 - [ ] copied templates are treated as project-owned after adoption
 - [ ] generated files are allowed to upgrade through template version changes
 - [ ] any future standard-kit upgrade is reviewed against local customizations
