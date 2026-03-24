@@ -3,11 +3,24 @@ meta:
   id: "project-id"
   version: "1.0.0"
   created: "YYYY-MM-DD"
+  description: "Project description"
 
 agent_context:
   quick_start: ".context/quick-start.md"
   current_state: ".context/state.yaml"
-  index: ".context/index.yaml"
+  conversations: ".context/conversations/"
+  knowledge: "knowledge/"
+  tasks: "tasks/"
+  artifacts: "artifacts/"
+
+memory_contract:
+  version: 1
+  quick_start_role: "project_orientation"
+  state_role: "operational_working_state"
+  conversations_role: "append_only_session_history"
+  knowledge_role: "durable_synthesis"
+  tasks_role: "execution_artifacts"
+  artifacts_role: "deliverables"
 
 status:
   phase: "planning"  # planning/active/paused/completed

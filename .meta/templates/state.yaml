@@ -1,3 +1,8 @@
+# Contract:
+# - Mutable operational working state only
+# - Keep current task, working memory, and latest guardrail evidence here
+# - Do not append raw conversation transcripts here
+# - Durable synthesis belongs in knowledge/
 session:
   id: "session-001"
   started: "YYYY-MM-DDTHH:MM:SSZ"
@@ -13,6 +18,14 @@ working_memory:
   facts: []
   decisions: []
   pending: []
+
+memory_contract:
+  version: 1
+  quick_start_role: "project_orientation"
+  state_role: "operational_working_state"
+  conversations_role: "append_only_session_history"
+  knowledge_role: "durable_synthesis"
+  tasks_role: "execution_artifacts"
 
 loaded_context:
   - ".project.yaml"

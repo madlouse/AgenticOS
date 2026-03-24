@@ -46,14 +46,14 @@ AgenticOS is ideal for:
 Each project contains:
 ```
 my-project/
-├── .project.yaml          # Project metadata (human & AI readable)
+├── .project.yaml          # Stable project identity, metadata, and layer map
 ├── .context/
-│   ├── quick-start.md     # Quick overview
-│   ├── state.yaml         # Current session state
-│   └── conversations/     # Full conversation logs
-├── knowledge/             # Extracted insights & decisions
-├── tasks/                 # Task tracking
-└── artifacts/             # Code, configs, outputs
+│   ├── quick-start.md     # Concise orientation for fast resume
+│   ├── state.yaml         # Mutable operational working state
+│   └── conversations/     # Append-only raw session history
+├── knowledge/             # Durable synthesized insights, architecture, research
+├── tasks/                 # Execution plans, briefs, and task decomposition
+└── artifacts/             # Deliverables and concrete outputs
 ```
 
 ---
@@ -157,6 +157,11 @@ Switch to existing project and load context.
 - `project` (required) - Project ID or name
 
 **Returns**: Loaded context (project config, quick-start, state)
+
+The quick-start/state split is intentional:
+- `quick-start.md` is a concise entry surface
+- `state.yaml` is mutable operational state
+- `conversations/` is append-only history, not the default inline resume surface
 
 ### agenticos_list
 List all projects with status.

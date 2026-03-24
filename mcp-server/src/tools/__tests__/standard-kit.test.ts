@@ -54,9 +54,9 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   };
 
   await writeFile(join(kitRoot, 'manifest.yaml'), yaml.stringify(manifest), 'utf-8');
-  await writeFile(join(templateRoot, '.project.yaml'), `meta:\n  name: "Project Name"\n  id: "project-id"\n  version: "1.0.0"\n  created: "YYYY-MM-DD"\nstatus:\n  phase: "planning"\n  last_updated: "YYYY-MM-DD"\n`, 'utf-8');
-  await writeFile(join(templateRoot, 'quick-start.md'), '# Quick Start\n\n- **Project**: [Project Name]\n- **Goal**: [Main objective]\n- **Status**: [Current phase]\n- **Last Action**: [What was done last]\n- **Next Step**: [What to do next]\n', 'utf-8');
-  await writeFile(join(templateRoot, 'state.yaml'), 'session:\n  id: "session-001"\n  started: "YYYY-MM-DDTHH:MM:SSZ"\n  agent: "claude-sonnet-4.6"\ncurrent_task:\n  id: null\n  title: null\n  status: "pending"\n  next_step: null\nworking_memory:\n  facts: []\n  decisions: []\n  pending: []\nloaded_context:\n  - ".project.yaml"\n', 'utf-8');
+  await writeFile(join(templateRoot, '.project.yaml'), `meta:\n  name: "Project Name"\n  id: "project-id"\n  version: "1.0.0"\n  created: "YYYY-MM-DD"\n  description: "Project description"\nagent_context:\n  quick_start: ".context/quick-start.md"\n  current_state: ".context/state.yaml"\n  conversations: ".context/conversations/"\n  knowledge: "knowledge/"\n  tasks: "tasks/"\n  artifacts: "artifacts/"\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\n  artifacts_role: "deliverables"\nstatus:\n  phase: "planning"\n  last_updated: "YYYY-MM-DD"\n`, 'utf-8');
+  await writeFile(join(templateRoot, 'quick-start.md'), '# Quick Start\n\n> Contract: concise project-level orientation for fast resume.\n> Do not store full session history, exhaustive decision logs, or issue-by-issue execution details here.\n\n## Project Snapshot\n- **Project**: [Project Name]\n- **Goal**: [Main objective]\n- **Status**: [Current phase]\n- **Last Action**: [What was done last]\n- **Current Focus**: [What to do next]\n- **Resume Here**: [What to do next]\n\n## Key Facts\n- [Important fact 1]\n- [Important fact 2]\n\n## Canonical Layers\n- Operational state: `.context/state.yaml`\n- Session history: `.context/conversations/`\n- Durable knowledge: `knowledge/`\n- Execution plans: `tasks/`\n- Deliverables: `artifacts/`\n', 'utf-8');
+  await writeFile(join(templateRoot, 'state.yaml'), '# Contract:\n# - Mutable operational working state only\n# - Keep current task, working memory, and latest guardrail evidence here\n# - Do not append raw conversation transcripts here\n# - Durable synthesis belongs in knowledge/\nsession:\n  id: "session-001"\n  started: "YYYY-MM-DDTHH:MM:SSZ"\n  agent: "claude-sonnet-4.6"\ncurrent_task:\n  id: null\n  title: null\n  status: "pending"\n  next_step: null\nworking_memory:\n  facts: []\n  decisions: []\n  pending: []\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\nloaded_context:\n  - ".project.yaml"\n', 'utf-8');
   await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.2\n', 'utf-8');
   await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n', 'utf-8');
   await writeFile(join(templateRoot, 'non-code-evaluation-rubric.yaml'), 'version: 0.1\nname: non-code-evaluation-rubric\n', 'utf-8');
@@ -116,9 +116,15 @@ describe('standard kit commands', () => {
     const projectYaml = yaml.parse(await readFile(join(projectRoot, '.project.yaml'), 'utf-8')) as any;
     expect(projectYaml.meta.name).toBe('Sample Project');
     expect(projectYaml.meta.id).toBe('sample-project');
+    expect(projectYaml.memory_contract.version).toBe(1);
+    expect(projectYaml.agent_context.conversations).toBe('.context/conversations/');
 
     const quickStart = await readFile(join(projectRoot, '.context', 'quick-start.md'), 'utf-8');
     expect(quickStart).toBe('custom quick start\n');
+
+    const stateYaml = yaml.parse(await readFile(join(projectRoot, '.context', 'state.yaml'), 'utf-8')) as any;
+    expect(stateYaml.memory_contract.version).toBe(1);
+    expect(stateYaml.loaded_context).toContain('.context/quick-start.md');
 
     const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');

@@ -13,6 +13,7 @@ It exists so a downstream project can adopt the AgenticOS execution model withou
 This kit covers:
 - project-scoped agent instructions
 - execution templates
+- memory layer contracts
 - generated project files
 - versioning and upgrade rules
 
@@ -48,6 +49,29 @@ The standards rationale, design history, and protocol documents live under:
 - `projects/agenticos/standards/`
 
 Downstream projects should inherit the templates and generated rules, not the full standards history by default.
+
+## Memory Layer Contract
+
+The downstream kit now carries a canonical contract for:
+
+- `.project.yaml`
+- `.context/quick-start.md`
+- `.context/state.yaml`
+- `.context/conversations/`
+- `knowledge/`
+- `tasks/`
+- `artifacts/`
+
+The contract distinguishes:
+
+- canonical vs derived layers
+- mutable vs append-only layers
+- operational state vs durable synthesis
+- project orientation vs raw session history
+
+The canonical rationale lives in:
+
+- `projects/agenticos/standards/knowledge/memory-layer-contract-spec-2026-03-25.md`
 
 ## Package Contents
 
