@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: fix agenticos_record JSON-stringified array parsing bug
+  title: upgrade agenticos_switch to return inline actionable project context
   status: implemented
-  updated: 2026-03-24T16:10:00.000Z
+  updated: 2026-03-24T16:28:00.000Z
 
 working_memory:
   facts:
@@ -45,6 +45,10 @@ working_memory:
     - issue #24 is now re-executed on an isolated issue branch instead of remaining as a hidden local-only commit on preserved branch preserve/local-main-2026-03-24
     - agenticos_record now accepts JSON-stringified arrays for decisions, outcomes, and pending in addition to native arrays
     - issue #24 verification passed in an isolated worktree with npm install, targeted record tests, and the full mcp-server test suite
+    - issue #23 is now re-executed on an isolated issue branch instead of remaining as a hidden local-only commit on preserved branch preserve/local-main-2026-03-24
+    - agenticos_switch now returns inline project context including current task, pending items, recent decisions, project summary, and suggested next step
+    - switch context summary prefers .project.yaml description and falls back to the first meaningful quick-start paragraph when structured description is empty
+    - issue #23 verification passed in an isolated worktree with npm install, targeted project tests, and the full mcp-server test suite
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -57,9 +61,15 @@ working_memory:
     - backlog cleanup should prefer closing or rewriting historical issues over leaving architecture-era ambiguity in the open queue
     - the local canonical checkout should be kept clean and used only as the trusted base, with implementation work moving to isolated issue worktrees
     - agenticos_record should normalize JSON-stringified array inputs at the tool boundary rather than expecting every MCP caller to submit native arrays
+    - agenticos_switch should treat its return string as a first-class mid-conversation handoff surface instead of only listing context file paths
   pending:
     - decide whether any entry surfaces beyond `agenticos_status` and `agenticos_switch` need the same compact guardrail summary
-    - execute issue #23 on an isolated issue branch instead of carrying local-only commits on main
+    - implement issue #25 to enforce project-boundary isolation in recorded context
+    - implement issue #26 to define and enforce canonical memory-layer contracts
+    - implement issue #28 to define sub-agent context inheritance and verification rules
+    - implement issue #29 to define per-agent bootstrap standards
+    - implement issue #30 to define Homebrew post-install bootstrap for supported agents
+    - implement issue #31 to define the MCP-native vs CLI+Skills integration matrix
 
 loaded_context:
   - .project.yaml
@@ -78,3 +88,5 @@ loaded_context:
   - knowledge/backlog-reconciliation-matrix-2026-03-24.md
   - knowledge/canonical-working-copy-cleanup-report-2026-03-24.md
   - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
+  - knowledge/record-array-parsing-fix-report-2026-03-24.md
+  - knowledge/switch-inline-context-implementation-report-2026-03-24.md
