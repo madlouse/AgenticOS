@@ -286,6 +286,87 @@ describe('saveState', () => {
     expect(result).toContain('commit failed');
   });
 
+  it('surfaces git commit failure details from stdout when stderr is empty', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' add ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('commit failed'), 'stdout failure details', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('git commit failed');
+    expect(result).toContain('commit failed');
+  });
+
+  it('surfaces git commit failure details from the error message when stdout and stderr are empty', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' add ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('message only failure'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('git commit failed');
+    expect(result).toContain('message only failure');
+  });
+
+  it('still returns a commit failure when stderr, stdout, and message are all empty', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' add ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb({} as Error, '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('git commit failed');
+    expect(result).toContain('Error: undefined');
+  });
+
   it('reports when there is nothing new to commit', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     mockProjectFiles({ state: { session: {} } });
