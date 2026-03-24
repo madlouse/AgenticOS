@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: define the Homebrew post-install bootstrap contract for supported agents
+  title: define the integration mode matrix and primary vs fallback product decision
   status: implemented
-  updated: 2026-03-25T03:40:00.000Z
+  updated: 2026-03-25T04:20:00.000Z
 
 working_memory:
   facts:
@@ -67,6 +67,9 @@ working_memory:
     - issue #30 now freezes Homebrew as a reminder-only post-install surface rather than automatic agent activation
     - Homebrew-facing docs now say installation does not edit agent configs, restart tools, or prove activation
     - a docs consistency test now checks root README, tap README, formula, and MCP README against the official supported agent set
+    - issue #31 now freezes a canonical integration mode matrix with MCP-native as the primary mode
+    - the product now distinguishes MCP plus Skills Assist as a supported fallback, CLI Wrapper as a limited fallback, and Skills-only Guidance as experimental
+    - README, MCP README, and ROADMAP now reflect the same primary/fallback decision
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -85,9 +88,9 @@ working_memory:
     - sub-agent inheritance should land first as a standard-kit-backed protocol and template contract before any deeper runtime automation
     - per-agent bootstrap should land as one canonical matrix plus aligned docs, while Homebrew caveats and fallback-mode strategy remain separate follow-up issues
     - Homebrew post-install should remain reminder-only until an explicit opt-in bootstrap helper exists
+    - fallback integration modes must be documented as narrower than MCP-native, not as equal parallel runtime modes
   pending:
     - decide whether any entry surfaces beyond `agenticos_status` and `agenticos_switch` need the same compact guardrail summary
-    - implement issue #31 to define the MCP-native vs CLI+Skills integration matrix
 
 loaded_context:
   - .project.yaml
@@ -117,3 +120,5 @@ loaded_context:
   - knowledge/per-agent-bootstrap-standard-implementation-report-2026-03-25.md
   - knowledge/homebrew-post-install-contract-2026-03-25.md
   - knowledge/homebrew-post-install-implementation-report-2026-03-25.md
+  - knowledge/integration-mode-matrix-2026-03-25.md
+  - knowledge/integration-mode-matrix-implementation-report-2026-03-25.md

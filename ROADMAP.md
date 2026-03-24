@@ -14,6 +14,7 @@
 - [x] GitHub Releases + Homebrew distribution
 - [x] CI pipeline (TypeScript lint, build, test)
 - [x] Open-source workflow: Issue → Branch → PR
+- [x] Integration mode decision: `MCP-native` primary, `MCP + Skills Assist` supported fallback, `CLI Wrapper` limited fallback, `Skills-only Guidance` experimental
 
 ## v0.3.0 — Next
 
