@@ -53,6 +53,61 @@ const registryMock = registry as typeof registry & {
   saveRegistry: ReturnType<typeof vi.fn>;
 };
 
+function buildRegistry(overrides: Record<string, unknown> = {}) {
+  return {
+    version: '1.0.0',
+    last_updated: '2025-01-01T00:00:00.000Z',
+    active_project: 'test-project',
+    projects: [
+      {
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/test/path',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function mockProjectFiles(options?: {
+  projectYaml?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+  quickStart?: string;
+  conversation?: string;
+}) {
+  const projectYaml = options?.projectYaml || {
+    meta: {
+      id: 'test-project',
+      name: 'Test Project',
+    },
+  };
+  const state = options?.state || {
+    session: {},
+    working_memory: { decisions: [], facts: [], pending: [] },
+  };
+  const quickStart = options?.quickStart || '# Quick Start\n\n1. Define project goals';
+  const conversation = options?.conversation || '';
+
+  fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+    if (path.endsWith('/.project.yaml')) {
+      return JSON.stringify(projectYaml);
+    }
+    if (path.endsWith('/state.yaml')) {
+      return JSON.stringify(state);
+    }
+    if (path.endsWith('/quick-start.md')) {
+      return quickStart;
+    }
+    if (path.includes('/conversations/') && path.endsWith('.md')) {
+      return conversation;
+    }
+    return '';
+  });
+}
+
 describe('recordSession', () => {
   beforeEach(() => {
     // Clear mock calls but preserve implementations
@@ -75,6 +130,7 @@ describe('recordSession', () => {
       projects: [],
     });
     registryMock.saveRegistry.mockResolvedValue(undefined);
+    mockProjectFiles();
   });
 
   afterEach(() => {
@@ -113,24 +169,7 @@ describe('recordSession', () => {
   });
 
   it('creates conversation file with correct date-based filename', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-
-    // Mock readFile for state.yaml (empty/non-existent)
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({}));
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
     await recordSession({ summary: 'Did some work' });
 
@@ -144,33 +183,12 @@ describe('recordSession', () => {
     expect(convPath).toContain(today);
   });
 
-  // TODO: Fix yaml mock - yamlMock.stringify not returning proper values
-  it.skip('appends to existing conversation file', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
+  it('appends to existing conversation file', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } },
+      conversation: '# Existing content\n\nsome previous record',
     });
-
-    // Mock readFile for all calls in order
-    const mockConv = '# Existing content\n\nsome previous record';
-    fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({ session: {} }))  // state.yaml
-      .mockResolvedValueOnce(mockConv)   // conversation file
-      .mockResolvedValueOnce('# CLAUDE.md'); // updateClaudeMdState reads CLAUDE.md
-
-    // yaml.parse is called on state.yaml, not conversation file
-    yamlMock.parse.mockReturnValue({ session: {} });
 
     await recordSession({ summary: 'Did more work' });
 
@@ -184,21 +202,7 @@ describe('recordSession', () => {
   });
 
   it('updates state.yaml with decisions appended', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
     const existingState = {
       session: {},
@@ -208,7 +212,7 @@ describe('recordSession', () => {
         pending: [],
       },
     };
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify(existingState));
+    mockProjectFiles({ state: existingState });
 
     await recordSession({
       summary: 'test',
@@ -226,21 +230,7 @@ describe('recordSession', () => {
   });
 
   it('replaces pending items in state.yaml', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
     const existingState = {
       session: {},
@@ -250,7 +240,7 @@ describe('recordSession', () => {
         pending: ['old pending item'],
       },
     };
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify(existingState));
+    mockProjectFiles({ state: existingState });
 
     await recordSession({
       summary: 'test',
@@ -266,21 +256,7 @@ describe('recordSession', () => {
   });
 
   it('appends outcomes as facts in state.yaml', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
     const existingState = {
       session: {},
@@ -290,7 +266,7 @@ describe('recordSession', () => {
         pending: [],
       },
     };
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify(existingState));
+    mockProjectFiles({ state: existingState });
 
     await recordSession({
       summary: 'test',
@@ -307,27 +283,13 @@ describe('recordSession', () => {
   });
 
   it('updates current_task in state', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
     const existingState = {
       session: {},
       working_memory: { decisions: [], facts: [], pending: [] },
     };
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify(existingState));
+    mockProjectFiles({ state: existingState });
 
     await recordSession({
       summary: 'test',
@@ -341,26 +303,42 @@ describe('recordSession', () => {
     expect(writtenState.current_task.status).toBe('in_progress');
   });
 
+  it('falls back to existing task title and default status when current_task fields are partial', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      state: {
+        session: {},
+        current_task: {
+          title: 'Existing task title',
+        },
+        working_memory: {
+          pending: [],
+        },
+      },
+    });
+
+    await recordSession({
+      summary: 'test',
+      decisions: ['decision one'],
+      outcomes: ['outcome one'],
+      current_task: {},
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const stateCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
+    const writtenState = JSON.parse(stateCall![1] as string);
+
+    expect(writtenState.current_task.title).toBe('Existing task title');
+    expect(writtenState.current_task.status).toBe('in_progress');
+    expect(writtenState.working_memory.decisions).toEqual(['decision one']);
+    expect(writtenState.working_memory.facts).toEqual(['outcome one']);
+  });
+
   it('calls updateClaudeMdState', async () => {
     const { updateClaudeMdState } = await import('../../utils/distill.js');
 
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ session: {} }));
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
 
     await recordSession({ summary: 'test' });
 
@@ -368,23 +346,8 @@ describe('recordSession', () => {
   });
 
   it('updates registry with last_recorded timestamp', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ session: {} }));
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
 
     await recordSession({ summary: 'test' });
 
@@ -395,27 +358,13 @@ describe('recordSession', () => {
   });
 
   it('parses JSON-stringified array arguments without spreading as characters', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
     const existingState = {
       session: {},
       working_memory: { decisions: [], facts: [], pending: [] },
     };
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify(existingState));
+    mockProjectFiles({ state: existingState });
 
     await recordSession({
       summary: 'test',
@@ -439,23 +388,8 @@ describe('recordSession', () => {
   });
 
   it('returns success message with paths', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ session: {} }));
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
 
     const result = await recordSession({ summary: 'test session' });
 
@@ -464,5 +398,95 @@ describe('recordSession', () => {
     expect(result).toContain('state.yaml');
     expect(result).toContain('CLAUDE.md');
     expect(result).toContain('✅ Session recorded');
+  });
+
+  it('continues when quick-start.md is missing during enrichment', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+      }
+      if (path.endsWith('/state.yaml')) {
+        return JSON.stringify({ session: {}, working_memory: { decisions: [], facts: [], pending: [] } });
+      }
+      if (path.endsWith('/quick-start.md')) {
+        throw new Error('missing quick-start');
+      }
+      return '';
+    });
+
+    const result = await recordSession({ summary: 'test session' });
+
+    expect(result).toContain('✅ Session recorded');
+  });
+
+  it('only updates last_recorded on the resolved project', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      ...buildRegistry(),
+      projects: [
+        ...buildRegistry().projects,
+        {
+          id: 'other-project',
+          name: 'Other Project',
+          path: '/other/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+          last_recorded: '2025-01-01T12:00:00.000Z',
+        },
+      ],
+    });
+    mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
+
+    await recordSession({ summary: 'test session' });
+
+    const savedRegistry = registryMock.saveRegistry.mock.calls[0][0];
+    const testProject = savedRegistry.projects.find((p: any) => p.id === 'test-project');
+    const otherProject = savedRegistry.projects.find((p: any) => p.id === 'other-project');
+
+    expect(testProject.last_recorded).toBeDefined();
+    expect(otherProject.last_recorded).toBe('2025-01-01T12:00:00.000Z');
+  });
+
+  it('fails closed when explicit project does not match the active project', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      ...buildRegistry(),
+      projects: [
+        ...buildRegistry().projects,
+        {
+          id: 'other-project',
+          name: 'Other Project',
+          path: '/other/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await recordSession({
+      project: 'other-project',
+      summary: 'test',
+    });
+
+    expect(result).toContain('does not match active project');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when .project.yaml identity mismatches the registry project', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'wrong-project',
+          name: 'Test Project',
+        },
+      },
+    });
+
+    const result = await recordSession({ summary: 'test' });
+
+    expect(result).toContain('does not match .project.yaml meta.id');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
   });
 });

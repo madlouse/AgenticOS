@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
 import yaml from 'yaml';
-import { loadRegistry, saveRegistry } from '../utils/registry.js';
+import { saveRegistry } from '../utils/registry.js';
 import { updateClaudeMdState } from '../utils/distill.js';
+import { resolveManagedProjectTarget } from '../utils/project-target.js';
 
 function parseArray(val: unknown): string[] {
   if (Array.isArray(val)) return val as string[];
@@ -25,23 +25,24 @@ export async function recordSession(args: any): Promise<string> {
     return '❌ summary is required. Provide a brief description of what happened.';
   }
 
-  const registry = await loadRegistry();
-  if (!registry.active_project) {
-    return '❌ No active project. Use agenticos_switch first.';
+  let resolved;
+  try {
+    resolved = await resolveManagedProjectTarget({
+      project: args.project,
+      commandName: 'agenticos_record',
+    });
+  } catch (error: any) {
+    return `❌ ${error.message}`;
   }
 
-  const project = registry.projects.find((p) => p.id === registry.active_project);
-  if (!project) return '❌ Active project not found in registry.';
-
-  const projectPath = project.path;
+  const { registry, project, projectPath, statePath, quickStartPath, conversationsDir: convDir, markerPath } = resolved;
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const time = now.toISOString().substring(11, 16);
 
   // 1. Append to conversations/YYYY-MM-DD.md
-  const convDir = join(projectPath, '.context', 'conversations');
   await mkdir(convDir, { recursive: true });
-  const convFile = join(convDir, `${today}.md`);
+  const convFile = `${convDir}/${today}.md`;
 
   let existing = '';
   try { existing = await readFile(convFile, 'utf-8'); } catch {}
@@ -74,7 +75,6 @@ export async function recordSession(args: any): Promise<string> {
   }
 
   // 2. Update state.yaml
-  const statePath = join(projectPath, '.context', 'state.yaml');
   let state: any = {};
   try {
     const stateContent = await readFile(statePath, 'utf-8');
@@ -108,11 +108,10 @@ export async function recordSession(args: any): Promise<string> {
   await writeFile(statePath, yaml.stringify(state), 'utf-8');
 
   // 3. Sync CLAUDE.md Current State
-  const claudeMdPath = join(projectPath, 'CLAUDE.md');
+  const claudeMdPath = `${projectPath}/CLAUDE.md`;
   await updateClaudeMdState(claudeMdPath, state, project.name);
 
   // 4. Auto-enrich quick-start.md if it still contains boilerplate
-  const quickStartPath = join(projectPath, '.context', 'quick-start.md');
   try {
     const qsContent = await readFile(quickStartPath, 'utf-8');
     if (qsContent.includes('1. Define project goals')) {
@@ -143,7 +142,6 @@ ${pendingLines}
   }
 
   // 5. Touch marker file for hook-based reminder system
-  const markerPath = join(projectPath, '.context', '.last_record');
   await writeFile(markerPath, now.toISOString(), 'utf-8');
 
   // 6. Update registry with last_recorded timestamp

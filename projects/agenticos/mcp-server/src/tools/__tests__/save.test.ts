@@ -49,6 +49,7 @@ import { saveState } from '../save.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as childProcess from 'child_process';
+import { updateClaudeMdState } from '../../utils/distill.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -57,6 +58,49 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
 };
 const registryMock = registry as typeof registry & { loadRegistry: ReturnType<typeof vi.fn> };
 const childProcessMock = childProcess as typeof childProcess & { exec: ReturnType<typeof vi.fn> };
+const updateClaudeMdStateMock = updateClaudeMdState as unknown as ReturnType<typeof vi.fn>;
+
+function buildRegistry(overrides: Record<string, unknown> = {}) {
+  return {
+    version: '1.0.0',
+    last_updated: '2025-01-01T00:00:00.000Z',
+    active_project: 'test-project',
+    projects: [
+      {
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/test/path',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function mockProjectFiles(options?: {
+  projectYaml?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+}) {
+  const projectYaml = options?.projectYaml || {
+    meta: {
+      id: 'test-project',
+      name: 'Test Project',
+    },
+  };
+  const state = options?.state || { session: {}, working_memory: { pending: [], decisions: [], facts: [] } };
+
+  fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+    if (path.endsWith('/.project.yaml')) {
+      return JSON.stringify(projectYaml);
+    }
+    if (path.endsWith('/state.yaml')) {
+      return JSON.stringify(state);
+    }
+    return '';
+  });
+}
 
 describe('saveState', () => {
   beforeEach(() => {
@@ -83,7 +127,12 @@ describe('saveState', () => {
       projects: [],
     });
     // Restore yaml stringify default
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
     yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
+    updateClaudeMdStateMock.mockResolvedValue({ updated: true, created: false });
+    mockProjectFiles();
   });
 
   afterEach(() => {
@@ -114,33 +163,13 @@ describe('saveState', () => {
     });
 
     const result = await saveState({ message: 'test' });
-    expect(result).toContain('Active project not found in registry');
+    expect(result).toContain('Active project "non-existent" not found in registry');
   });
 
-  // TODO: Fix exec mock - vi.mock('child_process') not intercepting promisify(exec)
-  it.skip('saves state.yaml with backup timestamp when no git repo', async () => {
-    yamlMock.parse.mockReturnValue({ session: {} });
+  it('saves state.yaml with backup timestamp when no git repo', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
 
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-
-    // Mock readFile to return a valid state
-    fsPromisesMock.readFile.mockResolvedValue('session:\n  last_backup: "2025-01-01T00:00:00.000Z"\n');
-
-    // Mock exec to throw (no git) — execAsync uses promisify which expects callback-based exec
     childProcessMock.exec.mockImplementation(
       (_cmd: string, cb: (err: Error, stdout?: string, stderr?: string) => void) => {
         cb(new Error('not a git repo'), '', '');
@@ -150,7 +179,7 @@ describe('saveState', () => {
     const result = await saveState({ message: 'test save' });
 
     expect(result).toContain('no git repo');
-    expect(result).toContain('State saved locally');
+    expect(result).toContain('State saved but no git repo found');
 
     // Verify state.yaml was updated
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
@@ -161,32 +190,17 @@ describe('saveState', () => {
     expect(writtenState.session.last_backup).toBeDefined();
   });
 
-  // TODO: Fix exec mock - vi.mock('child_process') not intercepting promisify(exec)
-  it.skip('runs git add, commit, push when git repo exists', async () => {
-    yamlMock.parse.mockReturnValue({ session: {} });
+  it('runs git add, commit, push when git repo exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
 
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-
-    fsPromisesMock.readFile.mockResolvedValue('session:\n  last_backup: "2025-01-01T00:00:00.000Z"\n');
-
-    // execAsync uses promisified exec — callback-based mock
     childProcessMock.exec.mockImplementation(
       (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
-        cb(null, '/test/path', '');
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        cb(null, '', '');
       }
     );
 
@@ -194,28 +208,45 @@ describe('saveState', () => {
 
     expect(result).toContain('Pushed to remote');
     expect(result).toContain('My commit message');
-    expect(result).toContain('test-project');
+    expect(result).toContain('Test Project');
+  });
+
+  it('notes when CLAUDE.md had to be auto-generated during save', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    updateClaudeMdStateMock.mockResolvedValue({ updated: true, created: true });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(new Error('not a git repo'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test save' });
+
+    expect(result).toContain('CLAUDE.md was auto-generated');
   });
 
   it('returns partial save message when error occurs during save', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
-    // readFile throws an error
-    fsPromisesMock.readFile.mockRejectedValue(new Error('read error'));
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+        });
+      }
+      if (path.endsWith('/state.yaml')) {
+        throw new Error('read error');
+      }
+      return '';
+    });
 
     const execMock = vi.fn((cmd: string, cb: Function) => {
       cb(null, '', '');
@@ -226,5 +257,142 @@ describe('saveState', () => {
 
     expect(result).toContain('Partial save');
     expect(result).toContain('read error');
+  });
+
+  it('handles git commit failure that is not a nothing-to-commit case', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' add ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('commit failed'), '', 'fatal: commit failed');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('git commit failed');
+    expect(result).toContain('commit failed');
+  });
+
+  it('reports when there is nothing new to commit', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' add ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('No new changes to commit');
+  });
+
+  it('uses the default auto-save message when no explicit message is provided', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { working_memory: { pending: [] } } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({});
+
+    expect(result).toContain('Auto-save [');
+    expect(result).toContain('No new changes to commit');
+  });
+
+  it('reports push failure as degraded but non-fatal', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' push')) {
+          cb(new Error('push failed'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('Push failed (committed locally, not synced)');
+  });
+
+  it('fails closed when explicit project does not match the active project', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      ...buildRegistry(),
+      projects: [
+        ...buildRegistry().projects,
+        {
+          id: 'other-project',
+          name: 'Other Project',
+          path: '/other/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await saveState({ project: 'other-project', message: 'test' });
+
+    expect(result).toContain('does not match active project');
+    expect(childProcessMock.exec).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when .project.yaml identity mismatches the registry project', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'wrong-project',
+          name: 'Test Project',
+        },
+      },
+    });
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('does not match .project.yaml meta.id');
+    expect(childProcessMock.exec).not.toHaveBeenCalled();
   });
 });
