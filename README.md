@@ -11,6 +11,19 @@ brew tap madlouse/agenticos
 brew install agenticos
 ```
 
+Homebrew installs:
+
+- the `agenticos-mcp` binary
+- a seed workspace directory under Homebrew `var`
+
+Homebrew does **not**:
+
+- edit Claude Code, Codex, Cursor, or Gemini CLI configuration for you
+- restart your AI tool
+- prove activation by itself
+
+After `brew install`, bootstrap one supported agent below, restart it, and verify `agenticos_list` explicitly.
+
 ### Option B — Manual install (from GitHub Releases)
 
 ```bash

@@ -50,3 +50,9 @@ export function getBootstrapAgent(
 
   return match;
 }
+
+export function getOfficialBootstrapAgents(
+  matrix: AgentBootstrapMatrix,
+): AgentBootstrapEntry[] {
+  return matrix.supported_agents.filter((agent) => agent.support_tier === 'official');
+}

@@ -5,6 +5,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import {
   getBootstrapAgent,
+  getOfficialBootstrapAgents,
   loadAgentBootstrapMatrix,
 } from '../bootstrap-matrix.js';
 
@@ -122,5 +123,14 @@ describe('bootstrap matrix', () => {
     const matrix = await loadAgentBootstrapMatrix();
 
     expect(getBootstrapAgent(matrix, 'codex').label).toBe('Codex');
+  });
+
+  it('returns only official supported agents for Homebrew-facing messaging', async () => {
+    const home = await setupBootstrapHome();
+    process.env.AGENTICOS_HOME = home;
+
+    const matrix = await loadAgentBootstrapMatrix();
+
+    expect(getOfficialBootstrapAgents(matrix).map((agent) => agent.id)).toEqual(['claude-code']);
   });
 });

@@ -53,6 +53,9 @@ Its job is to define and evolve:
 - `projects/agenticos/.meta/bootstrap/agent-bootstrap-matrix.yaml` is now the machine-readable source of truth for supported-agent bootstrap
 - `knowledge/per-agent-bootstrap-standard-2026-03-25.md` records the transport-vs-routing contract and official support surface
 - `knowledge/per-agent-bootstrap-standard-implementation-report-2026-03-25.md` records the landed matrix, parser, and docs alignment work
+- issue `#30` now defines the Homebrew post-install contract as reminder-only, not automatic agent activation
+- `knowledge/homebrew-post-install-contract-2026-03-25.md` records the product decision for install vs activation
+- `knowledge/homebrew-post-install-implementation-report-2026-03-25.md` records the formula, tap README, root README, and MCP README alignment work
 
 ## Recommended Entry Documents
 
@@ -79,11 +82,13 @@ Start here:
 19. `knowledge/sub-agent-inheritance-implementation-report-2026-03-25.md`
 20. `knowledge/per-agent-bootstrap-standard-2026-03-25.md`
 21. `knowledge/per-agent-bootstrap-standard-implementation-report-2026-03-25.md`
+22. `knowledge/homebrew-post-install-contract-2026-03-25.md`
+23. `knowledge/homebrew-post-install-implementation-report-2026-03-25.md`
 
 ## Next Steps
 
 1. Use the reconciled open backlog, not the pre-self-hosting issue list, as the canonical remaining work queue
 2. Treat `/Users/jeking/dev/AgenticOS` as the trusted local canonical checkout again; use isolated worktrees for changes
-3. Continue with the remaining core backlog: `#30`, `#31`
+3. Continue with the remaining core backlog: `#31`
 4. Decide whether any additional entry surfaces need the same compact guardrail summary beyond `agenticos_status` and `agenticos_switch`
 5. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap

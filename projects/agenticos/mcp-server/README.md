@@ -20,6 +20,17 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, bootstrap one supported agent, restart that agent, then explicitly verify `agenticos_list` works before relying on project-intent routing.
 
+### Homebrew Post-Install Contract
+
+If the user installed AgenticOS with Homebrew:
+
+- Homebrew installs the binary and a seed workspace
+- Homebrew does **not** edit Claude Code, Codex, Cursor, or Gemini CLI configuration
+- Homebrew does **not** restart the AI tool
+- Homebrew does **not** prove activation by itself
+
+So post-install success only means the package landed. It does not mean the agent is already bootstrapped.
+
 ### When to Use
 
 AgenticOS is ideal for:
