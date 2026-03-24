@@ -6,6 +6,79 @@ import { loadRegistry, saveRegistry } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
 
+type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
+
+interface GuardrailEvidenceEntry {
+  command?: GuardrailCommand;
+  recorded_at?: string;
+  issue_id?: string | null;
+  result?: {
+    status?: string;
+    summary?: string;
+    block_reasons?: string[];
+    redirect_actions?: string[];
+    notes?: string[];
+    branch_name?: string;
+    worktree_path?: string;
+  };
+}
+
+interface GuardrailEvidenceState {
+  updated_at?: string;
+  last_command?: GuardrailCommand;
+  preflight?: GuardrailEvidenceEntry;
+  branch_bootstrap?: GuardrailEvidenceEntry;
+  pr_scope_check?: GuardrailEvidenceEntry;
+}
+
+function formatTimestamp(value?: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+}
+
+function getLatestGuardrailEntry(guardrailEvidence?: GuardrailEvidenceState): GuardrailEvidenceEntry | null {
+  if (!guardrailEvidence?.last_command) return null;
+
+  switch (guardrailEvidence.last_command) {
+    case 'agenticos_preflight':
+      return guardrailEvidence.preflight || null;
+    case 'agenticos_branch_bootstrap':
+      return guardrailEvidence.branch_bootstrap || null;
+    case 'agenticos_pr_scope_check':
+      return guardrailEvidence.pr_scope_check || null;
+  }
+}
+
+function summarizeGuardrailDetail(entry: GuardrailEvidenceEntry): string | null {
+  const result = entry.result;
+  if (!result) return null;
+
+  if (result.status === 'BLOCK' && result.block_reasons && result.block_reasons.length > 0) {
+    return result.block_reasons[0];
+  }
+
+  if (result.status === 'REDIRECT' && result.redirect_actions && result.redirect_actions.length > 0) {
+    return result.redirect_actions[0];
+  }
+
+  if (result.status === 'CREATED') {
+    if (result.branch_name) {
+      return `created ${result.branch_name}`;
+    }
+    if (result.notes && result.notes.length > 0) {
+      return result.notes[0];
+    }
+  }
+
+  if (result.summary) {
+    return result.summary;
+  }
+
+  return null;
+}
+
 export async function switchProject(args: any): Promise<string> {
   const { project } = args;
   const registry = await loadRegistry();
@@ -127,6 +200,24 @@ export async function getStatus(): Promise<string> {
   if (state.session?.last_backup) {
     const backupDate = new Date(state.session.last_backup).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
     lines.push(`💾 Last saved: ${backupDate}`);
+  }
+
+  const latestGuardrail = getLatestGuardrailEntry(state.guardrail_evidence as GuardrailEvidenceState | undefined);
+  if (latestGuardrail?.command) {
+    const status = latestGuardrail.result?.status || 'UNKNOWN';
+    const recordedAt = formatTimestamp(latestGuardrail.recorded_at) || formatTimestamp((state.guardrail_evidence as GuardrailEvidenceState | undefined)?.updated_at) || 'Unknown time';
+    lines.push(`🛡️ Latest guardrail: ${latestGuardrail.command} -> ${status} (${recordedAt})`);
+
+    if (latestGuardrail.issue_id) {
+      lines.push(`   Issue: #${latestGuardrail.issue_id}`);
+    }
+
+    const detail = summarizeGuardrailDetail(latestGuardrail);
+    if (detail) {
+      lines.push(`   Detail: ${detail}`);
+    }
+  } else {
+    lines.push('🛡️ Latest guardrail: None recorded');
   }
 
   lines.push('');

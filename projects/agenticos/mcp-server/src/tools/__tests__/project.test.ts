@@ -430,4 +430,120 @@ describe('getStatus', () => {
     expect(result).toContain('None');
     expect(result).toContain('Test Project');
   });
+
+  it('shows a friendly guardrail placeholder when no guardrail evidence exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('🛡️ Latest guardrail: None recorded');
+  });
+
+  it('shows the latest BLOCK guardrail summary and reason', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+        guardrail_evidence: {
+          updated_at: '2025-01-02T13:00:00.000Z',
+          last_command: 'agenticos_preflight',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2025-01-02T13:00:00.000Z',
+            issue_id: '74',
+            result: {
+              status: 'BLOCK',
+              block_reasons: ['branch includes unrelated commits relative to origin/main'],
+            },
+          },
+        },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('agenticos_preflight -> BLOCK');
+    expect(result).toContain('Issue: #74');
+    expect(result).toContain('branch includes unrelated commits');
+  });
+
+  it('shows the latest REDIRECT guardrail summary and redirect action', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+        guardrail_evidence: {
+          updated_at: '2025-01-02T14:00:00.000Z',
+          last_command: 'agenticos_preflight',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2025-01-02T14:00:00.000Z',
+            issue_id: '74',
+            result: {
+              status: 'REDIRECT',
+              redirect_actions: ['create an isolated issue branch/worktree before implementation'],
+            },
+          },
+        },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('agenticos_preflight -> REDIRECT');
+    expect(result).toContain('create an isolated issue branch/worktree');
+  });
 });
