@@ -29,6 +29,7 @@ Do not treat archived standalone records as the live source of truth.
    - `projects/agenticos/.meta/templates/`
    - `projects/agenticos/.meta/standard-kit/`
 5. Treat the archive as read-only provenance.
+6. For non-trivial delegated work, define a sub-agent inheritance packet and require a verification echo before the sub-agent edits or concludes.
 
 ## Navigation
 

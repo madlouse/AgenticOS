@@ -4,6 +4,20 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import yaml from 'yaml';
 import { runStandardKitAdopt, runStandardKitUpgradeCheck } from '../standard-kit.js';
+import { generateAgentsMd } from '../../utils/distill.js';
+
+async function writeRegistry(home: string, registry: unknown): Promise<void> {
+  await mkdir(join(home, '.agent-workspace'), { recursive: true });
+  await writeFile(join(home, '.agent-workspace', 'registry.yaml'), yaml.stringify(registry), 'utf-8');
+}
+
+async function writeManifest(home: string, manifest: unknown): Promise<void> {
+  await writeFile(
+    join(home, 'projects', 'agenticos', '.meta', 'standard-kit', 'manifest.yaml'),
+    yaml.stringify(manifest),
+    'utf-8',
+  );
+}
 
 async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   const home = await mkdtemp(join(tmpdir(), 'agenticos-standard-kit-'));
@@ -34,6 +48,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
           { path: 'tasks/templates/agent-preflight-checklist.yaml', canonical_source: 'projects/agenticos/.meta/templates/agent-preflight-checklist.yaml' },
           { path: 'tasks/templates/issue-design-brief.md', canonical_source: 'projects/agenticos/.meta/templates/issue-design-brief.md' },
           { path: 'tasks/templates/non-code-evaluation-rubric.yaml', canonical_source: 'projects/agenticos/.meta/templates/non-code-evaluation-rubric.yaml' },
+          { path: 'tasks/templates/sub-agent-handoff.md', canonical_source: 'projects/agenticos/.meta/templates/sub-agent-handoff.md' },
           { path: 'tasks/templates/submission-evidence.md', canonical_source: 'projects/agenticos/.meta/templates/submission-evidence.md' },
         ],
       },
@@ -48,6 +63,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         'tasks/templates/agent-preflight-checklist.yaml',
         'tasks/templates/issue-design-brief.md',
         'tasks/templates/non-code-evaluation-rubric.yaml',
+        'tasks/templates/sub-agent-handoff.md',
         'tasks/templates/submission-evidence.md',
       ],
     },
@@ -60,10 +76,10 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.2\n', 'utf-8');
   await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n', 'utf-8');
   await writeFile(join(templateRoot, 'non-code-evaluation-rubric.yaml'), 'version: 0.1\nname: non-code-evaluation-rubric\n', 'utf-8');
+  await writeFile(join(templateRoot, 'sub-agent-handoff.md'), '# Sub-Agent Handoff\n', 'utf-8');
   await writeFile(join(templateRoot, 'submission-evidence.md'), '# Submission Evidence\n', 'utf-8');
 
-  await mkdir(join(home, '.agent-workspace'), { recursive: true });
-  await writeFile(join(home, '.agent-workspace', 'registry.yaml'), yaml.stringify({
+  await writeRegistry(home, {
     version: '1.0.0',
     last_updated: new Date().toISOString(),
     active_project: 'sample-project',
@@ -77,7 +93,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         last_accessed: new Date().toISOString(),
       },
     ],
-  }), 'utf-8');
+  });
 
   return { home, projectRoot };
 }
@@ -110,6 +126,7 @@ describe('standard kit commands', () => {
     expect(result.created_files).toContain('AGENTS.md');
     expect(result.created_files).toContain('CLAUDE.md');
     expect(result.created_files).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
+    expect(result.created_files).toContain('tasks/templates/sub-agent-handoff.md');
     expect(result.skipped_existing_templates).toContain('.context/quick-start.md');
     expect(result.upgraded_generated_files).toEqual([]);
 
@@ -164,8 +181,316 @@ describe('standard kit commands', () => {
     const quickStartStatus = result.copied_templates.find((item) => item.path === '.context/quick-start.md');
     const designBriefStatus = result.copied_templates.find((item) => item.path === 'tasks/templates/issue-design-brief.md');
     const rubricStatus = result.copied_templates.find((item) => item.path === 'tasks/templates/non-code-evaluation-rubric.yaml');
+    const subAgentHandoffStatus = result.copied_templates.find((item) => item.path === 'tasks/templates/sub-agent-handoff.md');
     expect(quickStartStatus).toMatchObject({ status: 'matches_canonical' });
     expect(designBriefStatus).toMatchObject({ status: 'diverged_from_canonical' });
     expect(rubricStatus).toMatchObject({ status: 'missing' });
+    expect(subAgentHandoffStatus).toMatchObject({ status: 'missing' });
+  });
+
+  it('adopt can resolve the active project from registry and upgrades stale generated files while skipping current ones', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeFile(join(projectRoot, 'AGENTS.md'), generateAgentsMd('Sample Project', ''), 'utf-8');
+    await writeFile(
+      join(projectRoot, 'CLAUDE.md'),
+      '<!-- agenticos-template: v2 -->\n# CLAUDE.md — Sample Project\n\n## Project DNA\n\ncustom dna\n\n## Navigation\n\ncustom nav\n',
+      'utf-8',
+    );
+
+    const result = JSON.parse(await runStandardKitAdopt(undefined)) as {
+      status: string;
+      created_files: string[];
+      upgraded_generated_files: string[];
+      skipped_current_generated_files: string[];
+      project_id: string;
+      project_name: string;
+    };
+
+    expect(result.status).toBe('ADOPTED');
+    expect(result.project_name).toBe('Sample Project');
+    expect(result.project_id).toBe('sample-project');
+    expect(result.upgraded_generated_files).toContain('CLAUDE.md');
+    expect(result.skipped_current_generated_files).toContain('AGENTS.md');
+    expect(result.created_files).toContain('.project.yaml');
+
+    const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
+    expect(claudeMd).toContain('agenticos-template: v3');
+    expect(claudeMd).toContain('custom dna');
+    expect(claudeMd).toContain('## Current State');
+  });
+
+  it('upgrade check reports current generated files when template versions already match', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeFile(join(projectRoot, 'AGENTS.md'), generateAgentsMd('Sample Project', ''), 'utf-8');
+    await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- agenticos-template: v3 -->\ncurrent claude\n', 'utf-8');
+
+    const result = JSON.parse(await runStandardKitUpgradeCheck({ project_path: projectRoot })) as {
+      generated_files: Array<{ path: string; status: string; current_version: number | null }>;
+    };
+
+    expect(result.generated_files.find((item) => item.path === 'AGENTS.md')).toMatchObject({
+      status: 'current',
+      current_version: 3,
+    });
+    expect(result.generated_files.find((item) => item.path === 'CLAUDE.md')).toMatchObject({
+      status: 'current',
+      current_version: 3,
+    });
+  });
+
+  it('upgrade check can resolve project identity from an existing .project.yaml through the active registry project', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeFile(
+      join(projectRoot, '.project.yaml'),
+      'meta:\n  name: "Yaml Project"\n  id: "yaml-project"\n  description: "yaml description"\n',
+      'utf-8',
+    );
+
+    const result = JSON.parse(await runStandardKitUpgradeCheck(undefined)) as {
+      project_name: string;
+      project_id: string;
+    };
+
+    expect(result.project_name).toBe('Yaml Project');
+    expect(result.project_id).toBe('yaml-project');
+  });
+
+  it('adopt upgrades stale AGENTS.md files to the current generated template', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeFile(join(projectRoot, 'AGENTS.md'), '<!-- agenticos-template: v2 -->\nold agents\n', 'utf-8');
+
+    const result = JSON.parse(await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      upgraded_generated_files: string[];
+    };
+
+    expect(result.upgraded_generated_files).toContain('AGENTS.md');
+    const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
+    expect(agentsMd).toContain('agenticos-template: v3');
+    expect(agentsMd).toContain('Guardrail Protocol');
+  });
+
+  it('adopt slugifies a provided project name when no canonical project id exists yet', async () => {
+    const { home } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    const orphanProjectRoot = join(home, 'projects', 'custom-project');
+    await mkdir(orphanProjectRoot, { recursive: true });
+
+    const result = JSON.parse(await runStandardKitAdopt({
+      project_path: orphanProjectRoot,
+      project_name: 'Custom Project',
+    })) as {
+      project_id: string;
+      project_name: string;
+    };
+
+    expect(result.project_name).toBe('Custom Project');
+    expect(result.project_id).toBe('custom-project');
+  });
+
+  it('adopt tolerates a minimal manifest and skips copied-template entries without canonical sources', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeManifest(home, {
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      layers: {
+        copied_templates: {
+          entries: [{ path: 'tasks/templates/ignored.md' }],
+        },
+      },
+    });
+
+    const result = JSON.parse(await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      created_files: string[];
+      upgraded_generated_files: string[];
+    };
+
+    expect(result.created_files).toEqual([]);
+    expect(result.upgraded_generated_files).toEqual([]);
+  });
+
+  it('upgrade check tolerates a minimal manifest and skips copied-template entries without canonical sources', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeManifest(home, {
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      layers: {
+        copied_templates: {
+          entries: [{ path: 'tasks/templates/ignored.md' }],
+        },
+      },
+    });
+
+    const result = JSON.parse(await runStandardKitUpgradeCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      missing_required_files: string[];
+      generated_files: unknown[];
+      copied_templates: unknown[];
+    };
+
+    expect(result.missing_required_files).toEqual([]);
+    expect(result.generated_files).toEqual([]);
+    expect(result.copied_templates).toEqual([]);
+  });
+
+  it('adopt fills missing state sections and preserves an explicit project phase from the template', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeManifest(home, {
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      layers: {
+        copied_templates: {
+          entries: [
+            { path: '.project.yaml', canonical_source: 'projects/agenticos/.meta/templates/.project.yaml' },
+            { path: '.context/state.yaml', canonical_source: 'projects/agenticos/.meta/templates/state.yaml' },
+          ],
+        },
+      },
+    });
+    await writeFile(
+      join(home, 'projects', 'agenticos', '.meta', 'templates', '.project.yaml'),
+      'meta:\n  name: "Template Name"\nstatus:\n  phase: "discovery"\n',
+      'utf-8',
+    );
+    await writeFile(
+      join(home, 'projects', 'agenticos', '.meta', 'templates', 'state.yaml'),
+      'loaded_context: []\n',
+      'utf-8',
+    );
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    });
+
+    const projectYaml = yaml.parse(await readFile(join(projectRoot, '.project.yaml'), 'utf-8')) as any;
+    const stateYaml = yaml.parse(await readFile(join(projectRoot, '.context', 'state.yaml'), 'utf-8')) as any;
+
+    expect(projectYaml.status.phase).toBe('discovery');
+    expect(projectYaml.status.last_updated).toBeTypeOf('string');
+    expect(stateYaml.session.id).toMatch(/^session-\d{4}-\d{2}-\d{2}-001$/);
+    expect(stateYaml.current_task.status).toBe('pending');
+    expect(stateYaml.current_task.next_step).toBe('Define project goals');
+  });
+
+  it('adopt fills missing project metadata and default planning status when the project template is skeletal', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeManifest(home, {
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      layers: {
+        copied_templates: {
+          entries: [
+            { path: '.project.yaml', canonical_source: 'projects/agenticos/.meta/templates/.project.yaml' },
+          ],
+        },
+      },
+    });
+    await writeFile(
+      join(home, 'projects', 'agenticos', '.meta', 'templates', '.project.yaml'),
+      '{}\n',
+      'utf-8',
+    );
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    });
+
+    const projectYaml = yaml.parse(await readFile(join(projectRoot, '.project.yaml'), 'utf-8')) as any;
+    expect(projectYaml.meta.name).toBe('Sample Project');
+    expect(projectYaml.meta.id).toBe('sample-project');
+    expect(projectYaml.meta.version).toBe('1.0.0');
+    expect(projectYaml.status.phase).toBe('planning');
+  });
+
+  it('upgrade check tolerates manifests with no copied-template layer at all', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeManifest(home, {
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      layers: {},
+    });
+
+    const result = JSON.parse(await runStandardKitUpgradeCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      generated_files: unknown[];
+      copied_templates: unknown[];
+    };
+
+    expect(result.generated_files).toEqual([]);
+    expect(result.copied_templates).toEqual([]);
+  });
+
+  it('adopt blocks when no active project exists and no project_path is provided', async () => {
+    const { home } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: null,
+      projects: [],
+    });
+
+    await expect(runStandardKitAdopt(undefined)).rejects.toThrow(
+      'No project_path provided and no active project found in registry.',
+    );
+  });
+
+  it('adopt blocks when the registry active project cannot be resolved', async () => {
+    const { home } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: 'missing-project',
+      projects: [],
+    });
+
+    await expect(runStandardKitAdopt({})).rejects.toThrow(
+      'Active project "missing-project" not found in registry.',
+    );
+  });
+
+  it('adopt blocks when project identity cannot resolve a name', async () => {
+    const { home } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    const orphanProjectRoot = join(home, 'projects', 'orphan-project');
+    await mkdir(orphanProjectRoot, { recursive: true });
+
+    await expect(runStandardKitAdopt({ project_path: orphanProjectRoot })).rejects.toThrow(
+      'Unable to resolve project name. Provide project_name or create .project.yaml first.',
+    );
   });
 });

@@ -24,6 +24,7 @@ Treat archived standalone material as read-only historical evidence, not as the 
 3. Keep `.context/quick-start.md` and `.context/state.yaml` current enough that another agent can resume without chat history.
 4. Do not create a second active standards repo or write new canonical records into `projects/agentic-os-development`.
 5. Prefer canonical template surfaces under `projects/agenticos/.meta/templates/` and `projects/agenticos/.meta/standard-kit/` over ad hoc local template copies.
+6. If you delegate to a sub-agent for non-trivial work, pass a defined inheritance packet and require the sub-agent to restate project, task, constraints, and expected evidence before it starts.
 
 ## Directory Structure
 

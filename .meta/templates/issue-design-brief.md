@@ -17,6 +17,16 @@
 - Related issues/risks:
 - Files or docs reviewed:
 
+## Sub-Agent Inheritance Packet
+- Sub-agent needed:
+- Delegated scope:
+- Project identity to pass:
+- Current task / issue context to pass:
+- Constraints / non-goals to pass:
+- Knowledge or task files to pass:
+- Expected output shape:
+- Verification the sub-agent must echo back:
+
 ## Design Pass 1
 - Proposed approach:
 - Why this approach:
