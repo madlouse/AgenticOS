@@ -43,6 +43,9 @@ Its job is to define and evolve:
 - `knowledge/switch-inline-context-implementation-report-2026-03-24.md` records the landed switch-context formatter, quick-start fallback, and verification
 - issue `#25` now enforces fail-closed project-boundary validation for record, save, and context reads
 - `knowledge/project-boundary-isolation-implementation-report-2026-03-25.md` records the boundary-proof design, coverage evidence, and verification
+- issue `#26` now freezes the canonical memory-layer contract and pushes it into the downstream standard kit and templates
+- `knowledge/memory-layer-contract-spec-2026-03-25.md` records the contract itself
+- `knowledge/memory-layer-contract-implementation-report-2026-03-25.md` records the template, kit, and documentation alignment work
 
 ## Recommended Entry Documents
 
@@ -63,11 +66,13 @@ Start here:
 13. `knowledge/record-array-parsing-fix-report-2026-03-24.md`
 14. `knowledge/switch-inline-context-implementation-report-2026-03-24.md`
 15. `knowledge/project-boundary-isolation-implementation-report-2026-03-25.md`
+16. `knowledge/memory-layer-contract-spec-2026-03-25.md`
+17. `knowledge/memory-layer-contract-implementation-report-2026-03-25.md`
 
 ## Next Steps
 
 1. Use the reconciled open backlog, not the pre-self-hosting issue list, as the canonical remaining work queue
 2. Treat `/Users/jeking/dev/AgenticOS` as the trusted local canonical checkout again; use isolated worktrees for changes
-3. Continue with the remaining core backlog: `#26`, `#28`, `#29`, `#30`, `#31`
+3. Continue with the remaining core backlog: `#28`, `#29`, `#30`, `#31`
 4. Decide whether any additional entry surfaces need the same compact guardrail summary beyond `agenticos_status` and `agenticos_switch`
 5. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap
