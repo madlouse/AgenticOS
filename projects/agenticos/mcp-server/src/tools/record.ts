@@ -4,14 +4,22 @@ import yaml from 'yaml';
 import { loadRegistry, saveRegistry } from '../utils/registry.js';
 import { updateClaudeMdState } from '../utils/distill.js';
 
+function parseArray(val: unknown): string[] {
+  if (Array.isArray(val)) return val as string[];
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed as string[];
+    } catch {}
+  }
+  return [];
+}
+
 export async function recordSession(args: any): Promise<string> {
-  const {
-    summary,
-    decisions = [],
-    outcomes = [],
-    pending = [],
-    current_task,
-  } = args;
+  const { summary, current_task } = args;
+  const decisions = parseArray(args.decisions);
+  const outcomes = parseArray(args.outcomes);
+  const pending = parseArray(args.pending);
 
   if (!summary) {
     return '❌ summary is required. Provide a brief description of what happened.';

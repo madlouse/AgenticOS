@@ -394,6 +394,50 @@ describe('recordSession', () => {
     expect(testProject.last_recorded).toBeDefined();
   });
 
+  it('parses JSON-stringified array arguments without spreading as characters', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const existingState = {
+      session: {},
+      working_memory: { decisions: [], facts: [], pending: [] },
+    };
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify(existingState));
+
+    await recordSession({
+      summary: 'test',
+      decisions: '["decision one","decision two"]',
+      outcomes: '["outcome one","outcome two"]',
+      pending: '["pending one"]',
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const stateCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
+    expect(stateCall).toBeDefined();
+    const writtenState = JSON.parse(stateCall![1] as string);
+
+    expect(writtenState.working_memory.decisions).toEqual(['decision one', 'decision two']);
+    expect(writtenState.working_memory.facts).toEqual(['outcome one', 'outcome two']);
+    expect(writtenState.working_memory.pending).toEqual(['pending one']);
+
+    for (const item of writtenState.working_memory.decisions) {
+      expect((item as string).length).toBeGreaterThan(1);
+    }
+  });
+
   it('returns success message with paths', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
