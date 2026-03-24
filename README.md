@@ -1,6 +1,6 @@
 # AgenticOS
 
-AI-native project management system for Claude Code, Cursor, Codex, and any MCP-compatible AI tool. Persists context and state across sessions so your AI agent always knows where it left off.
+AI-native project management system for Claude Code, Codex, Cursor, Gemini CLI, and other MCP-capable tools. Persists context and state across sessions so your AI agent always knows where it left off.
 
 ## Install
 
@@ -22,15 +22,27 @@ npm install -g ./agenticos-mcp.tgz
 
 ---
 
-## MCP Configuration
+## Supported Agent Bootstrap
 
-Add to your AI tool's MCP config file:
+AgenticOS is `MCP-native`.
 
-**Claude Code** — `~/.claude/settings/mcp.json`
-**Cursor** — `~/.cursor/mcp.json`
-**Windsurf** — `~/.codeium/windsurf/mcp_config.json`
+Bootstrap has two separate layers:
 
-If installed via Homebrew, use the binary directly (faster, no npx overhead):
+1. **Transport bootstrap**: register the `agenticos` MCP server successfully.
+2. **Project-intent routing**: make sure the agent is actually reading project instructions and using the tools when the task calls for it.
+
+If transport works but project-create/switch behavior is weak, that is a routing problem, not an MCP registration problem.
+
+### Officially Supported Agent Paths
+
+| Agent | Canonical bootstrap | Canonical config location | Verify |
+|------|---------------------|---------------------------|--------|
+| Claude Code | `claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp` | Claude-managed user MCP config | `claude mcp list`, `/mcp`, then call `agenticos_list` |
+| Codex | `codex mcp add agenticos -- agenticos-mcp` | `~/.codex/config.toml` | `codex mcp list`, then call `agenticos_list` |
+| Cursor | Add `agenticos` to `~/.cursor/mcp.json` | `~/.cursor/mcp.json` | Restart Cursor, then open MCP settings or run `cursor-agent mcp list` |
+| Gemini CLI | `gemini mcp add -s user agenticos agenticos-mcp` | `~/.gemini/settings.json` | `gemini mcp list`, restart Gemini CLI, then call `agenticos_list` |
+
+### Cursor Global `mcp.json`
 
 ```json
 {
@@ -43,20 +55,19 @@ If installed via Homebrew, use the binary directly (faster, no npx overhead):
 }
 ```
 
-If installed via npm/manual download:
+### Experimental / Manual
 
-```json
-{
-  "mcpServers": {
-    "agenticos": {
-      "command": "npx",
-      "args": ["-y", "agenticos-mcp"]
-    }
-  }
-}
-```
+Other MCP-capable tools are currently **experimental**. They are only considered bootstrapped if:
 
-Restart your AI tool after saving the config.
+- they can register a local stdio MCP server
+- `agenticos` appears in that tool's MCP diagnostics
+- `agenticos_list` can be called successfully
+
+Restart the AI tool after registration or config changes.
+
+The machine-readable source of truth for this support matrix lives in:
+
+- `projects/agenticos/.meta/bootstrap/agent-bootstrap-matrix.yaml`
 
 ---
 
@@ -185,7 +196,7 @@ brew tap madlouse/agenticos && brew install agenticos
 echo 'export AGENTICOS_HOME="$HOME/AgenticOS"' >> ~/.zshrc
 source ~/.zshrc
 
-# 3. Configure mcp.json and restart your AI tool
+# 3. Bootstrap one of the supported agents above and restart it
 ```
 
 ### Migrate existing projects from another machine
