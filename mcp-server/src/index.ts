@@ -88,6 +88,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If provided, it must match the active project or the call fails closed.' },
           summary: { type: 'string', description: 'What happened in this session (required)' },
           decisions: { type: 'array', items: { type: 'string' }, description: 'Key decisions made during this session' },
           outcomes: { type: 'array', items: { type: 'string' }, description: 'What was accomplished' },
@@ -110,6 +111,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If provided, it must match the active project or the call fails closed.' },
           message: { type: 'string', description: 'Optional commit message' },
         },
       },

@@ -1,17 +1,29 @@
 import { exec } from 'child_process';
-import { promisify } from 'util';
-import { loadRegistry } from '../utils/registry.js';
 import { updateClaudeMdState } from '../utils/distill.js';
 import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
 import yaml from 'yaml';
+import { resolveManagedProjectTarget } from '../utils/project-target.js';
 
-const execAsync = promisify(exec);
+async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        const enriched = Object.assign(error, { stdout, stderr });
+        reject(enriched);
+        return;
+      }
+      resolve({
+        stdout: stdout || '',
+        stderr: stderr || '',
+      });
+    });
+  });
+}
 
 /** Detect git root from a directory path */
 async function findGitRoot(fromDir: string): Promise<string | null> {
   try {
-    const { stdout } = await execAsync(`git -C "${fromDir}" rev-parse --show-toplevel`);
+    const { stdout } = await execCommand(`git -C "${fromDir}" rev-parse --show-toplevel`);
     return stdout.trim();
   } catch {
     return null;
@@ -23,22 +35,20 @@ export async function saveState(args: any): Promise<string> {
   const timestamp = now.toISOString().replace('T', ' ').substring(0, 16);
   const { message } = args;
   const commitMessage = message || `Auto-save [${timestamp}]`;
-  const registry = await loadRegistry();
-
-  if (!registry.active_project) {
-    return '❌ No active project. Use agenticos_switch first.';
+  let resolved;
+  try {
+    resolved = await resolveManagedProjectTarget({
+      project: args.project,
+      commandName: 'agenticos_save',
+    });
+  } catch (error: any) {
+    return `❌ ${error.message}`;
   }
 
-  const project = registry.projects.find((p) => p.id === registry.active_project);
-  if (!project) {
-    return '❌ Active project not found in registry.';
-  }
-
-  const projectPath = project.path;
+  const { project, projectPath, statePath } = resolved;
 
   try {
     // Update state.yaml with backup timestamp
-    const statePath = join(projectPath, '.context', 'state.yaml');
     const stateContent = await readFile(statePath, 'utf-8');
     const state = yaml.parse(stateContent);
 
@@ -48,7 +58,7 @@ export async function saveState(args: any): Promise<string> {
     await writeFile(statePath, yaml.stringify(state), 'utf-8');
 
     // Distill state.yaml into CLAUDE.md Current State section
-    const claudeMdPath = join(projectPath, 'CLAUDE.md');
+    const claudeMdPath = `${projectPath}/CLAUDE.md`;
     const distillResult = await updateClaudeMdState(claudeMdPath, state, project.name);
     const claudeMdNote = distillResult.created
       ? '\n📝 CLAUDE.md was auto-generated (Project DNA section needs manual enrichment)'
@@ -64,12 +74,12 @@ export async function saveState(args: any): Promise<string> {
     const gitCmd = `git -C "${gitRoot}"`;
 
     // Phase 1: git add
-    await execAsync(`${gitCmd} add "${projectPath}/"`);
+    await execCommand(`${gitCmd} add "${projectPath}/"`);
 
     // Phase 2: git commit
     let committed = false;
     try {
-      await execAsync(`${gitCmd} commit -m "${commitMessage}"`);
+      await execCommand(`${gitCmd} commit -m "${commitMessage}"`);
       committed = true;
     } catch (e: any) {
       const msg = (e.stderr || e.stdout || e.message || '').toString();
@@ -84,7 +94,7 @@ export async function saveState(args: any): Promise<string> {
     let pushed = false;
     if (committed) {
       try {
-        await execAsync(`${gitCmd} push`);
+        await execCommand(`${gitCmd} push`);
         pushed = true;
       } catch { /* push failure is degraded, not fatal */ }
     }
