@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: upgrade agenticos_switch to return inline actionable project context
+  title: enforce fail-closed project-boundary validation for record, save, and context reads
   status: implemented
-  updated: 2026-03-24T16:28:00.000Z
+  updated: 2026-03-25T00:50:00.000Z
 
 working_memory:
   facts:
@@ -49,6 +49,11 @@ working_memory:
     - agenticos_switch now returns inline project context including current task, pending items, recent decisions, project summary, and suggested next step
     - switch context summary prefers .project.yaml description and falls back to the first meaningful quick-start paragraph when structured description is empty
     - issue #23 verification passed in an isolated worktree with npm install, targeted project tests, and the full mcp-server test suite
+    - issue #25 now introduces a shared managed-project resolver that proves registry identity against .project.yaml before record/save/context reads mutate or return project state
+    - agenticos_record and agenticos_save now accept optional explicit project proof and fail closed when it disagrees with the active project
+    - agenticos://context/current now identifies the loaded project by id and path after the same boundary proof logic
+    - targeted coverage for the changed #25 files reached 100 percent statements, lines, and functions
+    - issue #25 verification passed with npm install, npm run build, npm test, and targeted coverage checks in an isolated worktree
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -62,9 +67,9 @@ working_memory:
     - the local canonical checkout should be kept clean and used only as the trusted base, with implementation work moving to isolated issue worktrees
     - agenticos_record should normalize JSON-stringified array inputs at the tool boundary rather than expecting every MCP caller to submit native arrays
     - agenticos_switch should treat its return string as a first-class mid-conversation handoff surface instead of only listing context file paths
+    - project-boundary enforcement should centralize identity proof in one shared resolver rather than duplicate weaker checks in record/save/context
   pending:
     - decide whether any entry surfaces beyond `agenticos_status` and `agenticos_switch` need the same compact guardrail summary
-    - implement issue #25 to enforce project-boundary isolation in recorded context
     - implement issue #26 to define and enforce canonical memory-layer contracts
     - implement issue #28 to define sub-agent context inheritance and verification rules
     - implement issue #29 to define per-agent bootstrap standards
@@ -90,3 +95,4 @@ loaded_context:
   - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
   - knowledge/record-array-parsing-fix-report-2026-03-24.md
   - knowledge/switch-inline-context-implementation-report-2026-03-24.md
+  - knowledge/project-boundary-isolation-implementation-report-2026-03-25.md
