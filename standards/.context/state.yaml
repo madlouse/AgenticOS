@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: add first-class standard-kit adopt and upgrade-check commands
+  title: surface the latest persisted guardrail evidence in normal project status output
   status: in_progress
-  updated: 2026-03-23T13:45:00.000Z
+  updated: 2026-03-24T01:55:00.000Z
 
 working_memory:
   facts:
@@ -28,6 +28,9 @@ working_memory:
     - standard-kit v1 now has a design document at knowledge/standard-kit-command-design-v1-2026-03-23.md
     - the implementation slice adds agenticos_standard_kit_adopt and agenticos_standard_kit_upgrade_check to the MCP tool surface
     - standard-kit v1 now restores generated navigation consistency by listing tasks/templates/non-code-evaluation-rubric.yaml
+    - issue #74 tracks status-surface exposure for persisted guardrail evidence
+    - agenticos_status now summarizes the latest guardrail command, result, timestamp, and the most relevant detail when guardrail evidence exists
+    - status output now explicitly shows a no-evidence placeholder when guardrail_evidence is absent
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -35,9 +38,10 @@ working_memory:
     - preserve the live .context/.last_record marker because current tooling still uses it
     - no second broad merge wave is needed for the retired standalone standards repo
     - standard-kit v1 should ship adopt plus upgrade-check before any destructive copied-template upgrade flow
+    - status surfaces should prefer compact human-readable guardrail summaries over raw persisted JSON blobs
   pending:
-    - merge issue #72 so adopt and upgrade-check become part of the canonical tool surface
-    - decide whether live status surfaces should summarize the latest guardrail evidence more explicitly
+    - merge issue #74 so the latest guardrail evidence becomes visible in the canonical status surface
+    - decide whether `agenticos_switch` or other entry surfaces should also summarize latest guardrail evidence
     - stop treating the standalone repo as a live writable standards source
 
 loaded_context:
@@ -52,4 +56,5 @@ loaded_context:
   - knowledge/downstream-standard-kit-implementation-report-2026-03-23.md
   - knowledge/standard-kit-command-design-v1-2026-03-23.md
   - knowledge/standard-kit-command-implementation-report-2026-03-23.md
+  - knowledge/status-guardrail-evidence-implementation-report-2026-03-24.md
   - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
