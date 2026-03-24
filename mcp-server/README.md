@@ -18,19 +18,7 @@ A project management system designed for AI collaboration. When you work on comp
 
 ### Quick Start
 
-Tell your AI assistant:
-
-```
-"安装 AgenticOS"
-```
-
-The AI will configure everything automatically. Then start using:
-
-```
-"创建新项目来管理 XXX"
-"切换到 XXX 项目"
-"列出所有项目"
-```
+Install AgenticOS, bootstrap one supported agent, restart that agent, then explicitly verify `agenticos_list` works before relying on project-intent routing.
 
 ### When to Use
 
@@ -58,83 +46,67 @@ my-project/
 
 ---
 
-## 🤖 For AI Agents: Installation Protocol
+## 🤖 Supported Agent Bootstrap Standard
 
-### When user says: "安装 AgenticOS" / "配置 AgenticOS" / "setup AgenticOS"
+Bootstrap is complete only when:
 
-Execute these steps autonomously:
+1. the MCP server is registered for the target agent
+2. the agent has been restarted if required
+3. `agenticos_list` succeeds
 
-#### Step 1: Add MCP Configuration
+Transport bootstrap and project-intent routing are different concerns.
 
-Detect AI tool and update config:
-- **Claude Code/Kiro**: `~/.claude/settings/mcp.json` or `~/.kiro/settings/mcp.json`
-- **Cursor**: `~/.cursor/settings/mcp.json`
-- **Codex**: Check Codex MCP config path
+- **transport bootstrap** proves the tool is registered and callable
+- **routing** proves the agent is reading project instructions and choosing the tool when appropriate
 
-Read existing config, merge this:
-```json
-{
-  "mcpServers": {
-    "agenticos": {
-      "command": "npx",
-      "args": ["-y", "agenticos-mcp"],
-      "disabled": false,
-      "autoApprove": []
-    }
-  }
-}
-```
+### Claude Code
 
-#### Step 2: Add Trigger Logic
+- canonical bootstrap: `claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp`
+- verify:
+  - `claude mcp list`
+  - `/mcp`
+  - explicit `agenticos_list`
+- debug split:
+  - if `agenticos` is missing from `claude mcp list`, fix MCP registration first
+  - if `agenticos` exists but intent routing is weak, load `CLAUDE.md` / `AGENTS.md` and call the tool explicitly
 
-Append to user-level config (`~/.claude/CLAUDE.md`, etc.):
+### Codex
 
-```markdown
-## 🚀 AgenticOS Integration
+- canonical bootstrap: `codex mcp add agenticos -- agenticos-mcp`
+- canonical config location: `~/.codex/config.toml`
+- verify:
+  - `codex mcp list`
+  - explicit `agenticos_list`
+- debug split:
+  - if `agenticos` is missing from `codex mcp list`, registration did not land in the active config
+  - if it is present but prompts still do not route correctly, treat that as routing behavior rather than transport failure
 
-### When to Suggest Creating a Project
+### Cursor
 
-Check for complexity signals:
-- Task requires 3+ steps
-- Multiple files involved
-- Cross-session tracking needed
-- Keywords: "项目"、"长期"、"持续"、"管理"
+- canonical bootstrap: add `agenticos` to `~/.cursor/mcp.json`
+- verify:
+  - restart Cursor
+  - check Cursor MCP settings or `cursor-agent mcp list` if the Cursor CLI is installed
+  - explicit `agenticos_list`
+- debug split:
+  - if `agenticos` never appears after restart, validate the JSON and executable path
+  - if tools appear but project-intent routing is weak, use explicit tools and project instructions
 
-Ask user:
-"这个任务较复杂且具有持续性，是否需要创建 AgenticOS 项目来管理？
+### Gemini CLI
 
-AgenticOS 提供：
-- 完整记录所有决策和对话
-- 跨会话恢复工作状态
-- 自动备份到 Git
-- 跨工具使用"
+- canonical bootstrap: `gemini mcp add -s user agenticos agenticos-mcp`
+- canonical config location: `~/.gemini/settings.json`
+- verify:
+  - `gemini mcp list`
+  - restart Gemini CLI
+  - explicit `agenticos_list`
+- debug split:
+  - if `agenticos` is missing from `gemini mcp list`, bootstrap did not land
+  - if it is present but behavior is weak, treat that as routing/instruction quality rather than MCP transport failure
 
-### Explicit Commands
-- "切换到 XX 项目" → agenticos_switch
-- "创建新项目" → agenticos_init
-- "列出项目" → agenticos_list
-- "保存项目" → agenticos_save
-```
+### Other MCP-Compatible Tools
 
-#### Step 3: Initialize System
-
-```bash
-mkdir -p ~/AgenticOS/.agent-workspace
-```
-
-Create `~/AgenticOS/.agent-workspace/registry.yaml`:
-```yaml
-version: "1.0.0"
-last_updated: "2026-03-16T08:52:20Z"
-active_project: null
-projects: []
-```
-
-#### Step 4: Verify & Report
-
-1. Call `agenticos_list` tool
-2. Confirm it returns project list or "No projects found"
-3. Tell user: "✅ AgenticOS 已配置完成"
+These are currently experimental. Do not describe them as first-class supported agents unless they have a documented bootstrap, verification, and debugging contract.
 
 ---
 

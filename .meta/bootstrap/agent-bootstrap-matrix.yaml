@@ -1,0 +1,93 @@
+version: 1
+primary_integration_mode: mcp-native
+supported_agents:
+  - id: claude-code
+    label: Claude Code
+    support_tier: official
+    transport: stdio
+    canonical_bootstrap_method: cli-command
+    canonical_config_location: claude-managed user MCP config via `claude mcp add --scope user`
+    bootstrap_command: claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+    verification:
+      - run `claude mcp list`
+      - run `/mcp` inside Claude Code
+      - confirm `agenticos` is present and call `agenticos_list`
+    transport_debug:
+      - if `agenticos` is missing from `claude mcp list`, MCP registration failed
+      - if the server is listed but unavailable, confirm `agenticos-mcp --version` works and restart Claude Code
+    routing_debug:
+      - if tools are available but project-intent prompts do not trigger routing, load the project `CLAUDE.md` and `AGENTS.md`
+      - call the relevant `agenticos_*` tool explicitly before treating the problem as transport failure
+  - id: codex
+    label: Codex
+    support_tier: official
+    transport: stdio
+    canonical_bootstrap_method: cli-command
+    canonical_config_location: ~/.codex/config.toml managed via `codex mcp add`
+    bootstrap_command: codex mcp add agenticos -- agenticos-mcp
+    verification:
+      - run `codex mcp list`
+      - confirm `agenticos` appears in the configured server list
+      - call `agenticos_list` explicitly from a Codex session
+    transport_debug:
+      - if `agenticos` is missing from `codex mcp list`, registration did not land in the active config
+      - if `agenticos` exists but fails to start, confirm `agenticos-mcp --version` works and restart Codex
+    routing_debug:
+      - Codex transport success does not guarantee natural-language project-intent routing
+      - if routing is weak, use explicit `agenticos_*` tool calls and ensure project instructions are loaded
+  - id: cursor
+    label: Cursor
+    support_tier: official
+    transport: stdio
+    canonical_bootstrap_method: global-mcp-json
+    canonical_config_location: ~/.cursor/mcp.json
+    bootstrap_snippet: |
+      {
+        "mcpServers": {
+          "agenticos": {
+            "command": "agenticos-mcp",
+            "args": []
+          }
+        }
+      }
+    verification:
+      - restart Cursor after saving `~/.cursor/mcp.json`
+      - open Cursor MCP settings or run `cursor-agent mcp list` if Cursor CLI is installed
+      - confirm `agenticos` appears and can call `agenticos_list`
+    transport_debug:
+      - if `agenticos` is absent after restart, validate JSON syntax and confirm `agenticos-mcp --version`
+      - if using `cursor-agent`, compare `cursor-agent mcp list` with the editor view to rule out config-scope confusion
+    routing_debug:
+      - project-specific `.cursor/mcp.json` exists, but AgenticOS bootstrap should stay user-global by default
+      - if tools appear but intent routing is weak, use explicit `agenticos_*` tool calls and rely on project instructions
+  - id: gemini-cli
+    label: Gemini CLI
+    support_tier: official
+    transport: stdio
+    canonical_bootstrap_method: cli-command
+    canonical_config_location: ~/.gemini/settings.json managed via `gemini mcp add -s user`
+    bootstrap_command: gemini mcp add -s user agenticos agenticos-mcp
+    verification:
+      - run `gemini mcp list`
+      - restart Gemini CLI after registration
+      - confirm `agenticos` appears and can call `agenticos_list`
+    transport_debug:
+      - if `agenticos` is missing from `gemini mcp list`, the user-scope registration did not land
+      - if `agenticos` is listed but unusable, confirm `agenticos-mcp --version` works and restart Gemini CLI
+    routing_debug:
+      - transport registration only proves MCP availability, not project-intent recognition
+      - if intent routing does not trigger, use explicit `agenticos_*` calls and ensure the project instructions are loaded
+experimental_agents:
+  - id: generic-mcp-tool
+    label: Other MCP-Compatible Tools
+    support_tier: experimental
+    transport: varies
+    canonical_bootstrap_method: manual
+    canonical_config_location: tool-specific
+    verification:
+      - confirm the tool can register a local stdio MCP server
+      - confirm `agenticos` appears and can call `agenticos_list`
+    transport_debug:
+      - debug transport using that tool's own MCP diagnostics first
+    routing_debug:
+      - treat project-intent routing as unsupported unless the tool has explicit AgenticOS instructions
