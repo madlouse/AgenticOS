@@ -1,0 +1,48 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { readFile } from 'fs/promises';
+import { resolve } from 'path';
+import {
+  getOfficialBootstrapAgents,
+  loadAgentBootstrapMatrix,
+} from '../bootstrap-matrix.js';
+
+function repoRoot(): string {
+  return resolve(process.cwd(), '..', '..', '..');
+}
+
+function normalizeDoc(text: string): string {
+  return text.toLowerCase().replace(/[`*]/g, '');
+}
+
+describe('homebrew bootstrap docs', () => {
+  afterEach(() => {
+    delete process.env.AGENTICOS_HOME;
+  });
+
+  it('keeps the Homebrew-facing docs aligned with the official supported agents and manual bootstrap contract', async () => {
+    const root = repoRoot();
+    process.env.AGENTICOS_HOME = root;
+
+    const matrix = await loadAgentBootstrapMatrix();
+    const agents = getOfficialBootstrapAgents(matrix).map((agent) => agent.label);
+
+    const rootReadme = await readFile(resolve(root, 'README.md'), 'utf-8');
+    const tapReadme = await readFile(resolve(root, 'projects', 'agenticos', 'homebrew-tap', 'README.md'), 'utf-8');
+    const formula = await readFile(resolve(root, 'projects', 'agenticos', 'homebrew-tap', 'Formula', 'agenticos.rb'), 'utf-8');
+    const mcpReadme = await readFile(resolve(root, 'projects', 'agenticos', 'mcp-server', 'README.md'), 'utf-8');
+
+    for (const agent of agents) {
+      expect(rootReadme).toContain(agent);
+      expect(tapReadme).toContain(agent);
+      expect(formula).toContain(agent);
+      expect(mcpReadme).toContain(agent);
+    }
+
+    for (const doc of [rootReadme, tapReadme, formula, mcpReadme]) {
+      const normalized = normalizeDoc(doc);
+      expect(normalized).toContain('does not');
+      expect(doc).toContain('agenticos_list');
+      expect(normalized).toContain('restart');
+    }
+  });
+});
