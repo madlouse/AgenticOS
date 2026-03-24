@@ -119,6 +119,15 @@ Transport bootstrap and project-intent routing are different concerns.
 
 These are currently experimental. Do not describe them as first-class supported agents unless they have a documented bootstrap, verification, and debugging contract.
 
+## Integration Modes
+
+AgenticOS does not treat every fallback as equal:
+
+- `MCP-native` is the canonical primary mode
+- `MCP + Skills Assist` is the supported fallback when transport works but routing or operator ergonomics need help
+- `CLI Wrapper` is limited to diagnostics and temporary bootstrap recovery
+- `Skills-only Guidance` is experimental and does not provide the canonical AgenticOS runtime surface
+
 ---
 
 ## 🛠️ Tools Reference

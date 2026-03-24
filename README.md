@@ -82,6 +82,21 @@ The machine-readable source of truth for this support matrix lives in:
 
 - `projects/agenticos/.meta/bootstrap/agent-bootstrap-matrix.yaml`
 
+## Integration Modes
+
+AgenticOS supports multiple integration modes, but they are not equal:
+
+| Mode | Status | Purpose |
+|------|--------|---------|
+| `MCP-native` | primary | Canonical AgenticOS execution path |
+| `MCP + Skills Assist` | supported fallback | Keep MCP as the execution path but use skills/prompt overlays to improve routing and bootstrap ergonomics |
+| `CLI Wrapper` | limited fallback | Operator diagnostics and temporary bootstrap recovery only |
+| `Skills-only Guidance` | experimental | Research or tool-specific guidance without the canonical MCP surface |
+
+The machine-readable source of truth for this mode decision lives in:
+
+- `projects/agenticos/.meta/bootstrap/integration-mode-matrix.yaml`
+
 ---
 
 ## Quick Start

@@ -1,0 +1,56 @@
+version: 1
+primary_mode: mcp-native
+modes:
+  - id: mcp-native
+    label: MCP-native
+    status: canonical
+    when_to_use: default mode for officially supported agents
+    capabilities:
+      - full AgenticOS MCP tool surface
+      - context resource loading
+      - guardrail flow
+      - standard-kit adoption and upgrade checks
+    limitations:
+      - requires working MCP transport and per-agent bootstrap
+      - requires routing or explicit tool use inside the agent
+    non_goals:
+      - none
+  - id: mcp-plus-skills
+    label: MCP + Skills Assist
+    status: supported-fallback
+    when_to_use: when MCP transport works but routing, prompting, or bootstrap ergonomics need help
+    capabilities:
+      - keeps MCP as the canonical execution path
+      - allows skills or prompt overlays to improve routing and operator guidance
+    limitations:
+      - still depends on MCP for canonical tool execution
+      - adds agent-specific maintenance overhead
+    non_goals:
+      - not a second canonical data plane
+      - not a replacement for MCP-native execution
+  - id: cli-wrapper
+    label: CLI Wrapper
+    status: limited-fallback
+    when_to_use: operator recovery, diagnostics, or temporary bootstrap gaps
+    capabilities:
+      - can help inspect workspace or assist bootstrap
+      - useful when MCP is temporarily unavailable
+    limitations:
+      - no parity guarantee with the MCP tool surface
+      - weaker context/resource ergonomics than MCP
+    non_goals:
+      - not the default downstream integration mode
+      - not a canonical substitute for MCP-native execution
+  - id: skills-only
+    label: Skills-only Guidance
+    status: experimental
+    when_to_use: research or tool-specific experimentation only
+    capabilities:
+      - prompt conventions and routing guidance
+      - installation or debugging instructions
+    limitations:
+      - cannot provide the canonical AgenticOS tool or resource surface
+      - cannot guarantee durable context restore by itself
+    non_goals:
+      - not an officially supported runtime mode
+      - not sufficient for full AgenticOS compatibility
