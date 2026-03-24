@@ -31,6 +31,8 @@ Its job is to define and evolve:
 - `knowledge/standard-kit-command-implementation-report-2026-03-23.md` records the landed implementation scope and verification
 - issue `#74` now upgrades project status output to summarize the latest persisted guardrail evidence
 - `knowledge/status-guardrail-evidence-implementation-report-2026-03-24.md` records the status-surface implementation and verification
+- issue `#76` now extends the same compact latest-guardrail summary into `agenticos_switch`
+- `knowledge/switch-guardrail-evidence-implementation-report-2026-03-24.md` records the switch-surface implementation and verification
 
 ## Recommended Entry Documents
 
@@ -45,10 +47,11 @@ Start here:
 7. `knowledge/standard-kit-command-design-v1-2026-03-23.md`
 8. `knowledge/standard-kit-command-implementation-report-2026-03-23.md`
 9. `knowledge/status-guardrail-evidence-implementation-report-2026-03-24.md`
+10. `knowledge/switch-guardrail-evidence-implementation-report-2026-03-24.md`
 
 ## Next Steps
 
 1. Stop writing new canonical standards records into the retired standalone repo
-2. Land issue `#74` so `agenticos_status` exposes the latest persisted guardrail evidence by default
-3. Decide whether other entry surfaces beyond `agenticos_status` should summarize latest guardrail evidence too
+2. Treat `agenticos_status` and `agenticos_switch` as the baseline entry surfaces for compact guardrail visibility
+3. Decide whether any additional entry surfaces need the same summary, or whether the current pair is enough
 4. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap

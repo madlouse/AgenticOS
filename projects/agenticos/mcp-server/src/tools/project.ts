@@ -79,6 +79,32 @@ function summarizeGuardrailDetail(entry: GuardrailEvidenceEntry): string | null 
   return null;
 }
 
+function buildGuardrailSummaryLines(guardrailEvidence?: GuardrailEvidenceState): string[] {
+  const latestGuardrail = getLatestGuardrailEntry(guardrailEvidence);
+  if (!latestGuardrail?.command) {
+    return ['🛡️ Latest guardrail: None recorded'];
+  }
+
+  const status = latestGuardrail.result?.status || 'UNKNOWN';
+  const recordedAt =
+    formatTimestamp(latestGuardrail.recorded_at) ||
+    formatTimestamp(guardrailEvidence?.updated_at) ||
+    'Unknown time';
+
+  const lines = [`🛡️ Latest guardrail: ${latestGuardrail.command} -> ${status} (${recordedAt})`];
+
+  if (latestGuardrail.issue_id) {
+    lines.push(`   Issue: #${latestGuardrail.issue_id}`);
+  }
+
+  const detail = summarizeGuardrailDetail(latestGuardrail);
+  if (detail) {
+    lines.push(`   Detail: ${detail}`);
+  }
+
+  return lines;
+}
+
 export async function switchProject(args: any): Promise<string> {
   const { project } = args;
   const registry = await loadRegistry();
@@ -137,8 +163,9 @@ export async function switchProject(args: any): Promise<string> {
   }
 
   const bootstrap = bootstrapNotes.length > 0 ? '\n\n' + bootstrapNotes.join('\n') : '';
+  const guardrailSummary = buildGuardrailSummaryLines(state?.guardrail_evidence as GuardrailEvidenceState | undefined);
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${found.path}/.context/quick-start.md\n- ${found.path}/.context/state.yaml${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${found.path}/.context/quick-start.md\n- ${found.path}/.context/state.yaml\n\n${guardrailSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
@@ -202,23 +229,7 @@ export async function getStatus(): Promise<string> {
     lines.push(`💾 Last saved: ${backupDate}`);
   }
 
-  const latestGuardrail = getLatestGuardrailEntry(state.guardrail_evidence as GuardrailEvidenceState | undefined);
-  if (latestGuardrail?.command) {
-    const status = latestGuardrail.result?.status || 'UNKNOWN';
-    const recordedAt = formatTimestamp(latestGuardrail.recorded_at) || formatTimestamp((state.guardrail_evidence as GuardrailEvidenceState | undefined)?.updated_at) || 'Unknown time';
-    lines.push(`🛡️ Latest guardrail: ${latestGuardrail.command} -> ${status} (${recordedAt})`);
-
-    if (latestGuardrail.issue_id) {
-      lines.push(`   Issue: #${latestGuardrail.issue_id}`);
-    }
-
-    const detail = summarizeGuardrailDetail(latestGuardrail);
-    if (detail) {
-      lines.push(`   Detail: ${detail}`);
-    }
-  } else {
-    lines.push('🛡️ Latest guardrail: None recorded');
-  }
+  lines.push(...buildGuardrailSummaryLines(state.guardrail_evidence as GuardrailEvidenceState | undefined));
 
   lines.push('');
   if (state.current_task) {

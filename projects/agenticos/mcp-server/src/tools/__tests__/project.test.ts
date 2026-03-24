@@ -64,6 +64,9 @@ describe('switchProject', () => {
     vi.clearAllMocks();
     // By default, mock existsSync to return false (no CLAUDE.md/AGENTS.md)
     fsMock.existsSync.mockReturnValue(false);
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
   });
 
   afterEach(() => {
@@ -209,6 +212,79 @@ describe('switchProject', () => {
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
     const claudeMdCall = writeCalls.find((c) => c[0].endsWith('CLAUDE.md'));
     expect(claudeMdCall).toBeDefined();
+  });
+
+  it('shows a friendly guardrail placeholder in switch output when no evidence exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        meta: { description: '' },
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+      })
+    );
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🛡️ Latest guardrail: None recorded');
+  });
+
+  it('shows the latest guardrail summary in switch output when evidence exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        meta: { description: '' },
+        guardrail_evidence: {
+          updated_at: '2025-01-02T14:00:00.000Z',
+          last_command: 'agenticos_preflight',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2025-01-02T14:00:00.000Z',
+            issue_id: '76',
+            result: {
+              status: 'REDIRECT',
+              redirect_actions: ['create an isolated issue branch/worktree before implementation'],
+            },
+          },
+        },
+      })
+    );
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('agenticos_preflight -> REDIRECT');
+    expect(result).toContain('Issue: #76');
+    expect(result).toContain('create an isolated issue branch/worktree');
   });
 });
 
