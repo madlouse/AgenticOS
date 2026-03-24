@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: freeze the canonical memory-layer contract in standards and templates
+  title: define and land the canonical sub-agent inheritance and verification protocol
   status: implemented
-  updated: 2026-03-25T00:59:00.000Z
+  updated: 2026-03-25T02:10:00.000Z
 
 working_memory:
   facts:
@@ -58,6 +58,9 @@ working_memory:
     - the downstream standard kit and default templates now carry the memory-layer contract by default
     - the mcp-server project structure docs now describe quick-start as orientation, state as mutable operational state, and conversations as append-only history
     - issue #26 verification passed with npm install, npm run build, targeted standard-kit tests, the full test suite, and YAML parsing for contract-bearing templates
+    - issue #28 now freezes a canonical sub-agent inheritance packet and required verification echo for delegated non-trivial work
+    - the downstream standard kit now includes tasks/templates/sub-agent-handoff.md and surfaces delegated-work expectations in the adoption checklist
+    - issue-design-brief.md and submission-evidence.md now contain explicit sub-agent inheritance and verification sections
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -73,9 +76,9 @@ working_memory:
     - agenticos_switch should treat its return string as a first-class mid-conversation handoff surface instead of only listing context file paths
     - project-boundary enforcement should centralize identity proof in one shared resolver rather than duplicate weaker checks in record/save/context
     - memory-layer enforcement should start by freezing canonical contracts in standards and templates before attempting broader runtime linting
+    - sub-agent inheritance should land first as a standard-kit-backed protocol and template contract before any deeper runtime automation
   pending:
     - decide whether any entry surfaces beyond `agenticos_status` and `agenticos_switch` need the same compact guardrail summary
-    - implement issue #28 to define sub-agent context inheritance and verification rules
     - implement issue #29 to define per-agent bootstrap standards
     - implement issue #30 to define Homebrew post-install bootstrap for supported agents
     - implement issue #31 to define the MCP-native vs CLI+Skills integration matrix
@@ -102,3 +105,5 @@ loaded_context:
   - knowledge/project-boundary-isolation-implementation-report-2026-03-25.md
   - knowledge/memory-layer-contract-spec-2026-03-25.md
   - knowledge/memory-layer-contract-implementation-report-2026-03-25.md
+  - knowledge/sub-agent-inheritance-protocol-2026-03-25.md
+  - knowledge/sub-agent-inheritance-implementation-report-2026-03-25.md
