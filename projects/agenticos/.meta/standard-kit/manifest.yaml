@@ -81,6 +81,7 @@ adoption:
     - tasks/templates/non-code-evaluation-rubric.yaml
     - tasks/templates/submission-evidence.md
   required_behavior:
+    - memory_layer_contracts
     - implementation_preflight
     - issue_first_branching
     - isolated_worktree_execution

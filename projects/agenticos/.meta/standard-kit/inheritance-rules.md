@@ -1,5 +1,24 @@
 # Inheritance Rules
 
+## Rule 0: Memory Layer Contracts Are Part Of The Kit
+
+Downstream projects inherit not just files, but the role boundaries between:
+
+- `.project.yaml`
+- `.context/quick-start.md`
+- `.context/state.yaml`
+- `.context/conversations/`
+- `knowledge/`
+- `tasks/`
+- `artifacts/`
+
+Implication:
+- quick-start stays concise and project-level
+- state stays mutable and operational
+- conversations stay append-only
+- knowledge stays synthesized
+- tasks stay future-facing
+
 ## Rule 1: Generated Files vs Copied Templates
 
 There are two inheritance modes.
@@ -29,6 +48,7 @@ These are copied into each project and then become project-owned working files.
 Implication:
 - downstream projects are expected to customize them
 - later upgrades should be explicit and reviewable, not silently overwritten
+- the copied templates still carry the canonical memory-layer contract and should not be repurposed arbitrarily
 
 ## Rule 2: Repository-Root Infrastructure Is Not Part Of The Project Kit
 

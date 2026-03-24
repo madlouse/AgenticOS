@@ -1,24 +1,28 @@
 # Quick Start
 
-## 30-Second Context
+> Contract: concise project-level orientation for fast resume.
+> Do not store full session history, exhaustive decision logs, or issue-by-issue execution details here.
+
+## Project Snapshot
 - **Project**: [Project Name]
 - **Goal**: [Main objective]
 - **Status**: [Current phase]
 - **Last Action**: [What was done last]
-- **Next Step**: [What to do next]
+- **Current Focus**: [What to do next]
+- **Resume Here**: [What to do next]
 
 ## Key Facts
 - [Important fact 1]
 - [Important fact 2]
 
-## Active Tasks
-1. [Task 1]
-2. [Task 2]
+## Canonical Layers
+- Operational state: `.context/state.yaml`
+- Session history: `.context/conversations/`
+- Durable knowledge: `knowledge/`
+- Execution plans: `tasks/`
+- Deliverables: `artifacts/`
 
-## Recent Decisions
-- YYYY-MM-DD: [Decision]
-
-## Where to Find Things
-- Code: `artifacts/code/`
-- Docs: `knowledge/`
-- Tasks: `tasks/`
+## What Does Not Belong Here
+- Full conversation transcripts
+- Exhaustive historical decision lists
+- Detailed issue decomposition or implementation checklists
