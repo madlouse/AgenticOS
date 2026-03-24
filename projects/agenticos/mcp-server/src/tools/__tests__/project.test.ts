@@ -286,6 +286,85 @@ describe('switchProject', () => {
     expect(result).toContain('Issue: #76');
     expect(result).toContain('create an isolated issue branch/worktree');
   });
+
+  it('inlines actionable project context into switch output', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+          last_recorded: '2025-01-03T08:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({ meta: { description: 'Agent-first project operating system' } }))
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          current_task: {
+            title: 'Ship context-rich switch output',
+            status: 'in_progress',
+          },
+          working_memory: {
+            pending: ['Close issue #23', 'Review switch UX'],
+            decisions: ['Keep switch compact', 'Persist guardrail evidence separately'],
+          },
+        })
+      )
+      .mockResolvedValueOnce('# Quick Start\n\nAgenticOS quick-start summary');
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('📍 Last recorded:');
+    expect(result).toContain('🎯 Current task: Ship context-rich switch output (in_progress)');
+    expect(result).toContain('📋 Pending (2):');
+    expect(result).toContain('  - Close issue #23');
+    expect(result).toContain('✅ Recent decisions (2):');
+    expect(result).toContain('📖 Project summary: Agent-first project operating system');
+    expect(result).toContain('💡 Suggested next step: Close issue #23');
+  });
+
+  it('falls back to quick-start summary when project description is missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({ meta: { description: '' } }))
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          working_memory: {
+            pending: [],
+            decisions: [],
+          },
+        })
+      )
+      .mockResolvedValueOnce('# Quick Start\n\nFallback project summary from quick-start.\n\n- bullet ignored');
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('📖 Project summary: Fallback project summary from quick-start.');
+  });
 });
 
 describe('listProjects', () => {
