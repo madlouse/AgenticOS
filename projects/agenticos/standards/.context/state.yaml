@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: enforce fail-closed project-boundary validation for record, save, and context reads
+  title: freeze the canonical memory-layer contract in standards and templates
   status: implemented
-  updated: 2026-03-25T00:50:00.000Z
+  updated: 2026-03-25T00:59:00.000Z
 
 working_memory:
   facts:
@@ -54,6 +54,10 @@ working_memory:
     - agenticos://context/current now identifies the loaded project by id and path after the same boundary proof logic
     - targeted coverage for the changed #25 files reached 100 percent statements, lines, and functions
     - issue #25 verification passed with npm install, npm run build, npm test, and targeted coverage checks in an isolated worktree
+    - issue #26 now freezes the canonical memory-layer contract for .project.yaml, quick-start, state, conversations, knowledge, tasks, and artifacts
+    - the downstream standard kit and default templates now carry the memory-layer contract by default
+    - the mcp-server project structure docs now describe quick-start as orientation, state as mutable operational state, and conversations as append-only history
+    - issue #26 verification passed with npm install, npm run build, targeted standard-kit tests, the full test suite, and YAML parsing for contract-bearing templates
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -68,9 +72,9 @@ working_memory:
     - agenticos_record should normalize JSON-stringified array inputs at the tool boundary rather than expecting every MCP caller to submit native arrays
     - agenticos_switch should treat its return string as a first-class mid-conversation handoff surface instead of only listing context file paths
     - project-boundary enforcement should centralize identity proof in one shared resolver rather than duplicate weaker checks in record/save/context
+    - memory-layer enforcement should start by freezing canonical contracts in standards and templates before attempting broader runtime linting
   pending:
     - decide whether any entry surfaces beyond `agenticos_status` and `agenticos_switch` need the same compact guardrail summary
-    - implement issue #26 to define and enforce canonical memory-layer contracts
     - implement issue #28 to define sub-agent context inheritance and verification rules
     - implement issue #29 to define per-agent bootstrap standards
     - implement issue #30 to define Homebrew post-install bootstrap for supported agents
@@ -96,3 +100,5 @@ loaded_context:
   - knowledge/record-array-parsing-fix-report-2026-03-24.md
   - knowledge/switch-inline-context-implementation-report-2026-03-24.md
   - knowledge/project-boundary-isolation-implementation-report-2026-03-25.md
+  - knowledge/memory-layer-contract-spec-2026-03-25.md
+  - knowledge/memory-layer-contract-implementation-report-2026-03-25.md
