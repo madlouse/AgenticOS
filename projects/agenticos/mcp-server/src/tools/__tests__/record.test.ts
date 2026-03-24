@@ -387,6 +387,31 @@ describe('recordSession', () => {
     }
   });
 
+  it('falls back to empty arrays when JSON-stringified list arguments are invalid', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      state: {
+        session: {},
+        working_memory: { decisions: ['existing'], facts: ['fact'], pending: ['pending'] },
+      },
+    });
+
+    await recordSession({
+      summary: 'test',
+      decisions: 'not-json',
+      outcomes: 'also-not-json',
+      pending: 'broken-json',
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const stateCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
+    const writtenState = JSON.parse(stateCall![1] as string);
+
+    expect(writtenState.working_memory.decisions).toEqual(['existing']);
+    expect(writtenState.working_memory.facts).toEqual(['fact']);
+    expect(writtenState.working_memory.pending).toEqual(['pending']);
+  });
+
   it('returns success message with paths', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
@@ -418,6 +443,94 @@ describe('recordSession', () => {
     const result = await recordSession({ summary: 'test session' });
 
     expect(result).toContain('✅ Session recorded');
+  });
+
+  it('creates a new conversation file and default state when conversation and state files do not exist yet', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+      }
+      if (path.endsWith('/state.yaml')) {
+        throw new Error('missing state');
+      }
+      if (path.includes('/conversations/') && path.endsWith('.md')) {
+        throw new Error('missing conversation');
+      }
+      if (path.endsWith('/quick-start.md')) {
+        return '# Quick Start\n\n1. Define project goals';
+      }
+      return '';
+    });
+
+    const result = await recordSession({
+      summary: 'bootstrapped',
+      current_task: { title: 'Bootstrap project' },
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const convCall = writeCalls.find((c) => c[0].includes('conversations') && c[0].endsWith('.md'));
+    const stateCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
+    expect(convCall).toBeDefined();
+    expect(String(convCall![1])).toContain('# Sessions');
+    expect(stateCall).toBeDefined();
+    const writtenState = JSON.parse(stateCall![1] as string);
+    expect(writtenState.working_memory).toEqual({ facts: [], decisions: [], pending: [] });
+    expect(writtenState.session.last_backup).toBeDefined();
+    expect(writtenState.current_task.title).toBe('Bootstrap project');
+    expect(result).toContain('✅ Session recorded');
+  });
+
+  it('falls back to an empty state object when state parsing returns nothing', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+      }
+      if (path.endsWith('/state.yaml')) {
+        return 'not-json';
+      }
+      if (path.endsWith('/quick-start.md')) {
+        return '# Quick Start\n\n1. Define project goals';
+      }
+      return '';
+    });
+    yamlMock.parse.mockImplementation((content: string) => {
+      if (content === 'not-json') return undefined;
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
+
+    await recordSession({ summary: 'test session' });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const stateCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
+    const writtenState = JSON.parse(stateCall![1] as string);
+    expect(writtenState.working_memory).toEqual({ facts: [], decisions: [], pending: [] });
+    expect(writtenState.session.last_backup).toBeDefined();
+  });
+
+  it('falls back to an empty state object when state parsing returns null', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+      }
+      if (path.endsWith('/state.yaml')) {
+        return 'null';
+      }
+      if (path.endsWith('/quick-start.md')) {
+        return '# Quick Start\n\n1. Define project goals';
+      }
+      return '';
+    });
+
+    await recordSession({ summary: 'test session' });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const stateCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
+    const writtenState = JSON.parse(stateCall![1] as string);
+    expect(writtenState.working_memory).toEqual({ facts: [], decisions: [], pending: [] });
+    expect(writtenState.session.last_backup).toBeDefined();
   });
 
   it('only updates last_recorded on the resolved project', async () => {

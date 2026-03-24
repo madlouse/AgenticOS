@@ -60,6 +60,8 @@ Its job is to define and evolve:
 - `projects/agenticos/.meta/bootstrap/integration-mode-matrix.yaml` is now the machine-readable source of truth for primary vs fallback integration modes
 - `knowledge/integration-mode-matrix-2026-03-25.md` records the product decision for primary and fallback modes
 - `knowledge/integration-mode-matrix-implementation-report-2026-03-25.md` records the parser, docs, and roadmap alignment work
+- issue `#92` now closes the last strict-verification gap left after `#25` by raising the touched project-boundary runtime files to full branch coverage
+- `knowledge/project-boundary-coverage-closure-report-2026-03-25.md` records the added fallback-path regression cases and the final `100 / 100 / 100 / 100` targeted coverage result
 
 ## Recommended Entry Documents
 
@@ -90,11 +92,12 @@ Start here:
 23. `knowledge/homebrew-post-install-implementation-report-2026-03-25.md`
 24. `knowledge/integration-mode-matrix-2026-03-25.md`
 25. `knowledge/integration-mode-matrix-implementation-report-2026-03-25.md`
+26. `knowledge/project-boundary-coverage-closure-report-2026-03-25.md`
 
 ## Next Steps
 
 1. Use the reconciled open backlog, not the pre-self-hosting issue list, as the canonical remaining work queue
 2. Treat `/Users/jeking/dev/AgenticOS` as the trusted local canonical checkout again; use isolated worktrees for changes
-3. Reassess the remaining backlog now that `#28` through `#31` are all frozen into canonical standards
+3. Reassess the remaining backlog now that `#25`, `#26`, `#28`, `#29`, `#30`, and `#31` are all frozen and fully verified
 4. Decide whether any additional entry surfaces need the same compact guardrail summary beyond `agenticos_status` and `agenticos_switch`
 5. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap
