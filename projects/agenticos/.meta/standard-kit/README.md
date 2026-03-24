@@ -73,6 +73,20 @@ The canonical rationale lives in:
 
 - `projects/agenticos/standards/knowledge/memory-layer-contract-spec-2026-03-25.md`
 
+## Sub-Agent Protocol
+
+The kit now also carries the canonical sub-agent inheritance protocol.
+
+Downstream projects inherit:
+
+- `tasks/templates/sub-agent-handoff.md`
+- sub-agent inheritance fields inside `tasks/templates/issue-design-brief.md`
+- sub-agent verification fields inside `tasks/templates/submission-evidence.md`
+
+The canonical rationale lives in:
+
+- `projects/agenticos/standards/knowledge/sub-agent-inheritance-protocol-2026-03-25.md`
+
 ## Package Contents
 
 See:

@@ -15,6 +15,12 @@
 - Critique completed:
 - Acceptance defined before edit:
 
+## Sub-Agent Verification
+- Sub-agents used:
+- Inheritance packet defined:
+- Sub-agent understanding verified before work:
+- Parent agent distilled important results back into canonical files:
+
 ## Verification
 - Deliverable type:
 - Commands run:

@@ -11,6 +11,7 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 - [ ] create `tasks/templates/agent-preflight-checklist.yaml`
 - [ ] create `tasks/templates/issue-design-brief.md`
 - [ ] create `tasks/templates/non-code-evaluation-rubric.yaml`
+- [ ] create `tasks/templates/sub-agent-handoff.md`
 - [ ] create `tasks/templates/submission-evidence.md`
 
 ## Generated Agent Instructions
@@ -26,6 +27,7 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 - [ ] redirected implementation work uses `agenticos_branch_bootstrap`
 - [ ] PR submission or merge runs `agenticos_pr_scope_check`
 - [ ] implementation work uses issue-first branch naming and isolated worktrees
+- [ ] delegated sub-agent work uses an explicit inheritance packet and verification echo
 
 ## Repository Boundary
 

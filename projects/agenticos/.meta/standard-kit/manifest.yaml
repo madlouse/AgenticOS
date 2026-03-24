@@ -45,6 +45,10 @@ layers:
         canonical_source: projects/agenticos/.meta/templates/non-code-evaluation-rubric.yaml
         inheritance: copied_template
         customizable: yes
+      - path: tasks/templates/sub-agent-handoff.md
+        canonical_source: projects/agenticos/.meta/templates/sub-agent-handoff.md
+        inheritance: copied_template
+        customizable: yes
       - path: tasks/templates/submission-evidence.md
         canonical_source: projects/agenticos/.meta/templates/submission-evidence.md
         inheritance: copied_template
@@ -79,6 +83,7 @@ adoption:
     - tasks/templates/agent-preflight-checklist.yaml
     - tasks/templates/issue-design-brief.md
     - tasks/templates/non-code-evaluation-rubric.yaml
+    - tasks/templates/sub-agent-handoff.md
     - tasks/templates/submission-evidence.md
   required_behavior:
     - memory_layer_contracts
@@ -86,3 +91,4 @@ adoption:
     - issue_first_branching
     - isolated_worktree_execution
     - pr_scope_validation
+    - sub_agent_context_inheritance
