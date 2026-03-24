@@ -31,6 +31,13 @@ interface GuardrailEvidenceState {
   pr_scope_check?: GuardrailEvidenceEntry;
 }
 
+interface SwitchContextSummaryInput {
+  description?: string;
+  quickStart?: string;
+  state?: any;
+  lastRecorded?: string;
+}
+
 function formatTimestamp(value?: string): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -105,6 +112,63 @@ function buildGuardrailSummaryLines(guardrailEvidence?: GuardrailEvidenceState):
   return lines;
 }
 
+function extractQuickStartSummary(quickStart?: string): string | null {
+  if (!quickStart) return null;
+
+  const lines = quickStart
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && !line.startsWith('-') && !line.startsWith('1.') && !line.startsWith('2.') && !line.startsWith('3.'));
+
+  return lines[0] || null;
+}
+
+function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): string[] {
+  const lines: string[] = [];
+  const state = input.state || {};
+  const pending = Array.isArray(state.working_memory?.pending) ? state.working_memory.pending : [];
+  const decisions = Array.isArray(state.working_memory?.decisions) ? state.working_memory.decisions : [];
+  const task = state.current_task;
+  const description = input.description || extractQuickStartSummary(input.quickStart);
+
+  if (input.lastRecorded) {
+    const recordedAt = formatTimestamp(input.lastRecorded);
+    if (recordedAt) {
+      lines.push(`📍 Last recorded: ${recordedAt}`);
+    }
+  }
+
+  if (task?.title) {
+    lines.push(`🎯 Current task: ${task.title} (${task.status || 'unknown'})`);
+  }
+
+  if (pending.length > 0) {
+    lines.push(`📋 Pending (${pending.length}):`);
+    for (const item of pending.slice(0, 5)) {
+      lines.push(`  - ${item}`);
+    }
+  } else {
+    lines.push('📋 Pending: None');
+  }
+
+  if (decisions.length > 0) {
+    lines.push(`✅ Recent decisions (${Math.min(decisions.length, 3)}):`);
+    for (const item of decisions.slice(-3)) {
+      lines.push(`  - ${item}`);
+    }
+  }
+
+  if (description) {
+    lines.push(`📖 Project summary: ${description}`);
+  }
+
+  if (pending.length > 0) {
+    lines.push(`💡 Suggested next step: ${pending[0]}`);
+  }
+
+  return lines;
+}
+
 export async function switchProject(args: any): Promise<string> {
   const { project } = args;
   const registry = await loadRegistry();
@@ -128,12 +192,16 @@ export async function switchProject(args: any): Promise<string> {
 
   let description = '';
   let state: any = undefined;
+  let quickStart = '';
   try {
     const projYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8'));
     description = projYaml?.meta?.description || '';
   } catch {}
   try {
     state = yaml.parse(await readFile(join(found.path, '.context', 'state.yaml'), 'utf-8'));
+  } catch {}
+  try {
+    quickStart = await readFile(join(found.path, '.context', 'quick-start.md'), 'utf-8');
   } catch {}
 
   // CLAUDE.md: create if missing, upgrade if stale template version
@@ -164,8 +232,14 @@ export async function switchProject(args: any): Promise<string> {
 
   const bootstrap = bootstrapNotes.length > 0 ? '\n\n' + bootstrapNotes.join('\n') : '';
   const guardrailSummary = buildGuardrailSummaryLines(state?.guardrail_evidence as GuardrailEvidenceState | undefined);
+  const contextSummary = buildSwitchContextSummaryLines({
+    description,
+    quickStart,
+    state,
+    lastRecorded: found.last_recorded,
+  });
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${found.path}/.context/quick-start.md\n- ${found.path}/.context/state.yaml\n\n${guardrailSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${found.path}/.context/quick-start.md\n- ${found.path}/.context/state.yaml\n\n${guardrailSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {

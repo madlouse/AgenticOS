@@ -39,6 +39,8 @@ Its job is to define and evolve:
 - `knowledge/canonical-working-copy-cleanup-report-2026-03-24.md` records what was preserved, what was removed from the source checkout, and how the local main checkout was verified
 - issue `#24` now fixes `agenticos_record` so JSON-stringified array arguments are normalized into real persisted list items instead of degrading into malformed state updates
 - `knowledge/record-array-parsing-fix-report-2026-03-24.md` records the fix, regression coverage, and verification for the restored `#24` work
+- issue `#23` now upgrades `agenticos_switch` so it returns inline actionable project context instead of only file paths
+- `knowledge/switch-inline-context-implementation-report-2026-03-24.md` records the landed switch-context formatter, quick-start fallback, and verification
 
 ## Recommended Entry Documents
 
@@ -57,11 +59,12 @@ Start here:
 11. `knowledge/backlog-reconciliation-matrix-2026-03-24.md`
 12. `knowledge/canonical-working-copy-cleanup-report-2026-03-24.md`
 13. `knowledge/record-array-parsing-fix-report-2026-03-24.md`
+14. `knowledge/switch-inline-context-implementation-report-2026-03-24.md`
 
 ## Next Steps
 
 1. Use the reconciled open backlog, not the pre-self-hosting issue list, as the canonical remaining work queue
 2. Treat `/Users/jeking/dev/AgenticOS` as the trusted local canonical checkout again; use isolated worktrees for changes
-3. Execute issue `#23` on an isolated issue branch to restore fuller project context in switch output
+3. Continue with the remaining core backlog: `#25`, `#26`, `#28`, `#29`, `#30`, `#31`
 4. Decide whether any additional entry surfaces need the same compact guardrail summary beyond `agenticos_status` and `agenticos_switch`
 5. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap
