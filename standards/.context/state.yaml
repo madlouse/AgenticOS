@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: restore projects/t5t as a recovered snapshot from verified local sources
+  title: restore projects/okr-management as an external-source wrapper project
   status: completed
-  updated: 2026-03-25T19:30:00.000Z
+  updated: 2026-03-25T20:10:00.000Z
 
 working_memory:
   facts:
@@ -92,6 +92,9 @@ working_memory:
     - the strongest verified okr-management source is the external document corpus under /Users/jeking/work/02.目标绩效/00.OKR管理/, not a preserved project-local AgenticOS directory
     - issue #108 now restores projects/t5t as a recovered snapshot with reconstructed metadata, recovered knowledge files, weekly outputs, and explicit provenance tracking
     - projects/t5t is now present again in the canonical source checkout under /Users/jeking/dev/AgenticOS/projects/t5t
+    - issue #110 now restores projects/okr-management as an external-source wrapper project because the strongest verified content source lives outside the source repo
+    - projects/okr-management is now present again in the canonical source checkout with project metadata, entry surfaces, provenance docs, and verified 2026 OKR snapshots
+    - the canonical external content source for okr-management currently points to /Users/jeking/work/02.目标绩效/00.OKR管理/
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -119,8 +122,8 @@ working_memory:
     - self-hosting and product-source cleanup must not remove preserved sibling projects or legacy operator paths unless each removal is explicitly intended and recoverable
     - recovery claims for missing projects must distinguish exact Git restoration from reconstruction from verified local sources
     - when evidence is sufficient for one missing project but not another, restore only the honest subset and leave the remaining gap explicit
+    - when the strongest verified content source is external to the repo, prefer an external-source wrapper project over a false claim of full in-repo restoration
   pending:
-    - decide whether okr-management should be restored as an external-source wrapper project or an evidence-backed archive
     - execute issue #95 after the missing-project recovery path is explicit
     - revisit issue #94 after the higher-priority health and enforcement work is complete
 
