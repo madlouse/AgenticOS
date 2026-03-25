@@ -128,6 +128,7 @@ The agent will call `agenticos_init` and set up the project structure automatica
 | `agenticos_preflight` | Evaluate implementation/PR guardrails | `task_type`, `repo_path`, `issue_id`, `declared_target_files` |
 | `agenticos_branch_bootstrap` | Create issue branch + isolated worktree from `origin/main` | `issue_id`, `slug`, `repo_path`, `worktree_root` |
 | `agenticos_pr_scope_check` | Validate commit/file scope before PR | `issue_id`, `repo_path`, `declared_target_files` |
+| `agenticos_health` | Check canonical checkout, entry-surface, and guardrail freshness | `repo_path`, `project_path`, `check_standard_kit` |
 | `agenticos_refresh_entry_surfaces` | Refresh quick-start and state from structured merged-work inputs | `project_path`, `summary`, `status`, `current_focus` |
 | `agenticos_record` | Record session progress | `summary`, `decisions`, `outcomes`, `pending`, `current_task` |
 | `agenticos_save` | Save state + git backup | `message` (commit message) |

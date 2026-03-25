@@ -207,6 +207,18 @@ Validate that the current branch diff stays within the intended issue scope.
 
 **Returns**: JSON with `PASS` or `BLOCK`
 
+### agenticos_health
+Evaluate whether a canonical checkout and project context are fresh enough to trust before starting work.
+
+**Parameters**:
+- `repo_path` (required)
+- `project_path` (optional)
+- `remote_base_branch` (optional, default `origin/main`)
+- `checkout_role` (optional, currently `canonical`)
+- `check_standard_kit` (optional)
+
+**Returns**: JSON with overall `PASS`, `WARN`, or `BLOCK`
+
 ### agenticos_refresh_entry_surfaces
 Deterministically refresh `.context/quick-start.md` and `.context/state.yaml` from structured merged-work inputs.
 
