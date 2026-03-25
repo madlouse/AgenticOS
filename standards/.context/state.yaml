@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: automate deterministic refresh of standards quick-start and state after merged work
+  title: add one bounded health surface for checkout freshness and resume-signal freshness
   status: implemented
-  updated: 2026-03-25T02:06:00.000Z
+  updated: 2026-03-25T02:12:00.000Z
 
 working_memory:
   facts:
@@ -77,7 +77,8 @@ working_memory:
     - issue #98 also freezes the freshness contract for when standards quick-start and state surfaces must be refreshed after merged work
     - issue #99 now adds a deterministic bounded refresh command for quick-start and state surfaces using structured merged-work inputs
     - the refresh command writes bounded entry-surface metadata into state instead of attempting freeform summarization
-    - the next higher-order backlog is now #97, #96, #95, and #94 in that priority order
+    - issue #97 now adds one bounded health command for canonical checkout freshness, entry-surface freshness, guardrail visibility, and optional standard-kit drift
+    - the next higher-order backlog is now #96, #95, and #94 in that priority order
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -100,8 +101,8 @@ working_memory:
     - strict coverage follow-up issues should add the smallest fallback-path regression tests needed to prove the existing design rather than reopening already-correct runtime behavior
     - canonical local sync should be treated as a repeatable contract with executable verification, not as an occasional operator cleanup task
     - entry-surface refresh should be deterministic and bounded, not an unconstrained summarizer over arbitrary merged documents
+    - health should be a compact pre-work gate with high-signal PASS/WARN/BLOCK semantics, not a broad dashboard
   pending:
-    - execute issue #97 to add one health surface for checkout freshness, standards freshness, and guardrail visibility
     - execute issue #96 to turn rubric-backed non-code evaluation into a first-class command
     - execute issue #95 to enforce delegated-work handoff packets and verification echoes at runtime
     - revisit issue #94 after the higher-priority health and enforcement work is complete

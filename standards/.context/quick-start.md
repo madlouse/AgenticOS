@@ -68,8 +68,10 @@ Its job is to define and evolve:
 - issue `#99` now adds a deterministic refresh surface for `quick-start.md` and `state.yaml` instead of relying on manual post-merge edits
 - `knowledge/entry-surface-refresh-design-2026-03-25.md` records why bounded structured refresh is preferred over freeform summarization
 - `knowledge/entry-surface-refresh-implementation-report-2026-03-25.md` records the landed command, runtime files, and verification
+- issue `#97` now adds one bounded `agenticos_health` surface for canonical checkout freshness, entry-surface refresh freshness, guardrail visibility, and optional standard-kit drift
+- `knowledge/health-command-design-2026-03-25.md` records why this should be a compact pre-work health gate instead of a dashboard
+- `knowledge/health-command-implementation-report-2026-03-25.md` records the landed gates, runtime files, and verification
 - the next higher-order backlog is now:
-  - `#97` `agenticos_health`
   - `#96` rubric-backed non-code evaluation
   - `#95` delegated-work runtime enforcement
   - `#94` entry-surface guardrail-summary design review
@@ -108,10 +110,11 @@ Start here:
 28. `knowledge/canonical-sync-implementation-report-2026-03-25.md`
 29. `knowledge/entry-surface-refresh-design-2026-03-25.md`
 30. `knowledge/entry-surface-refresh-implementation-report-2026-03-25.md`
+31. `knowledge/health-command-design-2026-03-25.md`
+32. `knowledge/health-command-implementation-report-2026-03-25.md`
 
 ## Next Steps
 
-1. Execute `#97` to give Agents one health surface for checkout freshness, standards freshness, and guardrail visibility
-2. Execute `#96` to turn rubric-backed non-code evaluation into a first-class verification command
-3. Execute `#95` to enforce delegated-work handoff packets and verification echoes at runtime
-4. Revisit `#94` only after the higher-priority health and enforcement work is done
+1. Execute `#96` to turn rubric-backed non-code evaluation into a first-class verification command
+2. Execute `#95` to enforce delegated-work handoff packets and verification echoes at runtime
+3. Revisit `#94` only after the higher-priority health and enforcement work is done
