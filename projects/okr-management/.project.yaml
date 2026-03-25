@@ -1,0 +1,15 @@
+meta:
+  name: OKR Management
+  id: okr-management
+  description: External-source wrapper project for the R&D OKR corpus, recovered from verified local sources on 2026-03-25.
+  created: 2026-03-25
+  version: wrapper-2026-03-25
+agent_context:
+  quick_start: .context/quick-start.md
+  current_state: .context/state.yaml
+recovery:
+  status: external_source_wrapper
+  canonical_external_source: /Users/jeking/work/02.目标绩效/00.OKR管理
+  notes:
+    - This project was restored as an external-source wrapper because the original AgenticOS project-local directory could not be verified from Git history.
+    - The source repository stores project metadata, entry surfaces, recovery provenance, and a small verified reference subset.
