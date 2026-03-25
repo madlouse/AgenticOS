@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: correct overreaching migration assumptions and restore preserved project layout compatibility
+  title: audit recoverability of t5t and okr-management from verified local evidence
   status: in_progress
-  updated: 2026-03-25T15:20:00.000Z
+  updated: 2026-03-25T18:25:00.000Z
 
 working_memory:
   facts:
@@ -85,6 +85,11 @@ working_memory:
     - the legacy top-level compatibility hook path tools/record-reminder.sh has been restored because existing Claude Code hooks still call it directly
     - projects/t5t and projects/okr-management remain non-recoverable as verified full projects because preserved history only contains orphaned gitlinks, not normal tracked directories
     - the next higher-order backlog remains #95 and #94, but only after the layout-restoration correction is merged
+    - issue #106 now audits missing project sources for t5t and okr-management using registry history, local file-system evidence, Claude file-history, and external working-doc paths
+    - t5t was confirmed as a previously registered managed project path and has enough verified local evidence to support a reconstructed project snapshot
+    - okr-management was confirmed as a previously registered managed project path but currently lacks enough project-local evidence to be honestly restored as a complete AgenticOS project snapshot
+    - the strongest verified t5t sources are ~/.claude/skills/t5t/SKILL.md, ~/.opencli/clis/360teams/t5t.js, Claude file-history snapshots, /Users/jeking/dev/code/T5T/项目进展总结(1).md, and /Users/jeking/work/02.目标绩效/00.OKR管理/2025/T5T.md
+    - the strongest verified okr-management source is the external document corpus under /Users/jeking/work/02.目标绩效/00.OKR管理/, not a preserved project-local AgenticOS directory
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -110,9 +115,11 @@ working_memory:
     - health should be a compact pre-work gate with high-signal PASS/WARN/BLOCK semantics, not a broad dashboard
     - non-code evaluation should be a deterministic validator and persistence surface around the canonical rubric, not an embedded opaque scoring system
     - self-hosting and product-source cleanup must not remove preserved sibling projects or legacy operator paths unless each removal is explicitly intended and recoverable
+    - recovery claims for missing projects must distinguish exact Git restoration from reconstruction from verified local sources
   pending:
-    - finish issue #104 by validating the restored layout, compatibility hook path, and corrected repository docs
-    - execute issue #95 after the layout-restoration correction is merged
+    - open and execute a dedicated restoration issue for t5t using the verified local source set
+    - decide whether okr-management should be restored as an external-source wrapper project or an evidence-backed archive
+    - execute issue #95 after the missing-project recovery path is explicit
     - revisit issue #94 after the higher-priority health and enforcement work is complete
 
 loaded_context:
@@ -148,3 +155,4 @@ loaded_context:
   - knowledge/non-code-evaluation-command-design-2026-03-25.md
   - knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md
   - knowledge/project-layout-restoration-report-2026-03-25.md
+  - knowledge/missing-project-source-audit-2026-03-25.md
