@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runNonCodeEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -254,6 +254,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
       },
     },
+    {
+      name: 'agenticos_non_code_evaluate',
+      description: 'Validate a completed non-code evaluation rubric against the canonical contract and persist the latest structured evidence into project state.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Absolute project path whose latest non-code evaluation evidence should be updated.' },
+          rubric_path: { type: 'string', description: 'Absolute or project-relative path to the completed rubric YAML file.' },
+        },
+        required: ['project_path', 'rubric_path'],
+      },
+    },
   ],
 }));
 
@@ -288,6 +300,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runStandardKitAdopt(args ?? {}) }] };
     case 'agenticos_standard_kit_upgrade_check':
       return { content: [{ type: 'text', text: await runStandardKitUpgradeCheck(args ?? {}) }] };
+    case 'agenticos_non_code_evaluate':
+      return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
