@@ -80,7 +80,9 @@ Its job is to define and evolve:
 - `knowledge/missing-project-source-audit-2026-03-25.md` records that `t5t` is reconstructable from verified local sources, while `okr-management` currently only supports an external-source or archive recovery model
 - issue `#108` now restores `projects/t5t` as a recovered snapshot using the verified local source set rather than pretending to have a byte-identical Git restoration
 - `knowledge/t5t-reconstruction-report-2026-03-25.md` records the restored project surface, provenance boundary, and remaining `okr-management` gap
-- the immediate priority is now to decide the honest recovery model for `okr-management` before continuing with higher-order backlog work
+- issue `#110` now restores `projects/okr-management` as an external-source wrapper project rooted in the verified corpus under `/Users/jeking/work/02.目标绩效/00.OKR管理/`
+- `knowledge/okr-management-wrapper-recovery-report-2026-03-25.md` records the wrapper-recovery decision, restored project surface, and verification boundary
+- the immediate priority is now to resume the higher-order backlog starting from delegated-work runtime enforcement in `#95`
 
 ## Recommended Entry Documents
 
@@ -123,9 +125,9 @@ Start here:
 35. `knowledge/project-layout-restoration-report-2026-03-25.md`
 36. `knowledge/missing-project-source-audit-2026-03-25.md`
 37. `knowledge/t5t-reconstruction-report-2026-03-25.md`
+38. `knowledge/okr-management-wrapper-recovery-report-2026-03-25.md`
 
 ## Next Steps
 
-1. Decide whether `okr-management` should be recovered as an external-source wrapper project or an evidence-backed archive
-2. Resume `#95` only after the missing-project recovery path is explicit
-3. Revisit `#94` after the higher-priority enforcement work is done
+1. Resume `#95` now that the missing-project recovery path is explicit
+2. Revisit `#94` after the higher-priority enforcement work is done
