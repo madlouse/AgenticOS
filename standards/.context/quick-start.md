@@ -74,9 +74,9 @@ Its job is to define and evolve:
 - issue `#96` now adds one bounded first-class non-code evaluation command that validates completed rubric files and persists the latest structured evidence into project state
 - `knowledge/non-code-evaluation-command-design-2026-03-25.md` records why this issue should validate and persist rubric results rather than inventing a second scoring system
 - `knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md` records the landed command, persistence contract, and full targeted coverage result
-- the next higher-order backlog is now:
-  - `#95` delegated-work runtime enforcement
-  - `#94` entry-surface guardrail-summary design review
+- issue `#104` now corrects the overreaching migration interpretation and restores the preserved visible project layout in the source checkout
+- `knowledge/project-layout-restoration-report-2026-03-25.md` records the root cause, verified restored paths, and the corrected repository boundary rule
+- the immediate priority is to formalize the restored layout and compatibility path correction before continuing with higher-order backlog work
 
 ## Recommended Entry Documents
 
@@ -116,8 +116,10 @@ Start here:
 32. `knowledge/health-command-implementation-report-2026-03-25.md`
 33. `knowledge/non-code-evaluation-command-design-2026-03-25.md`
 34. `knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md`
+35. `knowledge/project-layout-restoration-report-2026-03-25.md`
 
 ## Next Steps
 
-1. Execute `#95` to enforce delegated-work handoff packets and verification echoes at runtime
-2. Revisit `#94` only after the higher-priority enforcement work is done
+1. Finish issue `#104` by validating the restored source-checkout layout and updating canonical docs
+2. Resume `#95` only after the layout correction is merged
+3. Revisit `#94` after the higher-priority enforcement work is done
