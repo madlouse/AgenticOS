@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -192,6 +192,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_health',
+      description: 'Evaluate whether a canonical checkout and project context are fresh enough to trust before starting work.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repo_path: { type: 'string', description: 'Absolute repository checkout path to evaluate.' },
+          project_path: { type: 'string', description: 'Optional absolute project path whose state freshness should be checked.' },
+          remote_base_branch: { type: 'string', description: 'Remote base branch expected for canonical checkout freshness (default: origin/main).' },
+          checkout_role: { type: 'string', enum: ['canonical'], description: 'Checkout role. Currently canonical-only.' },
+          check_standard_kit: { type: 'boolean', description: 'Whether to include standard-kit drift in the health report.' },
+        },
+        required: ['repo_path'],
+      },
+    },
+    {
       name: 'agenticos_refresh_entry_surfaces',
       description: 'Deterministically refresh .context/quick-start.md and .context/state.yaml from structured merged-work inputs.',
       inputSchema: {
@@ -265,6 +280,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
     case 'agenticos_pr_scope_check':
       return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
+    case 'agenticos_health':
+      return { content: [{ type: 'text', text: await runHealth(args ?? {}) }] };
     case 'agenticos_refresh_entry_surfaces':
       return { content: [{ type: 'text', text: await runEntrySurfaceRefresh(args ?? {}) }] };
     case 'agenticos_standard_kit_adopt':
