@@ -236,6 +236,15 @@ Deterministically refresh `.context/quick-start.md` and `.context/state.yaml` fr
 
 **Returns**: JSON with `REFRESHED`
 
+### agenticos_non_code_evaluate
+Validate a completed non-code evaluation rubric against the canonical contract and persist the latest structured evidence into project state.
+
+**Parameters**:
+- `project_path` (required)
+- `rubric_path` (required)
+
+**Returns**: JSON with `RECORDED`
+
 ---
 
 ## 📦 Resources Reference
