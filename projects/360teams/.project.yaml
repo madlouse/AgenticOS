@@ -1,0 +1,9 @@
+meta:
+  name: 360teams
+  id: 360teams
+  description: 360teams项目管理
+  created: 2026-03-19
+  version: 1.0.0
+agent_context:
+  quick_start: .context/quick-start.md
+  current_state: .context/state.yaml

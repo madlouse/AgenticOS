@@ -1,0 +1,9 @@
+meta:
+  name: agentic-os-development
+  id: agentic-os-development
+  description: ""
+  created: 2026-03-20
+  version: 1.0.0
+agent_context:
+  quick_start: .context/quick-start.md
+  current_state: .context/state.yaml
