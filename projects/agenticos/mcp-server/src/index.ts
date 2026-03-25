@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runStandardKitAdopt, runStandardKitUpgradeCheck } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -192,6 +192,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_refresh_entry_surfaces',
+      description: 'Deterministically refresh .context/quick-start.md and .context/state.yaml from structured merged-work inputs.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Absolute target project path whose entry surfaces should be refreshed.' },
+          project_name: { type: 'string', description: 'Optional project name override when .project.yaml metadata is missing or stale.' },
+          project_description: { type: 'string', description: 'Optional project description override used for quick-start project overview.' },
+          issue_id: { type: 'string', description: 'Optional merged issue identifier that produced this refresh.' },
+          summary: { type: 'string', description: 'Required concise summary of what just landed.' },
+          status: { type: 'string', description: 'Required high-level project status label to surface in quick-start.' },
+          current_focus: { type: 'string', description: 'Required current focus line for the refreshed entry surfaces.' },
+          current_task_title: { type: 'string', description: 'Optional current task title override written into state.' },
+          current_task_status: { type: 'string', description: 'Optional current task status override written into state.' },
+          facts: { type: 'array', items: { type: 'string' }, description: 'Optional concise facts to persist into working memory and quick-start.' },
+          decisions: { type: 'array', items: { type: 'string' }, description: 'Optional concise decisions to persist into working memory.' },
+          pending: { type: 'array', items: { type: 'string' }, description: 'Optional next-work queue; the first item becomes Resume Here and next_step.' },
+          report_paths: { type: 'array', items: { type: 'string' }, description: 'Optional landed report paths to include in loaded context and quick-start.' },
+          recommended_entry_documents: { type: 'array', items: { type: 'string' }, description: 'Optional recommended entry documents for fast resume.' },
+        },
+        required: ['project_path', 'summary', 'status', 'current_focus'],
+      },
+    },
+    {
       name: 'agenticos_standard_kit_adopt',
       description: 'Adopt the canonical AgenticOS downstream standard kit into a project by creating missing copied templates and generated guidance.',
       inputSchema: {
@@ -241,6 +265,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
     case 'agenticos_pr_scope_check':
       return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
+    case 'agenticos_refresh_entry_surfaces':
+      return { content: [{ type: 'text', text: await runEntrySurfaceRefresh(args ?? {}) }] };
     case 'agenticos_standard_kit_adopt':
       return { content: [{ type: 'text', text: await runStandardKitAdopt(args ?? {}) }] };
     case 'agenticos_standard_kit_upgrade_check':

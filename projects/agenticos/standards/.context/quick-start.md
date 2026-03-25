@@ -65,8 +65,10 @@ Its job is to define and evolve:
 - issue `#98` now freezes the canonical sync contract for `/Users/jeking/dev/AgenticOS` and the freshness contract for live standards entry surfaces
 - `knowledge/canonical-sync-contract-2026-03-25.md` records when the local canonical checkout may be trusted and when `quick-start.md` and `state.yaml` must be refreshed
 - `knowledge/canonical-sync-implementation-report-2026-03-25.md` records the executable verification procedure and the intended post-merge proof run
+- issue `#99` now adds a deterministic refresh surface for `quick-start.md` and `state.yaml` instead of relying on manual post-merge edits
+- `knowledge/entry-surface-refresh-design-2026-03-25.md` records why bounded structured refresh is preferred over freeform summarization
+- `knowledge/entry-surface-refresh-implementation-report-2026-03-25.md` records the landed command, runtime files, and verification
 - the next higher-order backlog is now:
-  - `#99` standards entry-surface refresh automation
   - `#97` `agenticos_health`
   - `#96` rubric-backed non-code evaluation
   - `#95` delegated-work runtime enforcement
@@ -104,11 +106,12 @@ Start here:
 26. `knowledge/project-boundary-coverage-closure-report-2026-03-25.md`
 27. `knowledge/canonical-sync-contract-2026-03-25.md`
 28. `knowledge/canonical-sync-implementation-report-2026-03-25.md`
+29. `knowledge/entry-surface-refresh-design-2026-03-25.md`
+30. `knowledge/entry-surface-refresh-implementation-report-2026-03-25.md`
 
 ## Next Steps
 
-1. Apply the `#98` canonical sync contract to `/Users/jeking/dev/AgenticOS` after merge and verify that the local main checkout is clean and current
-2. Execute `#99` so standards entry surfaces stop depending on manual refresh discipline after merged work
-3. Execute `#97` to give Agents one health surface for checkout freshness, standards freshness, and guardrail visibility
-4. Execute `#96` to turn rubric-backed non-code evaluation into a first-class verification command
-5. Execute `#95`, then revisit `#94` only after the higher-priority runtime enforcement work is done
+1. Execute `#97` to give Agents one health surface for checkout freshness, standards freshness, and guardrail visibility
+2. Execute `#96` to turn rubric-backed non-code evaluation into a first-class verification command
+3. Execute `#95` to enforce delegated-work handoff packets and verification echoes at runtime
+4. Revisit `#94` only after the higher-priority health and enforcement work is done
