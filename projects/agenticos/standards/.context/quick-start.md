@@ -76,7 +76,9 @@ Its job is to define and evolve:
 - `knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md` records the landed command, persistence contract, and full targeted coverage result
 - issue `#104` now corrects the overreaching migration interpretation and restores the preserved visible project layout in the source checkout
 - `knowledge/project-layout-restoration-report-2026-03-25.md` records the root cause, verified restored paths, and the corrected repository boundary rule
-- the immediate priority is to formalize the restored layout and compatibility path correction before continuing with higher-order backlog work
+- issue `#106` now audits whether `t5t` and `okr-management` can be honestly restored from verified local evidence
+- `knowledge/missing-project-source-audit-2026-03-25.md` records that `t5t` is reconstructable from verified local sources, while `okr-management` currently only supports an external-source or archive recovery model
+- the immediate priority is to resolve the missing-project recovery model before continuing with higher-order backlog work
 
 ## Recommended Entry Documents
 
@@ -117,9 +119,11 @@ Start here:
 33. `knowledge/non-code-evaluation-command-design-2026-03-25.md`
 34. `knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md`
 35. `knowledge/project-layout-restoration-report-2026-03-25.md`
+36. `knowledge/missing-project-source-audit-2026-03-25.md`
 
 ## Next Steps
 
-1. Finish issue `#104` by validating the restored source-checkout layout and updating canonical docs
-2. Resume `#95` only after the layout correction is merged
-3. Revisit `#94` after the higher-priority enforcement work is done
+1. Execute a dedicated restoration issue for `t5t` using the verified local source set captured in `missing-project-source-audit-2026-03-25.md`
+2. Decide whether `okr-management` should be recovered as an external-source wrapper project or an evidence-backed archive
+3. Resume `#95` only after the missing-project recovery path is explicit
+4. Revisit `#94` after the higher-priority enforcement work is done
