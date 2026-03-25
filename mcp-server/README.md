@@ -207,6 +207,23 @@ Validate that the current branch diff stays within the intended issue scope.
 
 **Returns**: JSON with `PASS` or `BLOCK`
 
+### agenticos_refresh_entry_surfaces
+Deterministically refresh `.context/quick-start.md` and `.context/state.yaml` from structured merged-work inputs.
+
+**Parameters**:
+- `project_path` (required)
+- `summary` (required)
+- `status` (required)
+- `current_focus` (required)
+- `issue_id` (optional)
+- `facts` (optional)
+- `decisions` (optional)
+- `pending` (optional)
+- `report_paths` (optional)
+- `recommended_entry_documents` (optional)
+
+**Returns**: JSON with `REFRESHED`
+
 ---
 
 ## 📦 Resources Reference
