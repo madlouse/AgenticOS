@@ -1,0 +1,12 @@
+session:
+  id: session-2026-03-17-001
+  started: 2026-03-17T09:09:37.279Z
+  agent: claude-sonnet-4.6
+current_task: null
+working_memory:
+  facts: []
+  decisions: []
+  pending: []
+loaded_context:
+  - .project.yaml
+  - .context/quick-start.md

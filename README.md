@@ -178,10 +178,10 @@ For downstream project inheritance, the executable workflow standard kit lives i
 
 - `projects/agenticos/.meta/standard-kit/`
 
-Within this repository, only `projects/agenticos/` should be treated as canonical product source.
-The runtime extraction program has already moved `2026okr`, `360teams`, `agentic-devops`, and `ghostty-optimization` into the live workspace.
-The orphaned gitlink residues `okr-management` and `t5t` have been removed from the source repo rather than treated as real runtime projects.
-Any remaining non-`agenticos` tracked entry under `projects/` should now be treated as explicit fixture content, not product source.
+Within this repository, only `projects/agenticos/` should be treated as the canonical **AgenticOS product-source** project.
+Sibling entries under `projects/` may still exist as preserved managed-project content and should not be rewritten or removed just because AgenticOS itself adopted a self-hosting layout.
+The source checkout also keeps a legacy-compatible top-level `tools/record-reminder.sh` path because existing Claude Code hooks still call that location directly.
+The orphaned gitlink residues `okr-management` and `t5t` were not recoverable as full tracked projects and therefore should not be treated as canonical managed-project content without a separate verified source.
 
 ---
 

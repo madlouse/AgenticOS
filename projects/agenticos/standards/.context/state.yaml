@@ -5,9 +5,9 @@ session:
   last_backup: 2026-03-23T10:35:00.000Z
 
 current_task:
-  title: enforce delegated-work handoff packets and verification echoes at runtime
-  status: pending
-  updated: 2026-03-25T10:28:00.000Z
+  title: correct overreaching migration assumptions and restore preserved project layout compatibility
+  status: in_progress
+  updated: 2026-03-25T15:20:00.000Z
 
 working_memory:
   facts:
@@ -80,7 +80,11 @@ working_memory:
     - issue #97 now adds one bounded health command for canonical checkout freshness, entry-surface freshness, guardrail visibility, and optional standard-kit drift
     - issue #96 now adds one bounded first-class non-code evaluation command that validates completed rubric files against the canonical template and persists the latest structured evidence into state
     - targeted coverage for the #96 runtime surface reached full 100 percent statements, branches, functions, and lines across non-code-evaluation.ts and non-code-evaluate.ts
-    - the next higher-order backlog is now #95 and #94 in that priority order
+    - issue #104 now corrects an overreaching migration interpretation that had treated preserved sibling projects as already extracted away from the source checkout
+    - the canonical source checkout at /Users/jeking/dev/AgenticOS now again contains preserved sibling projects 2026okr, 360teams, agentic-devops, agentic-os-development, and ghostty-optimization
+    - the legacy top-level compatibility hook path tools/record-reminder.sh has been restored because existing Claude Code hooks still call it directly
+    - projects/t5t and projects/okr-management remain non-recoverable as verified full projects because preserved history only contains orphaned gitlinks, not normal tracked directories
+    - the next higher-order backlog remains #95 and #94, but only after the layout-restoration correction is merged
   decisions:
     - keep one main AgenticOS product repository and one canonical standards area inside it
     - merge durable standards knowledge into the main repo, but archive raw standalone context/history instead of treating it as live state
@@ -105,8 +109,10 @@ working_memory:
     - entry-surface refresh should be deterministic and bounded, not an unconstrained summarizer over arbitrary merged documents
     - health should be a compact pre-work gate with high-signal PASS/WARN/BLOCK semantics, not a broad dashboard
     - non-code evaluation should be a deterministic validator and persistence surface around the canonical rubric, not an embedded opaque scoring system
+    - self-hosting and product-source cleanup must not remove preserved sibling projects or legacy operator paths unless each removal is explicitly intended and recoverable
   pending:
-    - execute issue #95 to enforce delegated-work handoff packets and verification echoes at runtime
+    - finish issue #104 by validating the restored layout, compatibility hook path, and corrected repository docs
+    - execute issue #95 after the layout-restoration correction is merged
     - revisit issue #94 after the higher-priority health and enforcement work is complete
 
 loaded_context:
@@ -141,3 +147,4 @@ loaded_context:
   - knowledge/integration-mode-matrix-implementation-report-2026-03-25.md
   - knowledge/non-code-evaluation-command-design-2026-03-25.md
   - knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md
+  - knowledge/project-layout-restoration-report-2026-03-25.md

@@ -23,15 +23,16 @@ npm run build
 | `projects/agenticos/.meta/` | Templates and agent protocol guides |
 | `projects/agenticos/.meta/standard-kit/` | Downstream reusable workflow standard package |
 | `projects/agenticos/homebrew-tap/` | Homebrew distribution formula |
+| `tools/` | Legacy-compatible top-level operator and hook scripts |
 | `.github/` | Repository-level automation that must stay at root |
 | `.runtime/` | Runtime-only local state, not canonical source |
 | `.claude/worktrees/` | Agent worktree area, not product source |
 
 Repository boundary rule:
-- `projects/agenticos/` is the only canonical product-source project under `projects/`
-- `2026okr`, `360teams`, `agentic-devops`, and `ghostty-optimization` have already been extracted into the live workspace
-- orphaned gitlink residues `okr-management` and `t5t` are not real runtime projects and are removed by issue #56
-- any remaining tracked non-`agenticos` `projects/*` entry should be treated as explicit fixture content rather than runtime product data
+- `projects/agenticos/` is the only canonical AgenticOS product-source project under `projects/`
+- preserved sibling `projects/*` directories are still part of the operator-visible workspace layout and must not be removed just because AgenticOS itself was reorganized
+- top-level `tools/record-reminder.sh` must remain available as a legacy-compatible hook path until hook callers are migrated
+- orphaned gitlink residues `okr-management` and `t5t` are not verified full projects and must be handled only with explicit recovery evidence, not assumed deletion safety
 
 ## Development Rules
 
