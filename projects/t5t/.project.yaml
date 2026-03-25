@@ -1,0 +1,20 @@
+meta:
+  name: T5T
+  id: t5t
+  description: Recovered snapshot of the T5T weekly progress tracking project, reconstructed from verified local sources on 2026-03-25.
+  created: 2026-03-25
+  version: recovered-2026-03-25
+agent_context:
+  quick_start: .context/quick-start.md
+  current_state: .context/state.yaml
+recovery:
+  status: recovered_snapshot
+  restored_from:
+    - ~/.claude/file-history
+    - ~/.claude/skills/t5t/SKILL.md
+    - ~/.opencli/clis/360teams/t5t.js
+    - ~/dev/code/T5T
+    - ~/work/02.目标绩效/00.OKR管理/2025/T5T.md
+  notes:
+    - This project was reconstructed from verified local sources because the original repository tree was not recoverable from Git history as a normal tracked directory.
+    - Files marked as reconstructed may preserve verified content without guaranteeing byte-identical parity to the lost original project directory.
