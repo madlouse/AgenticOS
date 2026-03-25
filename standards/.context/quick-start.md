@@ -62,6 +62,15 @@ Its job is to define and evolve:
 - `knowledge/integration-mode-matrix-implementation-report-2026-03-25.md` records the parser, docs, and roadmap alignment work
 - issue `#92` now closes the last strict-verification gap left after `#25` by raising the touched project-boundary runtime files to full branch coverage
 - `knowledge/project-boundary-coverage-closure-report-2026-03-25.md` records the added fallback-path regression cases and the final `100 / 100 / 100 / 100` targeted coverage result
+- issue `#98` now freezes the canonical sync contract for `/Users/jeking/dev/AgenticOS` and the freshness contract for live standards entry surfaces
+- `knowledge/canonical-sync-contract-2026-03-25.md` records when the local canonical checkout may be trusted and when `quick-start.md` and `state.yaml` must be refreshed
+- `knowledge/canonical-sync-implementation-report-2026-03-25.md` records the executable verification procedure and the intended post-merge proof run
+- the next higher-order backlog is now:
+  - `#99` standards entry-surface refresh automation
+  - `#97` `agenticos_health`
+  - `#96` rubric-backed non-code evaluation
+  - `#95` delegated-work runtime enforcement
+  - `#94` entry-surface guardrail-summary design review
 
 ## Recommended Entry Documents
 
@@ -93,11 +102,13 @@ Start here:
 24. `knowledge/integration-mode-matrix-2026-03-25.md`
 25. `knowledge/integration-mode-matrix-implementation-report-2026-03-25.md`
 26. `knowledge/project-boundary-coverage-closure-report-2026-03-25.md`
+27. `knowledge/canonical-sync-contract-2026-03-25.md`
+28. `knowledge/canonical-sync-implementation-report-2026-03-25.md`
 
 ## Next Steps
 
-1. Use the reconciled open backlog, not the pre-self-hosting issue list, as the canonical remaining work queue
-2. Treat `/Users/jeking/dev/AgenticOS` as the trusted local canonical checkout again; use isolated worktrees for changes
-3. Reassess the remaining backlog now that `#25`, `#26`, `#28`, `#29`, `#30`, and `#31` are all frozen and fully verified
-4. Decide whether any additional entry surfaces need the same compact guardrail summary beyond `agenticos_status` and `agenticos_switch`
-5. Only open a new selective-merge issue if one specific archived artifact is later proven to fill a real canonical gap
+1. Apply the `#98` canonical sync contract to `/Users/jeking/dev/AgenticOS` after merge and verify that the local main checkout is clean and current
+2. Execute `#99` so standards entry surfaces stop depending on manual refresh discipline after merged work
+3. Execute `#97` to give Agents one health surface for checkout freshness, standards freshness, and guardrail visibility
+4. Execute `#96` to turn rubric-backed non-code evaluation into a first-class verification command
+5. Execute `#95`, then revisit `#94` only after the higher-priority runtime enforcement work is done
