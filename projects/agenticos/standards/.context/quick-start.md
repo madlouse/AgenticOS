@@ -78,7 +78,9 @@ Its job is to define and evolve:
 - `knowledge/project-layout-restoration-report-2026-03-25.md` records the root cause, verified restored paths, and the corrected repository boundary rule
 - issue `#106` now audits whether `t5t` and `okr-management` can be honestly restored from verified local evidence
 - `knowledge/missing-project-source-audit-2026-03-25.md` records that `t5t` is reconstructable from verified local sources, while `okr-management` currently only supports an external-source or archive recovery model
-- the immediate priority is to resolve the missing-project recovery model before continuing with higher-order backlog work
+- issue `#108` now restores `projects/t5t` as a recovered snapshot using the verified local source set rather than pretending to have a byte-identical Git restoration
+- `knowledge/t5t-reconstruction-report-2026-03-25.md` records the restored project surface, provenance boundary, and remaining `okr-management` gap
+- the immediate priority is now to decide the honest recovery model for `okr-management` before continuing with higher-order backlog work
 
 ## Recommended Entry Documents
 
@@ -120,10 +122,10 @@ Start here:
 34. `knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md`
 35. `knowledge/project-layout-restoration-report-2026-03-25.md`
 36. `knowledge/missing-project-source-audit-2026-03-25.md`
+37. `knowledge/t5t-reconstruction-report-2026-03-25.md`
 
 ## Next Steps
 
-1. Execute a dedicated restoration issue for `t5t` using the verified local source set captured in `missing-project-source-audit-2026-03-25.md`
-2. Decide whether `okr-management` should be recovered as an external-source wrapper project or an evidence-backed archive
-3. Resume `#95` only after the missing-project recovery path is explicit
-4. Revisit `#94` after the higher-priority enforcement work is done
+1. Decide whether `okr-management` should be recovered as an external-source wrapper project or an evidence-backed archive
+2. Resume `#95` only after the missing-project recovery path is explicit
+3. Revisit `#94` after the higher-priority enforcement work is done
