@@ -66,6 +66,25 @@ Full Git Flow (with `develop` + `release/*`) is designed for large teams with in
 5. **Open PR** — reference issue with `Closes #42`
 6. **Merge** — once CI passes, merge with merge commit (not squash)
 
+### Canonical Local Sync
+
+Before you treat `/Users/jeking/dev/AgenticOS` as a trusted local starting point, resync it:
+
+```bash
+git -C /Users/jeking/dev/AgenticOS fetch origin --prune
+git -C /Users/jeking/dev/AgenticOS checkout main
+git -C /Users/jeking/dev/AgenticOS pull --ff-only origin main
+git -C /Users/jeking/dev/AgenticOS status --short --branch
+```
+
+Trusted output is a clean:
+
+```text
+## main...origin/main
+```
+
+If the checkout is dirty, ahead, or behind, do not use it as your trusted local reasoning base. Resync first, then open or use an isolated worktree for real implementation work.
+
 ## Commit Types
 
 | Type | When to use |
