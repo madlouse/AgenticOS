@@ -1,0 +1,64 @@
+version: 1
+contract_id: cross-agent-execution-contract
+status: canonical
+summary: >
+  Freeze one canonical AgenticOS execution policy that every supported agent must
+  obey, while allowing runtime-specific adapter surfaces and optional local
+  enhancements.
+
+policy_invariants:
+  - id: active_project_alignment
+    summary: Implementation work must align to the intended active project before edits begin.
+  - id: issue_first_execution
+    summary: Implementation work must start from an issue-scoped task rather than ad hoc mutation.
+  - id: implementation_preflight
+    summary: Implementation-affecting work must pass executable preflight before editing.
+  - id: isolated_worktree_execution
+    summary: Implementation work must move into an isolated issue branch and worktree when required by guardrails.
+  - id: edit_boundary_enforcement
+    summary: Implementation edits must fail closed when active-project alignment or matching preflight evidence is missing.
+  - id: pr_scope_validation
+    summary: PR creation and merge must pass executable issue-scope validation.
+  - id: recording_protocol
+    summary: Meaningful session work must be recorded through the canonical AgenticOS persistence flow.
+
+adapter_surfaces:
+  - id: codex-generic
+    generated_file: AGENTS.md
+    runtime_family: codex_and_generic_mcp_agents
+    role: >
+      Generic and Codex-facing adapter surface that exposes the canonical AgenticOS
+      execution policy without redefining it.
+    runtime_specific_concerns:
+      - MCP registration and bootstrap ergonomics
+      - explicit tool-routing hints when natural-language routing is weak
+  - id: claude-code
+    generated_file: CLAUDE.md
+    runtime_family: claude_code
+    role: >
+      Claude Code-facing adapter surface that exposes the canonical AgenticOS
+      execution policy while allowing Claude-specific operator guidance.
+    runtime_specific_concerns:
+      - Claude CLI-managed MCP configuration and restart expectations
+      - Claude-specific prompting and routing hints
+      - optional local stop-hook reminders
+
+optional_runtime_enhancements:
+  - id: claude-stop-hook
+    canonical: false
+    scope: local_optional_enhancement
+    summary: Optional Claude-local reminder layer that does not replace canonical AgenticOS persistence or guardrails.
+
+layer_boundaries:
+  canonical_policy:
+    description: >
+      Project policy and guardrail semantics that must remain identical across all
+      supported agents.
+  adapter_surface:
+    description: >
+      Runtime-specific generated instruction surfaces that translate the canonical
+      policy into the entry surface each agent actually reads.
+  runtime_enhancement:
+    description: >
+      Optional runtime-specific helpers such as hooks and reminders. These may
+      improve operator ergonomics but must never become the sole enforcement plane.

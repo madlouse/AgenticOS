@@ -66,8 +66,8 @@ layers:
 
 upgrade_rules:
   template_marker_version:
-    AGENTS.md: 3
-    CLAUDE.md: 3
+    AGENTS.md: 4
+    CLAUDE.md: 4
   compatibility_rule: >
     Generated files may be upgraded in place by distill when the template marker version changes.
   copied_template_rule: >
@@ -87,8 +87,11 @@ adoption:
     - tasks/templates/submission-evidence.md
   required_behavior:
     - memory_layer_contracts
+    - cross_agent_policy_contract
     - implementation_preflight
     - issue_first_branching
     - isolated_worktree_execution
+    - edit_boundary_enforcement
     - pr_scope_validation
+    - official_agent_adapter_surfaces
     - sub_agent_context_inheritance
