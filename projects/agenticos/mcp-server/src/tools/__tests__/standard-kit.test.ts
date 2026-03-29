@@ -139,6 +139,40 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
     }),
     'utf-8',
   );
+  await writeFile(
+    join(bootstrapRoot, 'agent-adapter-matrix.yaml'),
+    yaml.stringify({
+      version: 1,
+      primary_policy_surface: 'cross-agent-execution-contract',
+      adapters: [
+        {
+          agent_id: 'claude-code',
+          support_tier: 'official',
+          adapter_file: 'CLAUDE.md',
+          adapter_family: 'claude',
+          required_runtime_guidance: [
+            '`CLAUDE.md` is the Claude Code adapter surface for this project.',
+            '## Claude Runtime Notes',
+            'Claude CLI-managed user MCP config',
+            'optional local stop-hook reminders',
+          ],
+        },
+        {
+          agent_id: 'codex',
+          support_tier: 'official',
+          adapter_file: 'AGENTS.md',
+          adapter_family: 'generic',
+          required_runtime_guidance: [
+            '`AGENTS.md` is the Codex/generic adapter surface for this project.',
+            '## Codex / Generic Runtime Notes',
+            'use explicit `agenticos_*` tool calls',
+            'Bootstrap differences are runtime concerns',
+          ],
+        },
+      ],
+    }),
+    'utf-8',
+  );
 
   await writeRegistry(home, {
     version: '1.0.0',
@@ -354,6 +388,36 @@ describe('standard kit commands', () => {
 
     expect(result.status).toBe('FAIL');
     expect(result.behavior_checks.find((item) => item.behavior === 'cross_agent_policy_contract')).toMatchObject({ status: 'FAIL' });
+    expect(result.adapter_checks.find((item) => item.agent_id === 'codex')).toMatchObject({ status: 'FAIL' });
+  });
+
+  it('conformance check fails Claude parity when Claude-specific runtime guidance is removed', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      project_description: 'Claude parity project',
+    });
+
+    const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
+    await writeFile(
+      join(projectRoot, 'CLAUDE.md'),
+      claudeMd.replace(/## Claude Runtime Notes[\s\S]*?## Guardrail Protocol \(MANDATORY\)/, '## Guardrail Protocol (MANDATORY)'),
+      'utf-8',
+    );
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+      adapter_checks: Array<{ agent_id: string; status: string }>;
+    };
+
+    expect(result.status).toBe('FAIL');
+    expect(result.adapter_checks.find((item) => item.agent_id === 'claude-code')).toMatchObject({ status: 'FAIL' });
     expect(result.adapter_checks.find((item) => item.agent_id === 'codex')).toMatchObject({ status: 'PASS' });
   });
 

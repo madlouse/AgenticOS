@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGENTS_ADAPTER_LINES,
+  AGENTS_RUNTIME_GUIDANCE_BULLETS,
+  AGENTS_RUNTIME_GUIDANCE_TITLE,
   CLAUDE_ADAPTER_LINES,
+  CLAUDE_RUNTIME_GUIDANCE_BULLETS,
+  CLAUDE_RUNTIME_GUIDANCE_TITLE,
   CURRENT_TEMPLATE_VERSION,
   SHARED_POLICY_BULLETS,
   SHARED_POLICY_TITLE,
@@ -22,6 +26,10 @@ describe('distill templates', () => {
     for (const bullet of SHARED_POLICY_BULLETS) {
       expect(content).toContain(bullet);
     }
+    expect(content).toContain(`## ${AGENTS_RUNTIME_GUIDANCE_TITLE}`);
+    for (const bullet of AGENTS_RUNTIME_GUIDANCE_BULLETS) {
+      expect(content).toContain(bullet);
+    }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
     expect(content).toContain('agenticos_branch_bootstrap');
@@ -39,6 +47,10 @@ describe('distill templates', () => {
     expect(content).toContain(CLAUDE_ADAPTER_LINES[1]);
     expect(content).toContain(`## ${SHARED_POLICY_TITLE}`);
     for (const bullet of SHARED_POLICY_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain(`## ${CLAUDE_RUNTIME_GUIDANCE_TITLE}`);
+    for (const bullet of CLAUDE_RUNTIME_GUIDANCE_BULLETS) {
       expect(content).toContain(bullet);
     }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
