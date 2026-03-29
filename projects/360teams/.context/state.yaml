@@ -2,11 +2,22 @@ session:
   id: session-2026-03-19-001
   started: 2026-03-19T08:48:37.665Z
   agent: claude-sonnet-4.6
-current_task: null
+current_task:
+  id: null
+  title: null
+  status: pending
+  next_step: null
 working_memory:
   facts: []
   decisions: []
   pending: []
+memory_contract:
+  version: 1
+  quick_start_role: project_orientation
+  state_role: operational_working_state
+  conversations_role: append_only_session_history
+  knowledge_role: durable_synthesis
+  tasks_role: execution_artifacts
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
