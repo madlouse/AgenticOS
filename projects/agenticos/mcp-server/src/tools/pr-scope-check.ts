@@ -45,19 +45,32 @@ function escapeRegex(value: string): string {
 
 function patternToRegex(pattern: string): RegExp {
   const normalized = pattern.replace(/\\/g, '/');
-  const tokens = normalized.match(/\*\*|\*|\.{3}|[^*.]+/g) ?? [];
-  const source = tokens
-    .map((token) => {
-      if (token === '**' || token === '...') {
-        return '.*';
-      }
-      if (token === '*') {
-        return '[^/]*';
-      }
-      return escapeRegex(token);
-    })
-    .join('');
-  return new RegExp(`^${source}$`);
+  let source = '^';
+
+  for (let index = 0; index < normalized.length; ) {
+    if (normalized.startsWith('**', index)) {
+      source += '.*';
+      index += 2;
+      continue;
+    }
+
+    if (normalized.startsWith('...', index)) {
+      source += '.*';
+      index += 3;
+      continue;
+    }
+
+    if (normalized[index] === '*') {
+      source += '[^/]*';
+      index += 1;
+      continue;
+    }
+
+    source += escapeRegex(normalized[index]);
+    index += 1;
+  }
+
+  return new RegExp(`${source}$`);
 }
 
 function fileMatchesDeclaredScope(file: string, patterns: string[]): boolean {

@@ -67,6 +67,28 @@ describe('runPrScopeCheck', () => {
     expect(persistGuardrailEvidenceMock).toHaveBeenCalledTimes(1);
   });
 
+  it('returns PASS when declared exact file paths contain dots', async () => {
+    mockGitResponses({
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'fix(mcp-server): preserve literal dots in pr scope matching (#114)\n',
+      'diff --name-only origin/main...HEAD': 'README.md\nprojects/agenticos/mcp-server/src/tools/__tests__/edit-guard.test.ts\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '114',
+      repo_path: '/repo',
+      declared_target_files: [
+        'README.md',
+        'projects/agenticos/mcp-server/src/tools/__tests__/edit-guard.test.ts',
+      ],
+      expected_issue_scope: 'pr_scope_exact_file_match',
+    })) as { status: string; unexpected_files: string[] };
+
+    expect(result.status).toBe('PASS');
+    expect(result.unexpected_files).toEqual([]);
+  });
+
   it('returns BLOCK when commit subjects do not match the current issue', async () => {
     mockGitResponses({
       'rev-parse origin/main': 'base999\n',
