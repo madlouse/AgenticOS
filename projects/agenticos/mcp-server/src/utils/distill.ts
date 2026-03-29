@@ -5,10 +5,28 @@ import { readFileSync } from 'fs';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 3;
+export const CURRENT_TEMPLATE_VERSION = 4;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
+
+export const SHARED_POLICY_TITLE = 'Canonical Policy (Shared Across Agents)';
+export const SHARED_POLICY_BULLETS = [
+  'This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.',
+  'Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.',
+  'PR creation or merge must not happen before executable scope validation passes.',
+  'Recording and save flow remain canonical project requirements rather than runtime-specific preferences.',
+] as const;
+
+export const AGENTS_ADAPTER_LINES = [
+  '`AGENTS.md` is the Codex/generic adapter surface for this project.',
+  'It must expose the same canonical policy as other agent adapters rather than defining a different workflow.',
+] as const;
+
+export const CLAUDE_ADAPTER_LINES = [
+  '`CLAUDE.md` is the Claude Code adapter surface for this project.',
+  'It must expose the same canonical policy as other agent adapters while allowing Claude-specific operator guidance.',
+] as const;
 
 /** Extract template version from an existing file. Returns 0 if no marker found (v1 or earlier). */
 export function extractTemplateVersion(content: string): number {
@@ -23,6 +41,15 @@ function ensureVersionMarker(content: string): string {
   return `${VERSION_MARKER}\n${cleaned}`;
 }
 
+function renderSharedPolicySection(): string {
+  return [
+    `## ${SHARED_POLICY_TITLE}`,
+    '',
+    ...SHARED_POLICY_BULLETS.map((line) => `- ${line}`),
+    '',
+  ].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // AGENTS.md template
 // ---------------------------------------------------------------------------
@@ -31,7 +58,12 @@ export function generateAgentsMd(name: string, description: string): string {
   return `${VERSION_MARKER}
 # AGENTS.md — ${name}
 
-## Guardrail Protocol (MANDATORY)
+## Adapter Role
+
+${AGENTS_ADAPTER_LINES[0]}
+${AGENTS_ADAPTER_LINES[1]}
+
+${renderSharedPolicySection()}## Guardrail Protocol (MANDATORY)
 
 Implementation work must use the executable guardrail flow:
 
@@ -168,7 +200,12 @@ function buildClaudeMdContent(name: string, description: string, state?: StateYa
   return `${VERSION_MARKER}
 # CLAUDE.md — ${name}
 
-## Guardrail Protocol (MANDATORY)
+## Adapter Role
+
+${CLAUDE_ADAPTER_LINES[0]}
+${CLAUDE_ADAPTER_LINES[1]}
+
+${renderSharedPolicySection()}## Guardrail Protocol (MANDATORY)
 
 For implementation-affecting work:
 

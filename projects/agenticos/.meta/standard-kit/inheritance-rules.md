@@ -33,6 +33,7 @@ These are generated or upgraded by the distillation layer.
 Implication:
 - downstream projects should not treat them as free-form scratch files
 - local project-specific content may exist, but upgrades must preserve the canonical guardrail protocol and template marker
+- generated adapter surfaces must preserve one canonical cross-agent execution contract even when runtime-specific guidance differs
 
 ### Copied templates
 
@@ -78,6 +79,7 @@ They should not need the full internal standards history unless they are doing s
 Generated files:
 - may be upgraded automatically when template markers change
 - must preserve user-extended sections where supported by the generator
+- must not drift into agent-specific policy forks
 
 Copied templates:
 - must not be silently replaced after project adoption
@@ -88,3 +90,14 @@ Copied templates:
 If older guidance elsewhere in `.meta/` conflicts with this package:
 - the standard kit wins
 - the conflicting file should be treated as legacy until updated
+
+## Rule 6: Adapter Surfaces Are Not Independent Policy Sources
+
+`AGENTS.md` and `CLAUDE.md` are adapter surfaces over the same canonical policy.
+
+They may vary in runtime-specific bootstrap and operator guidance, but they must not diverge on:
+
+- issue-first execution semantics
+- guardrail protocol meaning
+- recording protocol requirements
+- what counts as compliant implementation flow
