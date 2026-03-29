@@ -1,5 +1,5 @@
 import { access, readFile, writeFile } from 'fs/promises';
-import { dirname, join, resolve, sep } from 'path';
+import { basename, dirname, join, resolve, sep } from 'path';
 import yaml from 'yaml';
 import { loadRegistry } from './registry.js';
 
@@ -34,16 +34,26 @@ export interface GuardrailPersistenceResult {
 interface PersistGuardrailEvidenceArgs {
   command: GuardrailCommand;
   repo_path?: string;
+  project_path?: string;
   payload: Record<string, unknown>;
 }
 
 interface ResolvedProjectTarget {
   id: string;
   path: string;
+  statePath: string;
 }
 
 function normalizePath(path: string): string {
   return resolve(path);
+}
+
+function resolveProjectStatePath(projectPath: string, projectYaml: any): string {
+  const configuredStatePath = projectYaml?.agent_context?.current_state;
+  if (typeof configuredStatePath === 'string' && configuredStatePath.trim().length > 0) {
+    return join(projectPath, configuredStatePath.trim());
+  }
+  return join(projectPath, '.context', 'state.yaml');
 }
 
 function isWithinProject(repoPath: string, projectPath: string): boolean {
@@ -76,14 +86,13 @@ async function findProjectRootFromRepoPath(repoPath: string): Promise<ResolvedPr
 
   while (true) {
     const projectYamlPath = join(currentPath, '.project.yaml');
-    const statePath = join(currentPath, '.context', 'state.yaml');
     const hasProjectYaml = await pathExists(projectYamlPath);
-    const hasState = await pathExists(statePath);
 
-    if (hasProjectYaml && hasState) {
+    if (hasProjectYaml) {
+      let projectYaml: any = {};
       let projectId = currentPath.split(sep).filter(Boolean).pop() || 'unknown-project';
       try {
-        const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+        projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
         if (projectYaml?.meta?.id) {
           projectId = String(projectYaml.meta.id);
         }
@@ -91,9 +100,21 @@ async function findProjectRootFromRepoPath(repoPath: string): Promise<ResolvedPr
         // Fall back to directory-derived project id.
       }
 
+      const statePath = resolveProjectStatePath(currentPath, projectYaml);
+      const hasState = await pathExists(statePath);
+      if (!hasState) {
+        const parentPath = dirname(currentPath);
+        if (parentPath === currentPath) {
+          return null;
+        }
+        currentPath = parentPath;
+        continue;
+      }
+
       return {
         id: projectId,
         path: currentPath,
+        statePath,
       };
     }
 
@@ -105,7 +126,37 @@ async function findProjectRootFromRepoPath(repoPath: string): Promise<ResolvedPr
   }
 }
 
-async function resolveProjectTarget(repoPath: string): Promise<ResolvedProjectTarget | null> {
+async function resolveExplicitProjectTarget(projectPath: string): Promise<ResolvedProjectTarget | null> {
+  const normalizedProjectPath = normalizePath(projectPath);
+  const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
+  if (!(await pathExists(projectYamlPath))) {
+    return null;
+  }
+
+  let projectYaml: any = {};
+  try {
+    projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+  } catch {
+    projectYaml = {};
+  }
+
+  const statePath = resolveProjectStatePath(normalizedProjectPath, projectYaml);
+  if (!(await pathExists(statePath))) {
+    return null;
+  }
+
+  return {
+    id: String(projectYaml?.meta?.id || basename(normalizedProjectPath)),
+    path: normalizedProjectPath,
+    statePath,
+  };
+}
+
+async function resolveProjectTarget(repoPath: string, projectPath?: string): Promise<ResolvedProjectTarget | null> {
+  if (projectPath) {
+    return resolveExplicitProjectTarget(projectPath);
+  }
+
   const registry = await loadRegistry();
   const normalizedRepoPath = normalizePath(repoPath);
   const matchingProjects = registry.projects
@@ -118,6 +169,7 @@ async function resolveProjectTarget(repoPath: string): Promise<ResolvedProjectTa
     return {
       id: registryProject.id,
       path: registryProject.path,
+      statePath: join(registryProject.path, '.context', 'state.yaml'),
     };
   }
 
@@ -127,7 +179,7 @@ async function resolveProjectTarget(repoPath: string): Promise<ResolvedProjectTa
 export async function persistGuardrailEvidence(
   args: PersistGuardrailEvidenceArgs,
 ): Promise<GuardrailPersistenceResult> {
-  const { command, repo_path, payload } = args;
+  const { command, repo_path, project_path, payload } = args;
 
   if (!repo_path) {
     return {
@@ -137,16 +189,18 @@ export async function persistGuardrailEvidence(
     };
   }
 
-  const project = await resolveProjectTarget(repo_path);
+  const project = await resolveProjectTarget(repo_path, project_path);
   if (!project) {
     return {
       attempted: true,
       persisted: false,
-      reason: `repo_path is not within a resolvable AgenticOS project: ${repo_path}`,
+      reason: project_path
+        ? `project_path is not a resolvable AgenticOS project: ${project_path}`
+        : `repo_path is not within a resolvable AgenticOS project: ${repo_path}`,
     };
   }
 
-  const statePath = join(project.path, '.context', 'state.yaml');
+  const statePath = project.statePath;
   let state: StateYaml = {};
 
   try {

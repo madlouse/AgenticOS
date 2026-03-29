@@ -119,7 +119,6 @@ describe('persistGuardrailEvidence', () => {
     });
     accessMock
       .mockRejectedValueOnce(new Error('missing repo-level .project.yaml'))
-      .mockRejectedValueOnce(new Error('missing repo-level state'))
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined);
     readFileMock
@@ -142,6 +141,35 @@ describe('persistGuardrailEvidence', () => {
     expect(statePath).toBe('/workspace/source/projects/agenticos/.context/state.yaml');
     const writtenState = JSON.parse(content as string);
     expect(writtenState.guardrail_evidence.branch_bootstrap.issue_id).toBe('62');
+  });
+
+  it('uses explicit project_path when repo_path is a larger checkout root', async () => {
+    loadRegistryMock.mockResolvedValue({
+      active_project: null,
+      projects: [],
+    });
+    accessMock
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    readFileMock
+      .mockResolvedValueOnce(JSON.stringify({ meta: { id: 'agenticos-standards' }, agent_context: { current_state: '.context/state.yaml' } }))
+      .mockResolvedValueOnce(JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } }));
+
+    const result = await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/source',
+      project_path: '/workspace/source/projects/agenticos/standards',
+      payload: {
+        issue_id: '113',
+        result: { status: 'PASS' },
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.project_id).toBe('agenticos-standards');
+
+    const [statePath] = writeFileMock.mock.calls[0];
+    expect(statePath).toBe('/workspace/source/projects/agenticos/standards/.context/state.yaml');
   });
 
   it('does not write state when repo_path is outside managed projects', async () => {

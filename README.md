@@ -24,6 +24,13 @@ Homebrew does **not**:
 
 After `brew install`, bootstrap one supported agent below, restart it, and verify `agenticos_list` explicitly.
 
+For implementation-affecting work, AgenticOS also ships a hook-friendly guard wrapper at `tools/check-edit-boundary.sh`.
+Use it from local automation or any client-side pre-edit hook layer to fail closed unless:
+
+- the active project matches the intended managed project
+- the intended issue is explicit
+- the latest persisted `agenticos_preflight` for that issue and repo is `PASS`
+
 ### Option B — Manual install (from GitHub Releases)
 
 ```bash
@@ -125,7 +132,8 @@ The agent will call `agenticos_init` and set up the project structure automatica
 | `agenticos_switch` | Switch active project | `project` (ID or name) |
 | `agenticos_list` | List all projects | — |
 | `agenticos_status` | Show active project status | — |
-| `agenticos_preflight` | Evaluate implementation/PR guardrails | `task_type`, `repo_path`, `issue_id`, `declared_target_files` |
+| `agenticos_preflight` | Evaluate implementation/PR guardrails | `task_type`, `repo_path`, `project_path`, `issue_id`, `declared_target_files` |
+| `agenticos_edit_guard` | Fail closed before implementation edits unless project alignment and matching PASS preflight evidence exist | `issue_id`, `repo_path`, `project_path`, `declared_target_files` |
 | `agenticos_branch_bootstrap` | Create issue branch + isolated worktree from `origin/main` | `issue_id`, `slug`, `repo_path`, `worktree_root` |
 | `agenticos_pr_scope_check` | Validate commit/file scope before PR | `issue_id`, `repo_path`, `declared_target_files` |
 | `agenticos_health` | Check canonical checkout, entry-surface, and guardrail freshness | `repo_path`, `project_path`, `check_standard_kit` |
