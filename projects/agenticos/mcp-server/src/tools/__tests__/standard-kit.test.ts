@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import yaml from 'yaml';
-import { runStandardKitAdopt, runStandardKitUpgradeCheck } from '../standard-kit.js';
+import { runStandardKitAdopt, runStandardKitConformanceCheck, runStandardKitUpgradeCheck } from '../standard-kit.js';
 import { generateAgentsMd } from '../../utils/distill.js';
 
 async function writeRegistry(home: string, registry: unknown): Promise<void> {
@@ -23,10 +23,14 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   const home = await mkdtemp(join(tmpdir(), 'agenticos-standard-kit-'));
   const productRoot = join(home, 'projects', 'agenticos');
   const kitRoot = join(productRoot, '.meta', 'standard-kit');
+  const bootstrapRoot = join(productRoot, '.meta', 'bootstrap');
+  const canonicalServerRoot = join(productRoot, 'mcp-server', 'src');
   const templateRoot = join(productRoot, '.meta', 'templates');
   const projectRoot = join(home, 'projects', 'sample-project');
 
   await mkdir(kitRoot, { recursive: true });
+  await mkdir(bootstrapRoot, { recursive: true });
+  await mkdir(canonicalServerRoot, { recursive: true });
   await mkdir(templateRoot, { recursive: true });
   await mkdir(projectRoot, { recursive: true });
 
@@ -66,6 +70,17 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         'tasks/templates/sub-agent-handoff.md',
         'tasks/templates/submission-evidence.md',
       ],
+      required_behavior: [
+        'memory_layer_contracts',
+        'cross_agent_policy_contract',
+        'implementation_preflight',
+        'issue_first_branching',
+        'isolated_worktree_execution',
+        'edit_boundary_enforcement',
+        'pr_scope_validation',
+        'official_agent_adapter_surfaces',
+        'sub_agent_context_inheritance',
+      ],
     },
   };
 
@@ -78,6 +93,52 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   await writeFile(join(templateRoot, 'non-code-evaluation-rubric.yaml'), 'version: 0.1\nname: non-code-evaluation-rubric\n', 'utf-8');
   await writeFile(join(templateRoot, 'sub-agent-handoff.md'), '# Sub-Agent Handoff\n', 'utf-8');
   await writeFile(join(templateRoot, 'submission-evidence.md'), '# Submission Evidence\n', 'utf-8');
+  await writeFile(join(canonicalServerRoot, 'index.ts'), "name: 'agenticos_edit_guard'\n", 'utf-8');
+  await writeFile(
+    join(bootstrapRoot, 'agent-bootstrap-matrix.yaml'),
+    yaml.stringify({
+      version: 1,
+      primary_integration_mode: 'mcp-native',
+      supported_agents: [
+        {
+          id: 'claude-code',
+          label: 'Claude Code',
+          support_tier: 'official',
+          transport: 'stdio',
+          canonical_bootstrap_method: 'cli-command',
+          canonical_config_location: 'claude user config',
+          verification: ['call agenticos_list'],
+          transport_debug: ['restart Claude Code'],
+          routing_debug: ['use explicit tool calls'],
+        },
+        {
+          id: 'codex',
+          label: 'Codex',
+          support_tier: 'official',
+          transport: 'stdio',
+          canonical_bootstrap_method: 'cli-command',
+          canonical_config_location: 'codex config',
+          verification: ['call agenticos_list'],
+          transport_debug: ['restart Codex'],
+          routing_debug: ['use explicit tool calls'],
+        },
+      ],
+    }),
+    'utf-8',
+  );
+  await writeFile(
+    join(bootstrapRoot, 'cross-agent-execution-contract.yaml'),
+    yaml.stringify({
+      version: 1,
+      contract_id: 'cross-agent-execution-contract',
+      policy_invariants: [{ id: 'issue_first_execution' }],
+      adapter_surfaces: [
+        { id: 'codex-generic', generated_file: 'AGENTS.md' },
+        { id: 'claude-code', generated_file: 'CLAUDE.md' },
+      ],
+    }),
+    'utf-8',
+  );
 
   await writeRegistry(home, {
     version: '1.0.0',
@@ -240,6 +301,60 @@ describe('standard kit commands', () => {
       status: 'current',
       current_version: 4,
     });
+  });
+
+  it('conformance check passes after downstream adoption', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      project_description: 'Conformance test project',
+    });
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+      behavior_checks: Array<{ behavior: string; status: string }>;
+      adapter_checks: Array<{ agent_id: string; status: string; adapter_file: string }>;
+    };
+
+    expect(result.status).toBe('PASS');
+    expect(result.behavior_checks.every((item) => item.status === 'PASS')).toBe(true);
+    expect(result.adapter_checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ agent_id: 'claude-code', status: 'PASS', adapter_file: 'CLAUDE.md' }),
+        expect.objectContaining({ agent_id: 'codex', status: 'PASS', adapter_file: 'AGENTS.md' }),
+      ]),
+    );
+  });
+
+  it('conformance check fails when a generated adapter surface loses the shared policy block', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      project_description: 'Broken conformance project',
+    });
+    await writeFile(join(projectRoot, 'AGENTS.md'), '<!-- agenticos-template: v4 -->\n# AGENTS.md — Sample Project\n', 'utf-8');
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+      behavior_checks: Array<{ behavior: string; status: string }>;
+      adapter_checks: Array<{ agent_id: string; status: string }>;
+    };
+
+    expect(result.status).toBe('FAIL');
+    expect(result.behavior_checks.find((item) => item.behavior === 'cross_agent_policy_contract')).toMatchObject({ status: 'FAIL' });
+    expect(result.adapter_checks.find((item) => item.agent_id === 'codex')).toMatchObject({ status: 'PASS' });
   });
 
   it('upgrade check can resolve project identity from an existing .project.yaml through the active registry project', async () => {

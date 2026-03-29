@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
+import { getOfficialBootstrapAgents, loadAgentBootstrapMatrix } from './bootstrap-matrix.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
 
 interface StandardKitEntry {
@@ -23,6 +24,7 @@ interface StandardKitManifest {
   };
   adoption?: {
     required_files?: string[];
+    required_behavior?: string[];
   };
 }
 
@@ -71,6 +73,36 @@ export interface UpgradeCheckResult {
   missing_required_files: string[];
   generated_files: UpgradeCheckGeneratedStatus[];
   copied_templates: UpgradeCheckTemplateStatus[];
+}
+
+export interface ConformanceBehaviorStatus {
+  behavior: string;
+  status: 'PASS' | 'FAIL';
+  summary: string;
+  evidence_paths: string[];
+}
+
+export interface ConformanceAdapterStatus {
+  agent_id: string;
+  adapter_file: string;
+  status: 'PASS' | 'FAIL';
+  summary: string;
+}
+
+export interface StandardKitConformanceResult {
+  command: 'agenticos_standard_kit_conformance_check';
+  status: 'PASS' | 'FAIL';
+  summary: string;
+  project_path: string;
+  project_name: string;
+  project_id: string;
+  kit_id: string;
+  kit_version: string;
+  missing_required_files: string[];
+  generated_files: UpgradeCheckGeneratedStatus[];
+  copied_templates: UpgradeCheckTemplateStatus[];
+  behavior_checks: ConformanceBehaviorStatus[];
+  adapter_checks: ConformanceAdapterStatus[];
 }
 
 export async function loadStandardKitManifest(): Promise<StandardKitManifest> {
@@ -227,6 +259,20 @@ function getCopiedTemplateEntries(manifest: StandardKitManifest): StandardKitEnt
   return manifest.layers.copied_templates?.entries || [];
 }
 
+async function readProjectFile(projectPath: string, relativePath: string): Promise<string | null> {
+  const absolutePath = join(projectPath, relativePath);
+  if (!existsSync(absolutePath)) return null;
+  return readFile(absolutePath, 'utf-8');
+}
+
+function fileContainsAll(content: string | null, needles: string[]): boolean {
+  return !!content && needles.every((needle) => content.includes(needle));
+}
+
+function resolveOfficialAdapterFile(agentId: string): string {
+  return agentId === 'claude-code' ? 'CLAUDE.md' : 'AGENTS.md';
+}
+
 export async function adoptStandardKit(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<AdoptResult> {
   const manifest = await loadStandardKitManifest();
   const projectPath = await resolveProjectPath(args.project_path);
@@ -363,5 +409,193 @@ export async function checkStandardKitUpgrade(args: { project_path?: string; pro
     missing_required_files: missingRequiredFiles,
     generated_files: generatedFiles,
     copied_templates: copiedTemplates,
+  };
+}
+
+export async function checkStandardKitConformance(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<StandardKitConformanceResult> {
+  const manifest = await loadStandardKitManifest();
+  const upgrade = await checkStandardKitUpgrade(args);
+  const projectYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.project.yaml')) || '{}') as any;
+  const stateYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.context/state.yaml')) || '{}') as any;
+  const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
+  const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');
+  const officialAgents = getOfficialBootstrapAgents(await loadAgentBootstrapMatrix());
+
+  const behaviorChecks: ConformanceBehaviorStatus[] = [];
+
+  for (const behavior of manifest.adoption?.required_behavior || []) {
+    switch (behavior) {
+      case 'memory_layer_contracts': {
+        const pass = !!projectYaml?.memory_contract?.version
+          && !!projectYaml?.agent_context?.quick_start
+          && !!projectYaml?.agent_context?.current_state
+          && !!stateYaml?.memory_contract?.version
+          && Array.isArray(stateYaml?.loaded_context)
+          && stateYaml.loaded_context.includes('.context/quick-start.md');
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Project metadata and state preserve the memory-layer contract.'
+            : 'Project metadata or state is missing required memory-layer contract fields.',
+          evidence_paths: ['.project.yaml', '.context/state.yaml'],
+        });
+        break;
+      }
+      case 'cross_agent_policy_contract': {
+        const pass = fileContainsAll(agentsMd, [
+          'Canonical Policy (Shared Across Agents)',
+          'This project has one canonical AgenticOS execution policy',
+        ]) && fileContainsAll(claudeMd, [
+          'Canonical Policy (Shared Across Agents)',
+          'This project has one canonical AgenticOS execution policy',
+        ]);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Generated adapter docs expose the shared cross-agent policy block.'
+            : 'Generated adapter docs are missing the shared cross-agent policy block.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'implementation_preflight': {
+        const pass = fileContainsAll(agentsMd, ['agenticos_preflight']) && fileContainsAll(claudeMd, ['agenticos_preflight']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Both adapter surfaces require executable preflight before implementation edits.'
+            : 'One or more adapter surfaces are missing executable preflight guidance.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'issue_first_branching': {
+        const pass = fileContainsAll(agentsMd, ['issue-first']) && fileContainsAll(claudeMd, ['issue-first']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Both adapter surfaces preserve issue-first execution language.'
+            : 'One or more adapter surfaces are missing issue-first execution language.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'isolated_worktree_execution': {
+        const pass = fileContainsAll(agentsMd, ['agenticos_branch_bootstrap'])
+          && fileContainsAll(claudeMd, ['agenticos_branch_bootstrap', 'worktree']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Adapter surfaces preserve isolated branch/worktree execution guidance.'
+            : 'Adapter surfaces are missing isolated branch/worktree execution guidance.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'edit_boundary_enforcement': {
+        const indexSource = readFileSync(join(getAgenticOSHome(), 'projects', 'agenticos', 'mcp-server', 'src', 'index.ts'), 'utf-8');
+        const pass = indexSource.includes("name: 'agenticos_edit_guard'");
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Canonical MCP surface exposes executable edit-boundary enforcement.'
+            : 'Canonical MCP surface is missing executable edit-boundary enforcement.',
+          evidence_paths: ['projects/agenticos/mcp-server/src/index.ts'],
+        });
+        break;
+      }
+      case 'pr_scope_validation': {
+        const pass = fileContainsAll(agentsMd, ['agenticos_pr_scope_check']) && fileContainsAll(claudeMd, ['agenticos_pr_scope_check']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Both adapter surfaces require PR scope validation.'
+            : 'One or more adapter surfaces are missing PR scope validation guidance.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'official_agent_adapter_surfaces': {
+        const pass = officialAgents.every((agent) => existsSync(join(upgrade.project_path, resolveOfficialAdapterFile(agent.id))));
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Official agents map to present adapter surfaces.'
+            : 'One or more official agents do not map to a present adapter surface.',
+          evidence_paths: officialAgents.map((agent) => resolveOfficialAdapterFile(agent.id)),
+        });
+        break;
+      }
+      case 'sub_agent_context_inheritance': {
+        const pass = existsSync(join(upgrade.project_path, 'tasks', 'templates', 'sub-agent-handoff.md'));
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Sub-agent handoff template is present for downstream inheritance.'
+            : 'Sub-agent handoff template is missing.',
+          evidence_paths: ['tasks/templates/sub-agent-handoff.md'],
+        });
+        break;
+      }
+      default:
+        behaviorChecks.push({
+          behavior,
+          status: 'FAIL',
+          summary: `No executable conformance check is implemented for required behavior "${behavior}".`,
+          evidence_paths: [],
+        });
+        break;
+    }
+  }
+
+  const adapterChecks: ConformanceAdapterStatus[] = officialAgents.map((agent) => {
+    const adapterFile = resolveOfficialAdapterFile(agent.id);
+    const generatedStatus = upgrade.generated_files.find((item) => item.path === adapterFile);
+    const pass = generatedStatus?.status === 'current';
+    return {
+      agent_id: agent.id,
+      adapter_file: adapterFile,
+      status: pass ? 'PASS' : 'FAIL',
+      summary: pass
+        ? `${agent.id} is covered by a current generated adapter surface.`
+        : `${agent.id} is missing a current generated adapter surface.`,
+    };
+  });
+
+  const failedBehaviors = behaviorChecks.filter((item) => item.status === 'FAIL');
+  const failedAdapters = adapterChecks.filter((item) => item.status === 'FAIL');
+  const generatedDrift = upgrade.generated_files.filter((item) => item.status !== 'current');
+  const status = upgrade.missing_required_files.length === 0
+    && failedBehaviors.length === 0
+    && failedAdapters.length === 0
+    && generatedDrift.length === 0
+    ? 'PASS'
+    : 'FAIL';
+
+  return {
+    command: 'agenticos_standard_kit_conformance_check',
+    status,
+    summary: status === 'PASS'
+      ? 'standard-kit conformance passed'
+      : `standard-kit conformance failed: ${upgrade.missing_required_files.length} missing files, ${failedBehaviors.length} failed behaviors, ${failedAdapters.length} failed adapters`,
+    project_path: upgrade.project_path,
+    project_name: upgrade.project_name,
+    project_id: upgrade.project_id,
+    kit_id: manifest.kit_id,
+    kit_version: manifest.kit_version,
+    missing_required_files: upgrade.missing_required_files,
+    generated_files: upgrade.generated_files,
+    copied_templates: upgrade.copied_templates,
+    behavior_checks: behaviorChecks,
+    adapter_checks: adapterChecks,
   };
 }

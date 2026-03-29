@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runNonCodeEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -279,6 +279,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_standard_kit_conformance_check',
+      description: 'Check whether a downstream project conforms to the canonical standard-kit workflow contract, not just the file package.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses the active project from the registry.' },
+          project_name: { type: 'string', description: 'Optional project name override used for reporting when .project.yaml is missing.' },
+          project_description: { type: 'string', description: 'Optional project description override used for reporting.' },
+        },
+      },
+    },
+    {
       name: 'agenticos_non_code_evaluate',
       description: 'Validate a completed non-code evaluation rubric against the canonical contract and persist the latest structured evidence into project state.',
       inputSchema: {
@@ -326,6 +338,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runStandardKitAdopt(args ?? {}) }] };
     case 'agenticos_standard_kit_upgrade_check':
       return { content: [{ type: 'text', text: await runStandardKitUpgradeCheck(args ?? {}) }] };
+    case 'agenticos_standard_kit_conformance_check':
+      return { content: [{ type: 'text', text: await runStandardKitConformanceCheck(args ?? {}) }] };
     case 'agenticos_non_code_evaluate':
       return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
     default:
