@@ -1,0 +1,39 @@
+version: 1
+primary_policy_surface: cross-agent-execution-contract
+adapters:
+  - agent_id: claude-code
+    support_tier: official
+    adapter_file: CLAUDE.md
+    adapter_family: claude
+    required_runtime_guidance:
+      - '`CLAUDE.md` is the Claude Code adapter surface for this project.'
+      - '## Claude Runtime Notes'
+      - 'Claude CLI-managed user MCP config'
+      - 'optional local stop-hook reminders'
+  - agent_id: codex
+    support_tier: official
+    adapter_file: AGENTS.md
+    adapter_family: generic
+    required_runtime_guidance:
+      - '`AGENTS.md` is the Codex/generic adapter surface for this project.'
+      - '## Codex / Generic Runtime Notes'
+      - 'use explicit `agenticos_*` tool calls'
+      - 'Bootstrap differences are runtime concerns'
+  - agent_id: cursor
+    support_tier: official
+    adapter_file: AGENTS.md
+    adapter_family: generic
+    required_runtime_guidance:
+      - '`AGENTS.md` is the Codex/generic adapter surface for this project.'
+      - '## Codex / Generic Runtime Notes'
+      - 'use explicit `agenticos_*` tool calls'
+      - 'Bootstrap differences are runtime concerns'
+  - agent_id: gemini-cli
+    support_tier: official
+    adapter_file: AGENTS.md
+    adapter_family: generic
+    required_runtime_guidance:
+      - '`AGENTS.md` is the Codex/generic adapter surface for this project.'
+      - '## Codex / Generic Runtime Notes'
+      - 'use explicit `agenticos_*` tool calls'
+      - 'Bootstrap differences are runtime concerns'

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
-import { getOfficialBootstrapAgents, loadAgentBootstrapMatrix } from './bootstrap-matrix.js';
+import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapter-matrix.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
 
 interface StandardKitEntry {
@@ -269,10 +269,6 @@ function fileContainsAll(content: string | null, needles: string[]): boolean {
   return !!content && needles.every((needle) => content.includes(needle));
 }
 
-function resolveOfficialAdapterFile(agentId: string): string {
-  return agentId === 'claude-code' ? 'CLAUDE.md' : 'AGENTS.md';
-}
-
 export async function adoptStandardKit(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<AdoptResult> {
   const manifest = await loadStandardKitManifest();
   const projectPath = await resolveProjectPath(args.project_path);
@@ -419,7 +415,7 @@ export async function checkStandardKitConformance(args: { project_path?: string;
   const stateYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.context/state.yaml')) || '{}') as any;
   const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
   const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');
-  const officialAgents = getOfficialBootstrapAgents(await loadAgentBootstrapMatrix());
+  const officialAdapters = getOfficialAgentAdapters(await loadAgentAdapterMatrix());
 
   const behaviorChecks: ConformanceBehaviorStatus[] = [];
 
@@ -523,14 +519,14 @@ export async function checkStandardKitConformance(args: { project_path?: string;
         break;
       }
       case 'official_agent_adapter_surfaces': {
-        const pass = officialAgents.every((agent) => existsSync(join(upgrade.project_path, resolveOfficialAdapterFile(agent.id))));
+        const pass = officialAdapters.every((adapter) => existsSync(join(upgrade.project_path, adapter.adapter_file)));
         behaviorChecks.push({
           behavior,
           status: pass ? 'PASS' : 'FAIL',
           summary: pass
             ? 'Official agents map to present adapter surfaces.'
             : 'One or more official agents do not map to a present adapter surface.',
-          evidence_paths: officialAgents.map((agent) => resolveOfficialAdapterFile(agent.id)),
+          evidence_paths: officialAdapters.map((adapter) => adapter.adapter_file),
         });
         break;
       }
@@ -557,17 +553,18 @@ export async function checkStandardKitConformance(args: { project_path?: string;
     }
   }
 
-  const adapterChecks: ConformanceAdapterStatus[] = officialAgents.map((agent) => {
-    const adapterFile = resolveOfficialAdapterFile(agent.id);
-    const generatedStatus = upgrade.generated_files.find((item) => item.path === adapterFile);
-    const pass = generatedStatus?.status === 'current';
+  const adapterChecks: ConformanceAdapterStatus[] = officialAdapters.map((adapter) => {
+    const content = adapter.adapter_file === 'CLAUDE.md' ? claudeMd : agentsMd;
+    const generatedStatus = upgrade.generated_files.find((item) => item.path === adapter.adapter_file);
+    const pass = generatedStatus?.status === 'current'
+      && fileContainsAll(content, adapter.required_runtime_guidance);
     return {
-      agent_id: agent.id,
-      adapter_file: adapterFile,
+      agent_id: adapter.agent_id,
+      adapter_file: adapter.adapter_file,
       status: pass ? 'PASS' : 'FAIL',
       summary: pass
-        ? `${agent.id} is covered by a current generated adapter surface.`
-        : `${agent.id} is missing a current generated adapter surface.`,
+        ? `${adapter.agent_id} is covered by a current generated adapter surface with required runtime guidance.`
+        : `${adapter.agent_id} is missing a current generated adapter surface or required runtime guidance.`,
     };
   });
 
