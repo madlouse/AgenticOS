@@ -94,6 +94,31 @@ describe('runPreflight', () => {
     expect(result.redirect_actions[0]).toContain('isolated issue branch/worktree');
   });
 
+  it('passes project_path through to guardrail evidence persistence when provided', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --abbrev-ref HEAD': 'feat/113-fail-closed-edit-boundaries\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/113-fail-closed-edit-boundaries\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+
+    await runPreflight({
+      issue_id: '113',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      project_path: '/repo/projects/agenticos/standards',
+      declared_target_files: ['projects/agenticos/mcp-server/src/index.ts'],
+      worktree_required: true,
+    });
+
+    expect(persistGuardrailEvidenceMock).toHaveBeenCalledWith(expect.objectContaining({
+      project_path: '/repo/projects/agenticos/standards',
+    }));
+  });
+
   it('returns BLOCK when branch contains unrelated commits relative to origin/main', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',

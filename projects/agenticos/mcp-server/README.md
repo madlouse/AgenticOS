@@ -20,6 +20,8 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, bootstrap one supported agent, restart that agent, then explicitly verify `agenticos_list` works before relying on project-intent routing.
 
+When the client supports a pre-edit hook or local command wrapper, point that layer at `tools/check-edit-boundary.sh` so implementation edits fail closed unless project alignment and matching PASS preflight evidence already exist.
+
 ### Homebrew Post-Install Contract
 
 If the user installed AgenticOS with Homebrew:
@@ -179,10 +181,23 @@ Run machine-checkable guardrail preflight before implementation or PR creation.
 **Parameters**:
 - `task_type` (required)
 - `repo_path` (required)
+- `project_path` (optional, but recommended when `repo_path` is a larger checkout or worktree rather than the managed project root)
 - `issue_id` (required for implementation work)
 - `declared_target_files` (required for implementation work)
 
 **Returns**: JSON with `PASS`, `BLOCK`, or `REDIRECT`
+
+### agenticos_edit_guard
+Fail closed before implementation-affecting edits unless the active project and latest persisted preflight evidence already match the intended edit.
+
+**Parameters**:
+- `repo_path` (required)
+- `task_type` (required)
+- `declared_target_files` (required)
+- `issue_id` (required for implementation work)
+- `project_path` (optional, but recommended when `repo_path` is a self-hosting checkout or larger worktree)
+
+**Returns**: JSON with `PASS` or `BLOCK`
 
 ### agenticos_branch_bootstrap
 Create an issue branch and isolated worktree from the intended remote base.
