@@ -23,9 +23,21 @@ export const AGENTS_ADAPTER_LINES = [
   'It must expose the same canonical policy as other agent adapters rather than defining a different workflow.',
 ] as const;
 
+export const AGENTS_RUNTIME_GUIDANCE_TITLE = 'Codex / Generic Runtime Notes';
+export const AGENTS_RUNTIME_GUIDANCE_BULLETS = [
+  'If natural-language routing is weak, use explicit `agenticos_*` tool calls before treating the issue as transport failure.',
+  'Bootstrap differences are runtime concerns rather than policy changes.',
+] as const;
+
 export const CLAUDE_ADAPTER_LINES = [
   '`CLAUDE.md` is the Claude Code adapter surface for this project.',
   'It must expose the same canonical policy as other agent adapters while allowing Claude-specific operator guidance.',
+] as const;
+
+export const CLAUDE_RUNTIME_GUIDANCE_TITLE = 'Claude Runtime Notes';
+export const CLAUDE_RUNTIME_GUIDANCE_BULLETS = [
+  'Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.',
+  'Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.',
 ] as const;
 
 /** Extract template version from an existing file. Returns 0 if no marker found (v1 or earlier). */
@@ -50,6 +62,15 @@ function renderSharedPolicySection(): string {
   ].join('\n');
 }
 
+function renderRuntimeGuidanceSection(title: string, bullets: readonly string[]): string {
+  return [
+    `## ${title}`,
+    '',
+    ...bullets.map((line) => `- ${line}`),
+    '',
+  ].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // AGENTS.md template
 // ---------------------------------------------------------------------------
@@ -63,7 +84,7 @@ export function generateAgentsMd(name: string, description: string): string {
 ${AGENTS_ADAPTER_LINES[0]}
 ${AGENTS_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 Implementation work must use the executable guardrail flow:
 
@@ -205,7 +226,7 @@ function buildClaudeMdContent(name: string, description: string, state?: StateYa
 ${CLAUDE_ADAPTER_LINES[0]}
 ${CLAUDE_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 For implementation-affecting work:
 
