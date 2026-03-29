@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { CURRENT_TEMPLATE_VERSION, generateAgentsMd, generateClaudeMd } from '../distill.js';
+import {
+  AGENTS_ADAPTER_LINES,
+  CLAUDE_ADAPTER_LINES,
+  CURRENT_TEMPLATE_VERSION,
+  SHARED_POLICY_BULLETS,
+  SHARED_POLICY_TITLE,
+  generateAgentsMd,
+  generateClaudeMd,
+} from '../distill.js';
 
 describe('distill templates', () => {
-  it('generates AGENTS.md with the current template marker and guardrail flow', () => {
+  it('generates AGENTS.md with the current template marker, adapter role, and guardrail flow', () => {
     const content = generateAgentsMd('Demo Project', 'Guardrail test');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(3);
-    expect(content).toContain('<!-- agenticos-template: v3 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(4);
+    expect(content).toContain('<!-- agenticos-template: v4 -->');
+    expect(content).toContain('## Adapter Role');
+    expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
+    expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
+    expect(content).toContain(`## ${SHARED_POLICY_TITLE}`);
+    for (const bullet of SHARED_POLICY_BULLETS) {
+      expect(content).toContain(bullet);
+    }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
     expect(content).toContain('agenticos_branch_bootstrap');
@@ -16,9 +31,16 @@ describe('distill templates', () => {
     expect(content).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
   });
 
-  it('generates CLAUDE.md with guardrail flow and template navigation', () => {
+  it('generates CLAUDE.md with adapter role, shared policy, and template navigation', () => {
     const content = generateClaudeMd('Demo Project', 'Guardrail test');
 
+    expect(content).toContain('## Adapter Role');
+    expect(content).toContain(CLAUDE_ADAPTER_LINES[0]);
+    expect(content).toContain(CLAUDE_ADAPTER_LINES[1]);
+    expect(content).toContain(`## ${SHARED_POLICY_TITLE}`);
+    for (const bullet of SHARED_POLICY_BULLETS) {
+      expect(content).toContain(bullet);
+    }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
     expect(content).toContain('agenticos_branch_bootstrap');
