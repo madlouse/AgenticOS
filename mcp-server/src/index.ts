@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runNonCodeEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runNonCodeEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -134,6 +134,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: 'Classified task type',
           },
           repo_path: { type: 'string', description: 'Absolute repository or worktree path to evaluate' },
+          project_path: { type: 'string', description: 'Optional managed project root when repo_path is a larger checkout or worktree.' },
           remote_base_branch: { type: 'string', description: 'Remote base branch to compare against (default: origin/main)' },
           declared_target_files: {
             type: 'array',
@@ -154,6 +155,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['task_type', 'repo_path'],
+      },
+    },
+    {
+      name: 'agenticos_edit_guard',
+      description: 'Fail closed before implementation-affecting edits unless active-project alignment and matching PASS preflight evidence already exist.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current edit.' },
+          task_type: {
+            type: 'string',
+            enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bootstrap'],
+            description: 'Classified task type. Enforcement applies to implementation.',
+          },
+          repo_path: { type: 'string', description: 'Absolute repository or worktree path where the edit would occur.' },
+          project_path: { type: 'string', description: 'Optional explicit managed project root when repo_path is not itself inside the managed project.' },
+          declared_target_files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Exact target files the edit intends to mutate. Must remain inside the latest PASS preflight scope.',
+          },
+        },
+        required: ['repo_path', 'task_type', 'declared_target_files'],
       },
     },
     {
@@ -288,6 +312,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await getStatus() }] };
     case 'agenticos_preflight':
       return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
+    case 'agenticos_edit_guard':
+      return { content: [{ type: 'text', text: await runEditGuard(args ?? {}) }] };
     case 'agenticos_branch_bootstrap':
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
     case 'agenticos_pr_scope_check':

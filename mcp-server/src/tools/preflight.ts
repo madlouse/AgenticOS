@@ -12,6 +12,7 @@ interface PreflightArgs {
   issue_id?: string;
   task_type?: TaskType;
   repo_path?: string;
+  project_path?: string;
   remote_base_branch?: string;
   declared_target_files?: string[];
   structural_move?: boolean;
@@ -119,6 +120,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     issue_id,
     task_type = 'discussion_only',
     repo_path,
+    project_path,
     remote_base_branch = 'origin/main',
     declared_target_files = [],
     structural_move = false,
@@ -157,8 +159,10 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     finalized.persistence = await persistGuardrailEvidence({
       command: 'agenticos_preflight',
       repo_path,
+      project_path,
       payload: {
         issue_id: issue_id || null,
+        project_path: project_path || null,
         task_type,
         declared_target_files,
         structural_move,
@@ -225,8 +229,10 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
   finalized.persistence = await persistGuardrailEvidence({
     command: 'agenticos_preflight',
     repo_path,
+    project_path,
     payload: {
       issue_id: issue_id || null,
+      project_path: project_path || null,
       task_type,
       declared_target_files,
       structural_move,
