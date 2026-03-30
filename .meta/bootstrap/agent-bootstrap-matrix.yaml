@@ -1,5 +1,12 @@
 version: 1
 primary_integration_mode: mcp-native
+verification_contract:
+  canonical_runtime_entrypoint: agenticos-mcp
+  legacy_source_checkout_paths_unsupported: true
+  automation_boundary: manual_agent_cli
+  automation_rationale:
+    - official MCP registrations live in agent-owned user config outside AGENTICOS_HOME
+    - agenticos_health remains repo/project scoped and does not rewrite per-agent MCP settings
 supported_agents:
   - id: claude-code
     label: Claude Code
@@ -15,9 +22,15 @@ supported_agents:
     transport_debug:
       - if `agenticos` is missing from `claude mcp list`, MCP registration failed
       - if the server is listed but unavailable, confirm `agenticos-mcp --version` works and restart Claude Code
+      - if `claude mcp get agenticos` shows `Command: node` with a legacy source-checkout build path, remove and re-add the server with `agenticos-mcp`
     routing_debug:
       - if tools are available but project-intent prompts do not trigger routing, load the project `CLAUDE.md` and `AGENTS.md`
       - call the relevant `agenticos_*` tool explicitly before treating the problem as transport failure
+    repair:
+      - run `claude mcp get agenticos`
+      - if the command is not `agenticos-mcp`, run `claude mcp remove agenticos -s user`
+      - re-register with `claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp`
+      - restart Claude Code and verify with `claude mcp list`, `/mcp`, and `agenticos_list`
   - id: codex
     label: Codex
     support_tier: official
@@ -32,9 +45,15 @@ supported_agents:
     transport_debug:
       - if `agenticos` is missing from `codex mcp list`, registration did not land in the active config
       - if `agenticos` exists but fails to start, confirm `agenticos-mcp --version` works and restart Codex
+      - if `codex mcp get agenticos` shows a non-canonical command or a legacy source-checkout path, remove and re-add the server with `agenticos-mcp`
     routing_debug:
       - Codex transport success does not guarantee natural-language project-intent routing
       - if routing is weak, use explicit `agenticos_*` tool calls and ensure project instructions are loaded
+    repair:
+      - run `codex mcp list`
+      - if `agenticos` is missing, register it with `codex mcp add agenticos -- agenticos-mcp`
+      - if `codex mcp get agenticos` shows a command other than `agenticos-mcp`, run `codex mcp remove agenticos`
+      - re-register with `codex mcp add agenticos -- agenticos-mcp`, restart Codex, and verify with `codex mcp list` plus `agenticos_list`
   - id: cursor
     label: Cursor
     support_tier: official

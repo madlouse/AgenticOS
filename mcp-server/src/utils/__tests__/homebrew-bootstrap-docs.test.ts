@@ -47,6 +47,10 @@ describe('homebrew bootstrap docs', () => {
       expect(normalized).not.toContain('seed workspace');
       expect(normalized).not.toContain('default: ~/agenticos');
       expect(normalized).not.toContain('product default: ~/agenticos');
+      expect(doc).toContain('claude mcp get agenticos');
+      expect(doc).toContain('claude mcp remove agenticos');
+      expect(doc).toContain('codex mcp get agenticos');
+      expect(doc).toContain('codex mcp remove agenticos');
     }
   });
 });

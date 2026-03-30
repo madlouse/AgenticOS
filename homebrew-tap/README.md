@@ -56,6 +56,21 @@ Then restart the AI tool and confirm `agenticos_list` works.
 
 Homebrew policy is reminder-only today. It does not silently mutate user agent configs.
 
+If a previous registration still points at a source checkout instead of `agenticos-mcp`, repair it manually:
+
+```bash
+# Claude Code
+claude mcp get agenticos
+claude mcp remove agenticos -s user
+claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+
+# Codex
+codex mcp list
+codex mcp get agenticos
+codex mcp remove agenticos
+codex mcp add agenticos -- agenticos-mcp
+```
+
 ## Upgrade
 
 ```bash

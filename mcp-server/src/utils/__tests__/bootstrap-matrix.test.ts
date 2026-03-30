@@ -18,6 +18,12 @@ async function setupBootstrapHome(): Promise<string> {
     yaml.stringify({
       version: 1,
       primary_integration_mode: 'mcp-native',
+      verification_contract: {
+        canonical_runtime_entrypoint: 'agenticos-mcp',
+        legacy_source_checkout_paths_unsupported: true,
+        automation_boundary: 'manual_agent_cli',
+        automation_rationale: ['agent-owned config'],
+      },
       supported_agents: [
         {
           id: 'claude-code',
@@ -30,6 +36,7 @@ async function setupBootstrapHome(): Promise<string> {
           verification: ['claude mcp list'],
           transport_debug: ['transport'],
           routing_debug: ['routing'],
+          repair: ['claude mcp get agenticos'],
         },
       ],
       experimental_agents: [
@@ -60,6 +67,12 @@ async function setupBootstrapHomeWithoutExperimental(): Promise<string> {
     yaml.stringify({
       version: 1,
       primary_integration_mode: 'mcp-native',
+      verification_contract: {
+        canonical_runtime_entrypoint: 'agenticos-mcp',
+        legacy_source_checkout_paths_unsupported: true,
+        automation_boundary: 'manual_agent_cli',
+        automation_rationale: ['agent-owned config'],
+      },
       supported_agents: [
         {
           id: 'codex',
@@ -71,6 +84,7 @@ async function setupBootstrapHomeWithoutExperimental(): Promise<string> {
           verification: ['codex mcp list'],
           transport_debug: ['transport'],
           routing_debug: ['routing'],
+          repair: ['codex mcp list'],
         },
       ],
     }),
@@ -92,6 +106,7 @@ describe('bootstrap matrix', () => {
 
     expect(matrix.version).toBe(1);
     expect(matrix.primary_integration_mode).toBe('mcp-native');
+    expect(matrix.verification_contract.canonical_runtime_entrypoint).toBe('agenticos-mcp');
     expect(matrix.supported_agents.map((agent) => agent.id)).toEqual(['claude-code']);
   });
 
@@ -132,5 +147,17 @@ describe('bootstrap matrix', () => {
     const matrix = await loadAgentBootstrapMatrix();
 
     expect(getOfficialBootstrapAgents(matrix).map((agent) => agent.id)).toEqual(['claude-code']);
+  });
+
+  it('keeps repair guidance on official agent entries and records the manual verification boundary', async () => {
+    const home = await setupBootstrapHome();
+    process.env.AGENTICOS_HOME = home;
+
+    const matrix = await loadAgentBootstrapMatrix();
+    const agent = getBootstrapAgent(matrix, 'claude-code');
+
+    expect(matrix.verification_contract.legacy_source_checkout_paths_unsupported).toBe(true);
+    expect(matrix.verification_contract.automation_boundary).toBe('manual_agent_cli');
+    expect(agent.repair).toContain('claude mcp get agenticos');
   });
 });
