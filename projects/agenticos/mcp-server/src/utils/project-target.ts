@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, type Project, type Registry } from './registry.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
 
 export interface ResolvedManagedProjectTarget {
   registry: Registry;
@@ -109,6 +110,12 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
   if (metaName && metaName !== project.name) {
     throw new Error(
       `Project identity mismatch: registry name "${project.name}" does not match .project.yaml meta.name "${metaName}".`
+    );
+  }
+
+  if (isArchivedReferenceProject(projectYaml, project.status)) {
+    throw new Error(
+      `${buildArchivedReferenceMessage(project.name, projectYaml?.archive_contract?.replacement_project)} ${args.commandName} only works with active managed projects.`
     );
   }
 

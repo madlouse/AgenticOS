@@ -421,6 +421,47 @@ describe('standard kit commands', () => {
     expect(result.adapter_checks.find((item) => item.agent_id === 'codex')).toMatchObject({ status: 'PASS' });
   });
 
+  it('conformance check skips archived reference projects', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeFile(
+      join(projectRoot, '.project.yaml'),
+      yaml.stringify({
+        meta: {
+          name: 'Archived Project',
+          id: 'archived-project',
+          description: 'Archived reference content',
+        },
+        archive_contract: {
+          version: 1,
+          kind: 'archived_reference',
+          managed_project: false,
+          execution_mode: 'reference_only',
+          replacement_project: 'agenticos-standards',
+        },
+      }),
+      'utf-8',
+    );
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+    })) as {
+      status: string;
+      summary: string;
+      behavior_checks: unknown[];
+      adapter_checks: unknown[];
+      missing_required_files: unknown[];
+    };
+
+    expect(result.status).toBe('SKIP');
+    expect(result.summary).toContain('archived reference content');
+    expect(result.summary).toContain('agenticos-standards');
+    expect(result.behavior_checks).toEqual([]);
+    expect(result.adapter_checks).toEqual([]);
+    expect(result.missing_required_files).toEqual([]);
+  });
+
   it('upgrade check can resolve project identity from an existing .project.yaml through the active registry project', async () => {
     const { home, projectRoot } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;

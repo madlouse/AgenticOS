@@ -1,9 +1,19 @@
 meta:
   name: agentic-os-development
   id: agentic-os-development
-  description: ""
+  description: Archived reference material from the pre-consolidation standalone AgenticOS development workspace.
   created: 2026-03-20
   version: 1.0.0
 agent_context:
   quick_start: .context/quick-start.md
   current_state: .context/state.yaml
+archive_contract:
+  version: 1
+  kind: archived_reference
+  managed_project: false
+  execution_mode: reference_only
+  replacement_project: agenticos-standards
+  canonical_code_root: ../agenticos
+  notes:
+    - Do not activate this directory with agenticos_switch.
+    - Use projects/agenticos for implementation and projects/agenticos/standards for canonical workflow metadata.

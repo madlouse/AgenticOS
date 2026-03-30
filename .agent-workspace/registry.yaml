@@ -1,6 +1,6 @@
 version: 1.0.0
 last_updated: 2026-03-20T07:05:35.299Z
-active_project: agentic-os-development
+active_project: null
 projects:
   - id: ghostty-optimization
     name: Ghostty Optimization
@@ -11,7 +11,7 @@ projects:
   - id: agentic-os-development
     name: AgenticOS Development
     path: projects/agentic-os-development
-    status: active
+    status: archived
     created: 2026-03-16
     last_accessed: 2026-03-20T07:04:07.050Z
   - id: agentic-devops
@@ -20,9 +20,3 @@ projects:
     status: active
     created: 2026-03-16
     last_accessed: 2026-03-16T08:24:00Z
-  - id: agentic-os-development
-    name: agentic-os-development
-    path: projects/agentic-os-development
-    status: active
-    created: 2026-03-20
-    last_accessed: 2026-03-20T07:05:35.299Z
