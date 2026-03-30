@@ -19,6 +19,13 @@ working_memory:
     - 用 provenance 文档明确 wrapper 边界和证据强度
   pending:
     - 如后续找到更原始的项目级 `.context/`、`knowledge/` 或 `.project.yaml`，应更新当前 wrapper
+memory_contract:
+  version: 1
+  quick_start_role: project_orientation
+  state_role: operational_working_state
+  conversations_role: append_only_session_history
+  knowledge_role: durable_synthesis
+  tasks_role: execution_artifacts
 loaded_context:
   - .project.yaml
   - .context/quick-start.md

@@ -1,51 +1,117 @@
+<!-- agenticos-template: v4 -->
 # CLAUDE.md — OKR Management
 
-## Wrapper Notice
+## Adapter Role
 
-> This project is an **external-source wrapper** restored on 2026-03-25.
-> The strongest verified canonical content currently lives under:
-> `/Users/jeking/work/02.目标绩效/00.OKR管理/`
->
-> Do not claim this directory is a byte-identical restoration of the original lost `projects/okr-management` tree.
+`CLAUDE.md` is the Claude Code adapter surface for this project.
+It must expose the same canonical policy as other agent adapters while allowing Claude-specific operator guidance.
 
-## Project Purpose
+## Canonical Policy (Shared Across Agents)
 
-这是金科研发部 OKR（目标与关键结果）规划与迭代管理项目。
+- This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.
+- Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.
+- PR creation or merge must not happen before executable scope validation passes.
+- Recording and save flow remain canonical project requirements rather than runtime-specific preferences.
+## Claude Runtime Notes
 
-当前项目壳的职责是：
+- Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.
+- Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.
+## Guardrail Protocol (MANDATORY)
 
-- 提供可恢复的 AgenticOS 项目入口
-- 记录 external-source 语义和恢复来源
-- 暴露已验证的关键年度 / 季度 OKR 文档
-- 让 Agent 在进入项目时知道应优先读取哪些材料
+For implementation-affecting work:
+
+1. call `agenticos_preflight` before editing
+2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+3. before PR creation or merge, call `agenticos_pr_scope_check`
+
+If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
+
+## MANDATORY: Recording Protocol
+
+> This is an AgenticOS project. All session activity MUST be recorded.
+> Recording is not optional — it is the core function of this system.
+
+### During Session
+
+After completing any meaningful unit of work (feature, fix, design decision, analysis), call `agenticos_record`:
+
+```
+agenticos_record({
+  summary: "what happened",
+  decisions: ["decision 1", ...],
+  outcomes: ["outcome 1", ...],
+  pending: ["next step 1", ...],
+  current_task: { title: "task name", status: "in_progress" }
+})
+```
+
+### Before Session Ends
+
+When the user signals session end (says goodbye, thanks, done, or stops responding), you MUST:
+
+1. Call `agenticos_record` with a complete session summary
+2. Call `agenticos_save` to commit to Git
+
+**If you skip this step, all context from this session is permanently lost.**
+
+---
 
 ## Session Start Protocol
 
-进入本项目后，按以下顺序加载上下文：
+When you open this project in a new session, **immediately do the following**:
 
-1. `.project.yaml`
-2. `.context/quick-start.md`
-3. `.context/state.yaml`
-4. `knowledge/external-source-index.md`
-5. `knowledge/recovery-provenance.md`
-6. `knowledge/2026-annual-okr.md`
-7. `knowledge/2026-q1-okr.md`
+1. Read the "Current State" section below
+2. Greet the user with a brief status report:
 
-## Working Rules
+```
+📍 项目：OKR Management
+📌 上次进展：[current_task title + status]
+🎯 当前待办：[top pending items]
+💡 建议下一步：[recommended next action]
 
-1. 优先把本项目视为“OKR 管理入口壳”，不是完整内容镜像。
-2. 当需要更完整历史材料时，回到 external source：
-   - `/Users/jeking/work/02.目标绩效/00.OKR管理/`
-3. 只能在证据足够时把 external docs 纳入项目本体。
-4. 如果后续找到更原始的 `projects/okr-management` 目录证据，应更新 `knowledge/recovery-provenance.md`。
+继续上次的工作，还是有新的方向？
+```
 
-## Useful Navigation
+3. Wait for the user's direction before proceeding
 
-| Path | Purpose |
-|------|---------|
+---
+
+## Project DNA
+
+**一句话定位**: External-source wrapper project for the R&D OKR corpus, recovered from verified local sources on 2026-03-25.
+
+**核心设计原则**: (待补充 — 在项目推进中逐步完善)
+
+**技术栈**: (待补充)
+## Current State
+
+<!-- AGENT_CONTEXT_START -->
+**Last Updated**: 2026-03-29T16:41:10.623Z
+
+**Current Task**: No active task (status: unknown)
+
+**Active Items**:
+- Define project goals
+- Set up initial tasks
+
+
+**Next Action**: Define project goals
+<!-- AGENT_CONTEXT_END -->
+
+---
+
+## Navigation
+
+| 目录/文件 | 用途 |
+|-----------|------|
 | `.project.yaml` | 项目元信息 |
-| `.context/state.yaml` | 当前状态 |
-| `knowledge/external-source-index.md` | 外部语料索引 |
-| `knowledge/recovery-provenance.md` | 恢复来源与边界 |
-| `knowledge/2026-annual-okr.md` | 已验证年度 OKR 快照 |
-| `knowledge/2026-q1-okr.md` | 已验证 Q1 OKR 快照 |
+| `.context/quick-start.md` | 快速项目概览 |
+| `.context/state.yaml` | 当前会话状态及工作记忆 |
+| `.context/conversations/` | 会话记录（自动生成） |
+| `knowledge/` | 持久化知识文档 |
+| `tasks/` | 任务追踪 |
+| `tasks/templates/agent-preflight-checklist.yaml` | preflight 模板 |
+| `tasks/templates/issue-design-brief.md` | 设计循环模板 |
+| `tasks/templates/non-code-evaluation-rubric.yaml` | 非代码评估模板 |
+| `tasks/templates/submission-evidence.md` | 提交证据模板 |
+| `artifacts/` | 产出物 |
