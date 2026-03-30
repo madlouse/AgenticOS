@@ -1,51 +1,21 @@
-# AGENTS.md — AgenticOS Development
+# AGENTS.md — agentic-os-development Archive
 
-## Recording Protocol (MANDATORY)
+## Archive Notice
 
-This project uses AgenticOS for persistent context management.
-All session activity MUST be recorded via MCP tools.
+This directory is archived reference material, not an active project runtime.
 
-### How to Record
+- Do not switch into this directory with `agenticos_switch`.
+- Do not write new session state, guardrail evidence, or delivery artifacts here.
+- Treat the content as historical documentation only.
 
-Call the MCP tool `agenticos_record` with:
-- `summary` (required): What happened in this session
-- `decisions`: Key decisions made
-- `outcomes`: What was accomplished
-- `pending`: What remains to be done
-- `current_task`: { title, status } to update current task
+## Active Targets
 
-### When to Record
+- Product code: `projects/agenticos`
+- Canonical standards project: `projects/agenticos/standards`
 
-1. After completing any meaningful unit of work
-2. Before ending the session (MANDATORY — context is lost otherwise)
+## Allowed Work
 
-After recording, call `agenticos_save` to commit to Git.
-
-### Session Start
-
-On session start, read these files for context:
-1. `.project.yaml` — Project metadata
-2. `.context/state.yaml` — Current state and working memory
-3. `.context/conversations/` — Previous session records
-
-Then greet the user with: project name, last progress, current pending items, suggested next step.
-
-## Project
-
-**Name**: AgenticOS Development
-**Description**: Agent-first project management OS — AI Agent autonomously manages project state, cross-session context recovery, and cross-tool collaboration.
-
-## Directory Structure
-
-| Path | Purpose |
-|------|---------|
-| `.project.yaml` | Project metadata |
-| `.context/state.yaml` | Session state and working memory |
-| `.context/conversations/` | Session records (auto-generated) |
-| `knowledge/` | Persistent knowledge: architecture, decisions, trade-offs |
-| `knowledge/architecture.md` | Three-layer architecture design |
-| `knowledge/design-decisions.md` | 5 key design decisions with rationale |
-| `knowledge/complete-design.md` | Complete system design document |
-| `tasks/` | Task tracking |
-| `artifacts/` | Outputs and deliverables |
-| `changelog.md` | Project changelog |
+Only perform archival maintenance here:
+- clarify history
+- improve reference navigation
+- preserve provenance

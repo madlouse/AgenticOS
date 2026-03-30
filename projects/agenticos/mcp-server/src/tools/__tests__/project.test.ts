@@ -365,6 +365,43 @@ describe('switchProject', () => {
 
     expect(result).toContain('📖 Project summary: Fallback project summary from quick-start.');
   });
+
+  it('refuses to switch into archived reference content', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'archived-project',
+          name: 'Archived Project',
+          path: '/test/path',
+          status: 'archived' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        meta: { description: 'Archive' },
+        archive_contract: {
+          version: 1,
+          kind: 'archived_reference',
+          managed_project: false,
+          execution_mode: 'reference_only',
+          replacement_project: 'agenticos-standards',
+        },
+      })
+    );
+
+    const result = await switchProject({ project: 'archived-project' });
+
+    expect(result).toContain('archived reference content');
+    expect(result).toContain('agenticos-standards');
+    expect(registryMock.saveRegistry).not.toHaveBeenCalled();
+  });
 });
 
 describe('listProjects', () => {
@@ -700,5 +737,40 @@ describe('getStatus', () => {
 
     expect(result).toContain('agenticos_preflight -> REDIRECT');
     expect(result).toContain('create an isolated issue branch/worktree');
+  });
+
+  it('refuses status for an archived active project', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'archived-project',
+      projects: [
+        {
+          id: 'archived-project',
+          name: 'Archived Project',
+          path: '/test/path',
+          status: 'archived' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        archive_contract: {
+          version: 1,
+          kind: 'archived_reference',
+          managed_project: false,
+          execution_mode: 'reference_only',
+          replacement_project: 'agenticos-standards',
+        },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('archived reference content');
+    expect(result).toContain('agenticos-standards');
   });
 });

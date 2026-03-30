@@ -5,6 +5,7 @@ import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapter-matrix.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
 
 interface StandardKitEntry {
   path: string;
@@ -91,7 +92,7 @@ export interface ConformanceAdapterStatus {
 
 export interface StandardKitConformanceResult {
   command: 'agenticos_standard_kit_conformance_check';
-  status: 'PASS' | 'FAIL';
+  status: 'PASS' | 'FAIL' | 'SKIP';
   summary: string;
   project_path: string;
   project_name: string;
@@ -410,8 +411,33 @@ export async function checkStandardKitUpgrade(args: { project_path?: string; pro
 
 export async function checkStandardKitConformance(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<StandardKitConformanceResult> {
   const manifest = await loadStandardKitManifest();
-  const upgrade = await checkStandardKitUpgrade(args);
-  const projectYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.project.yaml')) || '{}') as any;
+  const projectPath = await resolveProjectPath(args.project_path);
+  const project = await resolveProjectIdentity(projectPath, args.project_name, args.project_description);
+  const projectYaml = yaml.parse((await readProjectFile(project.projectPath, '.project.yaml')) || '{}') as any;
+
+  if (isArchivedReferenceProject(projectYaml)) {
+    return {
+      command: 'agenticos_standard_kit_conformance_check',
+      status: 'SKIP',
+      summary: buildArchivedReferenceMessage(project.projectName, projectYaml?.archive_contract?.replacement_project),
+      project_path: project.projectPath,
+      project_name: project.projectName,
+      project_id: project.projectId,
+      kit_id: manifest.kit_id,
+      kit_version: manifest.kit_version,
+      missing_required_files: [],
+      generated_files: [],
+      copied_templates: [],
+      behavior_checks: [],
+      adapter_checks: [],
+    };
+  }
+
+  const upgrade = await checkStandardKitUpgrade({
+    project_path: project.projectPath,
+    project_name: project.projectName,
+    project_description: project.projectDescription,
+  });
   const stateYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.context/state.yaml')) || '{}') as any;
   const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
   const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');

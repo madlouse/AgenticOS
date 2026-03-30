@@ -1,13 +1,16 @@
-# agentic-os-development - Quick Start
+# agentic-os-development Archive
 
-## Project Overview
+## Status
 
+- Classification: Archived reference
+- Managed project: No
+- Execution mode: Reference only
 
-## Current Status
-- Created: 2026-03-20
-- Status: Active
+## Redirect
 
-## Next Steps
-1. Define project goals
-2. Set up initial tasks
-3. Begin development
+- Use `projects/agenticos` for product implementation.
+- Use `projects/agenticos/standards` for the canonical workflow contract.
+
+## Purpose
+
+This directory preserves historical standalone AgenticOS development material after consolidation into the main product tree.
