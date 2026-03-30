@@ -11,21 +11,18 @@ class Agenticos < Formula
   def install
     system "npm", "install", *Language::Node.std_npm_install_args(libexec)
     bin.install_symlink Dir["#{libexec}/bin/*"]
-
-    # Create default workspace directory
-    (var/"agenticos/.agent-workspace").mkpath
   end
 
   def post_install
     ohai "AgenticOS installed!"
     ohai "Installed:"
     ohai "  - agenticos-mcp"
-    ohai "  - workspace seed at #{var}/agenticos/.agent-workspace"
     ohai ""
     ohai "Homebrew does not edit Claude Code, Codex, Cursor, or Gemini CLI configs for you."
-    ohai "Choose a supported agent bootstrap path, restart the tool, then verify with agenticos_list."
+    ohai "Set AGENTICOS_HOME explicitly, choose a supported agent bootstrap path, restart the tool, then verify with agenticos_list."
     ohai ""
-    ohai "Recommended workspace override:"
+    ohai "Example workspace setup:"
+    ohai "  mkdir -p #{var}/agenticos"
     ohai "  export AGENTICOS_HOME=#{var}/agenticos"
   end
 
@@ -33,13 +30,13 @@ class Agenticos < Formula
     <<~EOS
       AgenticOS has been installed.
 
-      Homebrew installs the binary and a seed workspace. It does not edit AI tool configs,
-      restart the tool, or prove activation automatically.
+      Homebrew installs the binary only. It does not create or select a workspace, edit AI tool
+      configs, restart the tool, or prove activation automatically.
 
-      1. Set your workspace location (add to ~/.zshrc or ~/.bashrc) if you want to use the
-         Homebrew-managed workspace seed:
+      1. Set your workspace location before starting agenticos-mcp (add to ~/.zshrc or ~/.bashrc).
+         Example:
+           mkdir -p "#{var}/agenticos"
            export AGENTICOS_HOME="#{var}/agenticos"
-         Otherwise leave AGENTICOS_HOME unset and use the product default: ~/AgenticOS
 
       2. Bootstrap one officially supported agent:
 

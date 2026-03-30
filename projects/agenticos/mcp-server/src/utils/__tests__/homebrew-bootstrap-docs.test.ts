@@ -43,6 +43,10 @@ describe('homebrew bootstrap docs', () => {
       expect(normalized).toContain('does not');
       expect(doc).toContain('agenticos_list');
       expect(normalized).toContain('restart');
+      expect(doc).toContain('AGENTICOS_HOME');
+      expect(normalized).not.toContain('seed workspace');
+      expect(normalized).not.toContain('default: ~/agenticos');
+      expect(normalized).not.toContain('product default: ~/agenticos');
     }
   });
 });

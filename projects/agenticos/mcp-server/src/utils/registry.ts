@@ -1,26 +1,17 @@
-import { readFile, writeFile, mkdir, access } from 'fs/promises';
+import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, isAbsolute, relative } from 'path';
-import { homedir } from 'os';
-import { existsSync } from 'fs';
 import yaml from 'yaml';
 
-/** Resolve AGENTICOS_HOME with fallback detection */
+export const MISSING_AGENTICOS_HOME_MESSAGE =
+  'AGENTICOS_HOME is not set. AgenticOS requires an explicit workspace root. Set AGENTICOS_HOME before starting agenticos-mcp.';
+
+/** Resolve AGENTICOS_HOME with fail-fast semantics */
 export function getAgenticOSHome(): string {
-  // 1. Explicit env var — highest priority
-  if (process.env.AGENTICOS_HOME) return process.env.AGENTICOS_HOME;
-
-  // 2. Default: ~/AgenticOS
-  const defaultHome = join(homedir(), 'AgenticOS');
-
-  // 3. If default doesn't have a registry, check common dev locations
-  if (!existsSync(join(defaultHome, '.agent-workspace', 'registry.yaml'))) {
-    const devHome = join(homedir(), 'dev', 'AgenticOS');
-    if (existsSync(join(devHome, '.agent-workspace', 'registry.yaml'))) {
-      return devHome;
-    }
+  const configuredHome = process.env.AGENTICOS_HOME?.trim();
+  if (!configuredHome) {
+    throw new Error(MISSING_AGENTICOS_HOME_MESSAGE);
   }
-
-  return defaultHome;
+  return configuredHome;
 }
 
 /** Convert an absolute path under AGENTICOS_HOME to a relative path for storage */
@@ -61,8 +52,9 @@ export interface Registry {
 }
 
 export async function loadRegistry(): Promise<Registry> {
+  const registryPath = getRegistryPath();
   try {
-    const content = await readFile(getRegistryPath(), 'utf-8');
+    const content = await readFile(registryPath, 'utf-8');
     const raw: Registry = yaml.parse(content);
     // Resolve relative paths to absolute at load time
     raw.projects = raw.projects.map((p) => ({

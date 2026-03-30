@@ -22,7 +22,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log('  { "command": "agenticos-mcp", "args": [] }');
   console.log('');
   console.log('Environment:');
-  console.log('  AGENTICOS_HOME  Workspace root (default: ~/AgenticOS)');
+  console.log('  AGENTICOS_HOME  Workspace root (required)');
   process.exit(0);
 }
 
@@ -61,7 +61,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           name: { type: 'string', description: 'Project name' },
           description: { type: 'string', description: 'Project description' },
-          path: { type: 'string', description: 'Optional custom path (defaults to $AGENTICOS_HOME/projects/{id}, i.e. ~/AgenticOS/projects/{id})' },
+          path: { type: 'string', description: 'Optional custom path (otherwise uses $AGENTICOS_HOME/projects/{id})' },
         },
         required: ['name'],
       },
