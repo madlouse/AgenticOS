@@ -18,7 +18,7 @@ A project management system designed for AI collaboration. When you work on comp
 
 ### Quick Start
 
-Install AgenticOS, bootstrap one supported agent, restart that agent, then explicitly verify `agenticos_list` works before relying on project-intent routing.
+Install AgenticOS, set `AGENTICOS_HOME` explicitly, bootstrap one supported agent, restart that agent, then explicitly verify `agenticos_list` works before relying on project-intent routing.
 
 When the client supports a pre-edit hook or local command wrapper, point that layer at `tools/check-edit-boundary.sh` so implementation edits fail closed unless project alignment and matching PASS preflight evidence already exist.
 
@@ -26,7 +26,8 @@ When the client supports a pre-edit hook or local command wrapper, point that la
 
 If the user installed AgenticOS with Homebrew:
 
-- Homebrew installs the binary and a seed workspace
+- Homebrew installs the binary only
+- Homebrew does **not** create or select a workspace
 - Homebrew does **not** edit Claude Code, Codex, Cursor, or Gemini CLI configuration
 - Homebrew does **not** restart the AI tool
 - Homebrew does **not** prove activation by itself
@@ -140,7 +141,7 @@ Create new project with standard structure.
 **Parameters**:
 - `name` (required) - Project name
 - `description` (optional) - What this project is about
-- `path` (optional) - Custom location (default: ~/AgenticOS/projects/{id})
+- `path` (optional) - Custom location (otherwise uses $AGENTICOS_HOME/projects/{id})
 
 **Returns**: Project created confirmation with path and ID
 
@@ -276,7 +277,7 @@ Get complete context for active project.
 
 ## 🔒 Privacy & Security
 
-- All data stored locally in `~/AgenticOS/`
+- All data stored locally under `AGENTICOS_HOME`
 - No external servers or telemetry
 - Git backup is optional and user-controlled
 - Safe for public npm distribution

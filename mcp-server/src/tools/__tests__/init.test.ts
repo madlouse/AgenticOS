@@ -52,7 +52,7 @@ const osMock = os as typeof os & { homedir: ReturnType<typeof vi.fn> };
 describe('initProject', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.AGENTICOS_HOME;
+    process.env.AGENTICOS_HOME = '/home/testuser/AgenticOS';
     // Default: simulate registry file does not exist (causes loadRegistry to return default)
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
@@ -62,6 +62,14 @@ describe('initProject', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('fails fast when AGENTICOS_HOME is not configured', async () => {
+    delete process.env.AGENTICOS_HOME;
+
+    await expect(
+      initProject({ name: 'Test Project', description: 'A test project' }),
+    ).rejects.toThrow('AGENTICOS_HOME is not set.');
   });
 
   it('creates directories with correct structure', async () => {
