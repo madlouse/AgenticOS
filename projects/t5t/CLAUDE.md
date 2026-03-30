@@ -1,9 +1,30 @@
+<!-- agenticos-template: v4 -->
 # CLAUDE.md — T5T
 
-## Recovered Snapshot Notice
+## Adapter Role
 
-> This project was restored on 2026-03-25 from verified local sources.
-> Treat it as the canonical recovered snapshot for T5T unless a more original source is later found.
+`CLAUDE.md` is the Claude Code adapter surface for this project.
+It must expose the same canonical policy as other agent adapters while allowing Claude-specific operator guidance.
+
+## Canonical Policy (Shared Across Agents)
+
+- This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.
+- Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.
+- PR creation or merge must not happen before executable scope validation passes.
+- Recording and save flow remain canonical project requirements rather than runtime-specific preferences.
+## Claude Runtime Notes
+
+- Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.
+- Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.
+## Guardrail Protocol (MANDATORY)
+
+For implementation-affecting work:
+
+1. call `agenticos_preflight` before editing
+2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+3. before PR creation or merge, call `agenticos_pr_scope_check`
+
+If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
 
 ## MANDATORY: Recording Protocol
 
@@ -75,80 +96,20 @@ When you open this project in a new session, **immediately do the following**:
 **技术栈**: 纯文档管理（Markdown）
 
 ---
-
-## T5T 规则与原则
-
-### T5 写作规范
-
-参考 `knowledge/t5-writing-rules.md`，核心要点：
-
-- 格式：`**主题**：动作1；动作2；动作3。`
-- 标题：保持强一致性，优先沿用已确定命名，如 "DB 资源回收推进"、"常熟银行AI信贷员"、"新机构交付项目"、"全流程质量加固项目"、"效率提升"
-- 内容本质：研发部门关键事项的阶段性推进，不假设一周闭环
-- 语言风格：口语化但专业，基于事实不拔高，使用真实管理动作（跟进、明确、推进、评审、实施等）
-- 禁止：华丽辞藻、AI腔、材料腔、擅自放大成果
-
-### 模板结构
-
-每个项目包含：
-1. 上线时间：项目计划上线日期
-2. 进度：各阶段百分比/状态
-3. 变化：本周主要变化
-4. 风险：已知风险项
-5. 关键进展 / 下一步：具体行动项
-
-### 文档组织
-
-- `Week-2026-03-01/`：2026 年 3 月第 1 周的文档
-- 每周一个文件夹，命名格式：`Week-年-月-当月第几周`
-- `knowledge/t5-writing-rules.md`：T5 写作规范
-
-### 公司 T5 规范框架
-
-按公司要求，T5 周报包含三个维度：
-
-**维度一：核心项目推进**
-- 格式：项目名称 | 当前阶段 | 关键进展 | 下周计划 | 风险卡点
-- 每项目一行
-
-**维度二：重点关注事项**
-- 不超过 3 条，每条不超过 20 字
-
-**维度三：团队管理**
-- 不少于 2 条
-- 围绕团队梯队建设、人才培养、核心人员稳定性等
-
-### 规范整合关系
-
-| 公司T5规范 | 用户写作规范 | 关系 |
-|-----------|-------------|------|
-| 填写框架（维度一/二/三） | 写作风格指南 | 互补 |
-| 告诉填什么 | 告诉怎么写 | 整合使用 |
-
-### 填写频率
-
-每周五下午 4 点前填写
-
----
-
 ## Current State
 
-**Last Updated**: 2026-03-25
+<!-- AGENT_CONTEXT_START -->
+**Last Updated**: 2026-03-30T03:17:01.538Z
 
-**当前周**: 第 13 周（2026-03-23 ~ 2026-03-29）
-
-**Current Task**: 恢复 T5T 项目目录与已验证知识快照
+**Current Task**: No active task (status: unknown)
 
 **Active Items**:
-- 已恢复：项目级 `CLAUDE.md`、核心知识文档、周报快照
-- 已恢复：`knowledge/t5-writing-rules.md`
-- 已恢复：`knowledge/t5-collect-rules.md`
-- 已恢复：`knowledge/t5-review-rules.md`
-- 已恢复：`knowledge/t5-evolution-log.md`
-- 待确认：`topic-library.md` 为根据已验证标题恢复的近似版本
-- 待确认：是否还存在更原始的 `okr-management` 或 T5T 项目目录源
+- Define project goals
+- Set up initial tasks
 
-**Next Action**: 使用者确认恢复结果是否满足继续使用条件，或补充更原始来源
+
+**Next Action**: Define project goals
+<!-- AGENT_CONTEXT_END -->
 
 ---
 
@@ -157,7 +118,13 @@ When you open this project in a new session, **immediately do the following**:
 | 目录/文件 | 用途 |
 |-----------|------|
 | `.project.yaml` | 项目元信息 |
+| `.context/quick-start.md` | 快速项目概览 |
 | `.context/state.yaml` | 当前会话状态及工作记忆 |
+| `.context/conversations/` | 会话记录（自动生成） |
 | `knowledge/` | 持久化知识文档 |
-| `Week-YYYY-MM-NN/` | 每周 T5T 产出快照 |
-| `artifacts/` | 恢复相关产出物 |
+| `tasks/` | 任务追踪 |
+| `tasks/templates/agent-preflight-checklist.yaml` | preflight 模板 |
+| `tasks/templates/issue-design-brief.md` | 设计循环模板 |
+| `tasks/templates/non-code-evaluation-rubric.yaml` | 非代码评估模板 |
+| `tasks/templates/submission-evidence.md` | 提交证据模板 |
+| `artifacts/` | 产出物 |

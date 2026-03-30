@@ -1,0 +1,86 @@
+version: 0.2
+name: agent-preflight-checklist
+purpose: Preflight gate before any issue-driven work proceeds to editing or submission.
+
+task:
+  issue_id: ""
+  title: ""
+  type: discussion_only
+  allowed_types:
+    - discussion_only
+    - analysis_or_doc
+    - implementation
+    - bootstrap
+  risk_level: medium
+  allowed_risk_levels:
+    - low
+    - medium
+    - high
+
+repository:
+  repo_path: ""
+  repo_identity_confirmed: false
+  current_branch: ""
+  remote_name: origin
+  remote_base_branch: origin/main
+  current_head: ""
+  remote_base_head: ""
+  branch_fork_point: ""
+  branch_ancestry_verified: false
+  branch_based_on_intended_remote: false
+  has_initial_commit: false
+  active_workspace_type: main
+  allowed_workspace_types:
+    - main
+    - isolated_worktree
+  issue_link_confirmed: false
+
+context:
+  project_goal_restate: ""
+  issue_goal_restate: ""
+  constraints_restate: []
+  related_docs_read:
+    - .context/quick-start.md
+    - .context/state.yaml
+  issue_relevant_knowledge_files: []
+  adjacent_risks_checked: false
+
+classification:
+  structural_move: false
+  implementation_affecting_files: []
+  docs_only_files: []
+  declared_target_files: []
+  worktree_required: false
+  main_workspace_allowed: false
+  bootstrap_exception_used: false
+
+scope_control:
+  root_scoped_exceptions:
+    - .github/
+  exception_check_completed: false
+  pr_scope_check_required: false
+  changed_files_within_declared_scope: false
+  unrelated_commits_detected: false
+  diff_scope_notes: ""
+
+design_loop:
+  required_passes: 2
+  completed_passes: 0
+  critique_completed: false
+  acceptance_defined_before_edit: false
+
+verification_plan:
+  deliverable_type: non_code
+  allowed_deliverable_types:
+    - code
+    - non_code
+  planned_checks: []
+  clean_reproducibility_gate: []
+  coverage_target: changed_scope_100
+  rubric_defined: false
+  evidence_destination: ""
+
+gate:
+  preflight_passed: false
+  block_reason: ""
+  next_action: ""
