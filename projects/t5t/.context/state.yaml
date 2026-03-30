@@ -3,9 +3,10 @@ session:
   started: 2026-03-25T19:30:00+08:00
   agent: codex-gpt-5
 current_task:
+  id: null
   title: 恢复 T5T 项目快照
   status: completed
-  updated: 2026-03-25T19:30:00+08:00
+  next_step: 用户确认恢复结果是否满足继续使用条件
 working_memory:
   facts:
     - T5T 在历史 registry 中曾是正式 AgenticOS 项目，路径为 /Users/jeking/dev/AgenticOS/projects/t5t
@@ -19,7 +20,15 @@ working_memory:
   pending:
     - 用户确认恢复结果是否满足继续使用
     - 如后续找到更原始来源，更新 recovery provenance 并修正对应文件
+memory_contract:
+  version: 1
+  quick_start_role: project_orientation
+  state_role: operational_working_state
+  conversations_role: append_only_session_history
+  knowledge_role: durable_synthesis
+  tasks_role: execution_artifacts
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
+  - .context/state.yaml
   - knowledge/recovery-provenance.md

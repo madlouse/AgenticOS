@@ -7,6 +7,25 @@ meta:
 agent_context:
   quick_start: .context/quick-start.md
   current_state: .context/state.yaml
+  conversations: .context/conversations/
+  knowledge: knowledge/
+  tasks: tasks/
+  artifacts: artifacts/
+
+memory_contract:
+  version: 1
+  quick_start_role: project_orientation
+  state_role: operational_working_state
+  conversations_role: append_only_session_history
+  knowledge_role: durable_synthesis
+  tasks_role: execution_artifacts
+  artifacts_role: deliverables
+
+status:
+  phase: active
+  last_updated: 2026-03-30
+  next_action: Validate the recovered T5T snapshot and continue weekly progress tracking from the recovered baseline.
+
 recovery:
   status: recovered_snapshot
   restored_from:
