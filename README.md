@@ -14,10 +14,10 @@ brew install agenticos
 Homebrew installs:
 
 - the `agenticos-mcp` binary
-- a seed workspace directory under Homebrew `var`
 
 Homebrew does **not**:
 
+- create or select a workspace for you
 - edit Claude Code, Codex, Cursor, or Gemini CLI configuration for you
 - restart your AI tool
 - prove activation by itself
@@ -162,7 +162,7 @@ For implementation work in AgenticOS-managed repositories:
 Each project is a self-contained directory:
 
 ```
-~/AgenticOS/projects/my-feature/
+$AGENTICOS_HOME/projects/my-feature/
 ├── .project.yaml          # Project metadata
 ├── .context/
 │   ├── quick-start.md     # 30-second context summary (AI reads this first)
@@ -173,7 +173,7 @@ Each project is a self-contained directory:
 └── artifacts/             # Code, configs, outputs
 ```
 
-The global registry lives at `~/AgenticOS/.agent-workspace/registry.yaml` and tracks all projects with relative paths — making the whole workspace portable.
+The global registry lives at `$AGENTICOS_HOME/.agent-workspace/registry.yaml` and tracks all projects with relative paths — making the whole workspace portable.
 
 Runtime-only byproducts should not be treated as canonical source:
 
@@ -195,7 +195,7 @@ The orphaned gitlink residues `okr-management` and `t5t` were not recoverable as
 
 ## Environment Variable
 
-By default, AgenticOS stores everything in `~/AgenticOS`. Override with:
+AgenticOS requires `AGENTICOS_HOME` to be set explicitly before you start `agenticos-mcp` or call workspace-backed tools:
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
@@ -205,7 +205,7 @@ export AGENTICOS_HOME="$HOME/my-custom-path"
 Recommended layout:
 
 - product source checkout: any normal development path such as `~/src/AgenticOS`
-- live workspace: `AGENTICOS_HOME`, such as `~/AgenticOS`
+- live workspace: `AGENTICOS_HOME`, such as `~/AgenticOS-workspace`
 
 ## GitHub Publish Troubleshooting
 
@@ -231,8 +231,8 @@ If the no-proxy retry still fails with `LibreSSL SSL_connect: SSL_ERROR_SYSCALL`
 # 1. Install
 brew tap madlouse/agenticos && brew install agenticos
 
-# 2. Set workspace (optional, ~/AgenticOS is the default)
-echo 'export AGENTICOS_HOME="$HOME/AgenticOS"' >> ~/.zshrc
+# 2. Set workspace
+echo 'export AGENTICOS_HOME="$HOME/AgenticOS-workspace"' >> ~/.zshrc
 source ~/.zshrc
 
 # 3. Bootstrap one of the supported agents above and restart it
@@ -242,14 +242,14 @@ source ~/.zshrc
 
 ```bash
 # On old machine — push your workspace to Git
-cd ~/AgenticOS
+cd "$AGENTICOS_HOME"
 git remote add origin https://github.com/yourname/your-agenticos-workspace.git
 git push -u origin main
 
 # On new machine
 brew tap madlouse/agenticos && brew install agenticos
-git clone https://github.com/yourname/your-agenticos-workspace.git ~/AgenticOS
-echo 'export AGENTICOS_HOME="$HOME/AgenticOS"' >> ~/.zshrc
+git clone https://github.com/yourname/your-agenticos-workspace.git "$HOME/AgenticOS-workspace"
+echo 'export AGENTICOS_HOME="$HOME/AgenticOS-workspace"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -264,7 +264,7 @@ AI Tool (Claude / Cursor / Codex)
         ↓  MCP protocol (stdio)
   agenticos-mcp server
         ↓  reads/writes
-  ~/AgenticOS/
+  $AGENTICOS_HOME/
     .agent-workspace/registry.yaml   ← active project + project list
     projects/
       my-feature/

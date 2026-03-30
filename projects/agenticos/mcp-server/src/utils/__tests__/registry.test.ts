@@ -41,25 +41,18 @@ vi.mock('fs/promises', () => ({
   access: vi.fn(),
 }));
 
-vi.mock('fs', () => ({
-  existsSync: vi.fn(),
-  default: {},
-}));
-
-vi.mock('os', () => ({
-  homedir: vi.fn(() => '/home/testuser'),
-  default: {},
-}));
-
 vi.mock('yaml', () => ({
   default: yamlMock,
 }));
 
 // Must import after mocks are set up
-import { loadRegistry, saveRegistry, getAgenticOSHome } from '../registry.js';
+import {
+  loadRegistry,
+  saveRegistry,
+  getAgenticOSHome,
+  MISSING_AGENTICOS_HOME_MESSAGE,
+} from '../registry.js';
 import * as fsPromises from 'fs/promises';
-import * as fs from 'fs';
-import * as os from 'os';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -67,13 +60,11 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
   mkdir: ReturnType<typeof vi.fn>;
   access: ReturnType<typeof vi.fn>;
 };
-const fsMock = fs as typeof fs & { existsSync: ReturnType<typeof vi.fn> };
-const osMock = os as typeof os & { homedir: ReturnType<typeof vi.fn> };
 
 describe('registry utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.AGENTICOS_HOME;
+    process.env.AGENTICOS_HOME = '/home/testuser/AgenticOS';
   });
 
   afterEach(() => {
@@ -87,27 +78,13 @@ describe('registry utilities', () => {
   describe('getAgenticOSHome', () => {
     it('respects AGENTICOS_HOME env var', () => {
       process.env.AGENTICOS_HOME = '/custom/path';
-      // Need to re-import to pick up the env change; the function reads
-      // process.env at call time, so no re-import is needed.
       const result = getAgenticOSHome();
       expect(result).toBe('/custom/path');
     });
 
-    it('falls back to ~/AgenticOS when env var is not set', () => {
-      osMock.homedir.mockReturnValue('/home/testuser');
-      fsMock.existsSync.mockReturnValue(false);
-      const result = getAgenticOSHome();
-      expect(result).toBe('/home/testuser/AgenticOS');
-    });
-
-    it('returns dev location when default lacks registry but dev location has it', () => {
-      osMock.homedir.mockReturnValue('/home/testuser');
-      // First call: default home lacks registry, second call: dev home has it
-      fsMock.existsSync
-        .mockReturnValueOnce(false)  // default home lacks registry
-        .mockReturnValueOnce(true);   // dev home has registry
-      const result = getAgenticOSHome();
-      expect(result).toBe('/home/testuser/dev/AgenticOS');
+    it('fails fast when AGENTICOS_HOME is not set', () => {
+      delete process.env.AGENTICOS_HOME;
+      expect(() => getAgenticOSHome()).toThrow(MISSING_AGENTICOS_HOME_MESSAGE);
     });
   });
 
@@ -122,12 +99,15 @@ describe('registry utilities', () => {
       yamlMock.stringify.mockReset();
     });
 
+    it('fails fast when AGENTICOS_HOME is not set', async () => {
+      delete process.env.AGENTICOS_HOME;
+
+      await expect(loadRegistry()).rejects.toThrow(MISSING_AGENTICOS_HOME_MESSAGE);
+    });
 
     it('returns default registry when file does not exist', async () => {
       yamlMock.parse.mockRejectedValue(new Error('ENOENT'));
       fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
-      osMock.homedir.mockReturnValue('/home/testuser');
-      fsMock.existsSync.mockReturnValue(false);
 
       const registry = await loadRegistry();
 
@@ -154,8 +134,6 @@ describe('registry utilities', () => {
       };
       yamlMock.parse.mockReturnValue(storedYaml as any);
       fsPromisesMock.readFile.mockResolvedValue('version: 1.0.0\nactive_project: my-project');
-      osMock.homedir.mockReturnValue('/home/testuser');
-      fsMock.existsSync.mockReturnValue(true);
 
       const registry = await loadRegistry();
 
@@ -166,8 +144,6 @@ describe('registry utilities', () => {
     it('returns default registry when YAML parse fails', async () => {
       yamlMock.parse.mockRejectedValue(new Error('parse error'));
       fsPromisesMock.readFile.mockResolvedValue('invalid: yaml: content:');
-      osMock.homedir.mockReturnValue('/home/testuser');
-      fsMock.existsSync.mockReturnValue(false);
 
       const registry = await loadRegistry();
 
@@ -183,9 +159,6 @@ describe('registry utilities', () => {
   describe('saveRegistry', () => {
     it('converts absolute paths to relative before writing', async () => {
       // The yaml mock at module level already returns YAML with field values
-      osMock.homedir.mockReturnValue('/home/testuser');
-      fsMock.existsSync.mockReturnValue(true);
-
       const registry = {
         version: '1.0.0',
         last_updated: '2025-01-01T00:00:00.000Z',
@@ -215,9 +188,6 @@ describe('registry utilities', () => {
     });
 
     it('stores non-absolute paths as-is', async () => {
-      osMock.homedir.mockReturnValue('/home/testuser');
-      fsMock.existsSync.mockReturnValue(true);
-
       const registry = {
         version: '1.0.0',
         last_updated: '2025-01-01T00:00:00.000Z',

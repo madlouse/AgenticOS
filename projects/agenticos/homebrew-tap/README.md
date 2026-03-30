@@ -14,18 +14,19 @@ brew install agenticos
 Homebrew installs:
 
 - the `agenticos-mcp` binary
-- a seed workspace at Homebrew `var`
 
 Homebrew does **not**:
 
 - edit Claude Code, Codex, Cursor, or Gemini CLI configuration automatically
+- create or select a workspace for you
 - restart your AI tool
 - verify activation for you
 
-After installation, set your workspace if needed, bootstrap one officially supported agent, restart it, and verify `agenticos_list`:
+After installation, set `AGENTICOS_HOME` explicitly, bootstrap one officially supported agent, restart it, and verify `agenticos_list`:
 
 ```bash
-# Optional: customize workspace location
+# Example workspace path
+mkdir -p "$(brew --prefix)/var/agenticos"
 export AGENTICOS_HOME="$(brew --prefix)/var/agenticos"
 
 # Claude Code
