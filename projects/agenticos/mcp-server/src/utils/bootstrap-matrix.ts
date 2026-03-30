@@ -15,11 +15,20 @@ export interface AgentBootstrapEntry {
   verification: string[];
   transport_debug: string[];
   routing_debug: string[];
+  repair?: string[];
+}
+
+export interface BootstrapVerificationContract {
+  canonical_runtime_entrypoint: string;
+  legacy_source_checkout_paths_unsupported: boolean;
+  automation_boundary: string;
+  automation_rationale: string[];
 }
 
 export interface AgentBootstrapMatrix {
   version: number;
   primary_integration_mode: string;
+  verification_contract: BootstrapVerificationContract;
   supported_agents: AgentBootstrapEntry[];
   experimental_agents?: AgentBootstrapEntry[];
 }

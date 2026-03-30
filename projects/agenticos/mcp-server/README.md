@@ -122,6 +122,34 @@ Transport bootstrap and project-intent routing are different concerns.
 
 These are currently experimental. Do not describe them as first-class supported agents unless they have a documented bootstrap, verification, and debugging contract.
 
+### Repairing Stale Registrations
+
+The supported runtime entrypoint is `agenticos-mcp`.
+Do not keep legacy source-checkout registrations such as `node /Users/jeking/dev/AgenticOS/mcp-server/build/index.js`.
+
+Claude Code repair flow:
+
+```bash
+claude mcp get agenticos
+claude mcp remove agenticos -s user
+claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+```
+
+Codex repair flow:
+
+```bash
+codex mcp list
+codex mcp get agenticos
+codex mcp remove agenticos
+codex mcp add agenticos -- agenticos-mcp
+```
+
+If Codex reports that `agenticos` does not exist yet, skip the remove step and add it directly.
+After any registration change, restart the agent, confirm the server appears in its MCP diagnostics, and call `agenticos_list`.
+
+This verification remains manual by design.
+`agenticos_health` is repo/project scoped and does not inspect or mutate per-agent MCP settings that live in user-owned config files.
+
 ## Integration Modes
 
 AgenticOS does not treat every fallback as equal:

@@ -64,7 +64,21 @@ class Agenticos < Formula
       4. Verify activation by confirming the server is listed in the tool's MCP diagnostics
          and by explicitly calling agenticos_list.
 
-      5. Product policy: Homebrew is reminder-only today.
+      5. If Claude Code or Codex still points at a source checkout path, remove the stale entry
+         and re-add the canonical binary entrypoint:
+
+         Claude Code
+           claude mcp get agenticos
+           claude mcp remove agenticos -s user
+           claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+
+         Codex
+           codex mcp list
+           codex mcp get agenticos
+           codex mcp remove agenticos
+           codex mcp add agenticos -- agenticos-mcp
+
+      6. Product policy: Homebrew is reminder-only today.
          It does not mutate user agent configs by default.
          A future opt-in bootstrap helper may be added later, but silent config mutation is out of scope.
     EOS

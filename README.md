@@ -89,6 +89,36 @@ The machine-readable source of truth for this support matrix lives in:
 
 - `projects/agenticos/.meta/bootstrap/agent-bootstrap-matrix.yaml`
 
+### Repair Stale MCP Registrations
+
+The only supported runtime entrypoint is `agenticos-mcp`.
+Legacy source-checkout registrations such as `node /Users/jeking/dev/AgenticOS/mcp-server/build/index.js` are unsupported and should be replaced.
+
+Claude Code repair:
+
+```bash
+claude mcp get agenticos
+claude mcp remove agenticos -s user
+claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+```
+
+Then restart Claude Code, confirm `agenticos` appears in `claude mcp list` and `/mcp`, and call `agenticos_list`.
+
+Codex repair:
+
+```bash
+codex mcp list
+codex mcp get agenticos
+codex mcp remove agenticos
+codex mcp add agenticos -- agenticos-mcp
+```
+
+If `codex mcp get agenticos` reports that no server exists, skip the remove step and add it directly.
+Then restart Codex, confirm `agenticos` appears in `codex mcp list`, and call `agenticos_list`.
+
+Bootstrap verification is intentionally manual and agent-local.
+`agenticos_health` stays repo/project scoped and does not inspect or mutate user MCP settings owned by Claude Code, Codex, Cursor, or Gemini CLI.
+
 ## Integration Modes
 
 AgenticOS supports multiple integration modes, but they are not equal:
