@@ -5,6 +5,7 @@ import yaml from 'yaml';
 import { loadRegistry, saveRegistry } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject } from '../utils/project-contract.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -181,6 +182,15 @@ export async function switchProject(args: any): Promise<string> {
     return `❌ Project "${project}" not found.\n\nAvailable projects:\n${registry.projects.map((p) => `- ${p.name} (${p.id})`).join('\n')}`;
   }
 
+  let projectYaml: any = {};
+  try {
+    projectYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8')) || {};
+  } catch {}
+
+  if (isArchivedReferenceProject(projectYaml, found.status)) {
+    return `❌ ${buildArchivedReferenceMessage(found.name, projectYaml?.archive_contract?.replacement_project)}`;
+  }
+
   registry.active_project = found.id;
   found.last_accessed = new Date().toISOString();
   await saveRegistry(registry);
@@ -193,10 +203,7 @@ export async function switchProject(args: any): Promise<string> {
   let description = '';
   let state: any = undefined;
   let quickStart = '';
-  try {
-    const projYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8'));
-    description = projYaml?.meta?.description || '';
-  } catch {}
+  description = projectYaml?.meta?.description || '';
   try {
     state = yaml.parse(await readFile(join(found.path, '.context', 'state.yaml'), 'utf-8'));
   } catch {}
@@ -277,6 +284,15 @@ export async function getStatus(): Promise<string> {
 
   const project = registry.projects.find((p) => p.id === registry.active_project);
   if (!project) return '❌ Active project not found in registry.';
+
+  let projectYaml: any = {};
+  try {
+    projectYaml = yaml.parse(await readFile(join(project.path, '.project.yaml'), 'utf-8')) || {};
+  } catch {}
+
+  if (isArchivedReferenceProject(projectYaml, project.status)) {
+    return `❌ ${buildArchivedReferenceMessage(project.name, projectYaml?.archive_contract?.replacement_project)}`;
+  }
 
   // Read state.yaml
   const statePath = join(project.path, '.context', 'state.yaml');

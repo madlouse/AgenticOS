@@ -306,4 +306,26 @@ describe('resolveManagedProjectTarget', () => {
       commandName: 'agenticos_record',
     })).rejects.toThrow('Project identity mismatch: registry name "Alpha Project" does not match .project.yaml meta.name "Wrong Project Name".');
   });
+
+  it('fails when the resolved project is archived reference content', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: {
+        id: 'alpha',
+        name: 'Alpha Project',
+      },
+      archive_contract: {
+        version: 1,
+        kind: 'archived_reference',
+        managed_project: false,
+        execution_mode: 'reference_only',
+        replacement_project: 'agenticos-standards',
+      },
+    }));
+
+    await expect(resolveManagedProjectTarget({
+      commandName: 'agenticos_record',
+    })).rejects.toThrow(
+      'Project "Alpha Project" is archived reference content, not an active managed project. Use "agenticos-standards" instead. agenticos_record only works with active managed projects.',
+    );
+  });
 });
