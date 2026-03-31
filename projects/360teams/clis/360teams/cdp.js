@@ -6,6 +6,7 @@
  * calls unconditionally during connectOverCDP initialization.
  */
 import CDP from 'chrome-remote-interface';
+import { ensureDebugMode } from './launcher.js';
 
 const CDP_HOST = process.env.TEAMS_CDP_HOST || 'localhost';
 const CDP_PORT = parseInt(process.env.TEAMS_CDP_PORT || '9234', 10);
@@ -32,6 +33,35 @@ async function cdpEvaluate(expression, client) {
 }
 
 /**
+ * Dispatch a real mouse click event at the given viewport coordinates.
+ * This bypasses Vue's event delegation and sends raw OS-level input events.
+ * @param {number} x - X coordinate relative to viewport (CSS pixels)
+ * @param {number} y - Y coordinate relative to viewport (CSS pixels)
+ * @param {import('chrome-remote-interface').Client} client
+ */
+async function cdpDispatchMouseEvent(x, y, client) {
+  const { Input } = client;
+  await Input.dispatchMouseEvent({
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+    modifiers: 0,
+    pointerType: 'mouse',
+  });
+  await Input.dispatchMouseEvent({
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+    modifiers: 0,
+    pointerType: 'mouse',
+  });
+}
+
+/**
  * Connect to 360Teams Electron renderer, run fn(page), then disconnect.
  *
  * The `page` object exposes a single method:
@@ -40,6 +70,9 @@ async function cdpEvaluate(expression, client) {
  * @param {(page: { evaluate: (expr: string) => Promise<any> }) => Promise<any>} fn
  */
 export async function withElectronPage(fn) {
+  // Ensure 360Teams is running with remote debugging port before connecting
+  await ensureDebugMode();
+
   // List all CDP targets to find the main renderer window
   let targets;
   try {
@@ -47,7 +80,7 @@ export async function withElectronPage(fn) {
   } catch (err) {
     throw new Error(
       `Cannot reach 360Teams CDP at ${CDP_HOST}:${CDP_PORT}. ` +
-      'Is 360Teams running with --remote-debugging-port=9234? ' +
+      `Is 360Teams running with --remote-debugging-port=9234? ` +
       `(original error: ${err.message})`
     );
   }
@@ -68,6 +101,7 @@ export async function withElectronPage(fn) {
   try {
     const page = {
       evaluate: (expression) => cdpEvaluate(expression, client),
+      dispatchMouseEvent: (x, y) => cdpDispatchMouseEvent(x, y, client),
     };
     return await fn(page);
   } finally {
