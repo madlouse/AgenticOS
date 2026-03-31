@@ -89,3 +89,95 @@ export function extractGroups(groups) {
     MemberCount: g.memberCount ?? g.memberNum ?? 0,
   }));
 }
+
+// ─── T5T Helpers ────────────────────────────────────────────────────────────────
+
+export function parseT5TWeek(weekStr) {
+  if (!weekStr) return { year: '', month: '', weekNum: '' };
+  const match = weekStr.match(/(\d{4})年(\d+)月第(\d+)周/);
+  if (match) return { year: match[1], month: match[2], weekNum: match[3] };
+  return { year: '', month: '', weekNum: '' };
+}
+
+export function extractT5TStatus(status) {
+  if (!status) return [{ Week: 'Unknown', Status: '', SubmitTime: '', Content: '' }];
+  const week = status.currentWeek || '当前周期';
+  const myStatus = status.currentStatus || '未知';
+  return [{
+    Week: week,
+    Status: myStatus,
+    SubmitTime: '',
+    Content: `团队: ${status.submitCount || 0}人已提交, ${status.unsubmitCount || 0}人未提交`,
+  }];
+}
+
+export function extractT5TRecords(records, limit = 10) {
+  if (!Array.isArray(records) || records.length === 0) return [];
+  return records.slice(0, limit).map((r) => ({
+    Week: r.title || '未知周期',
+    Status: r.content?.includes('评论') ? '已提交' : '未知',
+    SubmitTime: r.time || '',
+    Content: (r.content || '').substring(0, 100),
+  }));
+}
+
+// ─── Docs Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Transform structured doc objects into table rows.
+ * @param {Array|null} docs - array of { name, creator, time }
+ * @param {number} limit
+ * @returns {Array<{Name: string, Creator: string, Time: string}>}
+ */
+export function extractDocsList(docs, limit = 20) {
+  if (!Array.isArray(docs) || docs.length === 0) return [];
+  return docs.slice(0, limit).map((d) => ({
+    Name: d.name || '',
+    Creator: d.creator || '',
+    Time: d.time || '',
+  }));
+}
+
+/**
+ * Check if a line is docs UI noise (sidebar items, table headers, buttons).
+ * @param {string} line
+ * @returns {boolean}
+ */
+export function isDocsNoiseLine(line) {
+  const noisePatterns = [
+    /^Recently opened$/,
+    /^Shared with me$/,
+    /^Favorite$/,
+    /^Activities$/,
+    /^My space$/,
+    /^Team space$/,
+    /^Quick access$/,
+    /^Trash$/,
+    /^Create$/,
+    /^Name$/,
+    /^Creator$/,
+    /^Open time$/,
+    /^Share Information$/,
+    /^Search for files$/,
+    /^最近打开$/,
+    /^与我共享$/,
+    /^收藏$/,
+    /^动态$/,
+    /^我的空间$/,
+    /^团队空间$/,
+    /^快速访问$/,
+    /^回收站$/,
+    /^新建$/,
+    /^名称$/,
+    /^创建者$/,
+    /^打开时间$/,
+    /^共享信息$/,
+    /^搜索文件$/,
+    /^Share$/,
+    /^金科SA$/,
+    /^DeepBank/,
+    /^金科$/,
+    /^\d+$/,
+  ];
+  return noisePatterns.some((p) => p.test(line));
+}

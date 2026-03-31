@@ -1,4 +1,4 @@
-import { cli, Strategy } from '@jackwener/opencli/dist/registry.js';
+import { cli, Strategy } from '@jackwener/opencli/registry';
 import { extractUserInfo } from './helpers.js';
 import { withElectronPage } from './cdp.js';
 
