@@ -606,7 +606,7 @@ async function performAction(page, action, comment, to) {
 
   // Fill comment first (before clicking action button)
   if (comment) {
-    const commentResult = await fillComment(page, comment);
+    await fillComment(page, comment);
   }
 
   let buttonLabel;
