@@ -1,10 +1,10 @@
 class Agenticos < Formula
   desc "AI-native project management MCP server for Claude Code, Codex, Cursor, and Gemini CLI"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://github.com/madlouse/AgenticOS/releases/download/v0.2.1/agenticos-mcp.tgz"
-  sha256 "f87d5e1a14442ac327f474a133cfafca32e6dd418cc48ab26e4f71fee72d501e"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.3.0/agenticos-mcp.tgz"
+  sha256 "54c755ec2150ea4e5217eec2dcba6cd96c2e8ed2352a4eb6439ec458e182f64b"
   license "MIT"
-  version "0.2.1"
+  version "0.3.0"
 
   depends_on "node"
 
@@ -14,16 +14,15 @@ class Agenticos < Formula
   end
 
   def post_install
+    # Provision a clean workspace directory separate from any source checkout
+    (var/"agenticos").mkpath
     ohai "AgenticOS installed!"
-    ohai "Installed:"
-    ohai "  - agenticos-mcp"
+    ohai "Workspace directory created at: #{var}/agenticos"
     ohai ""
-    ohai "Homebrew does not edit Claude Code, Codex, Cursor, or Gemini CLI configs for you."
-    ohai "Set AGENTICOS_HOME explicitly, choose a supported agent bootstrap path, restart the tool, then verify with agenticos_list."
+    ohai "Add the following to your shell profile (~/.zshrc or ~/.bashrc):"
+    ohai "  export AGENTICOS_HOME=\"#{var}/agenticos\""
     ohai ""
-    ohai "Example workspace setup:"
-    ohai "  mkdir -p #{var}/agenticos"
-    ohai "  export AGENTICOS_HOME=#{var}/agenticos"
+    ohai "Then bootstrap your agent (see caveats below) and restart the tool."
   end
 
   def caveats
@@ -33,10 +32,11 @@ class Agenticos < Formula
       Homebrew installs the binary only. It does not create or select a workspace, edit AI tool
       configs, restart the tool, or prove activation automatically.
 
-      1. Set your workspace location before starting agenticos-mcp (add to ~/.zshrc or ~/.bashrc).
-         Example:
-           mkdir -p "#{var}/agenticos"
+      1. Set AGENTICOS_HOME to the workspace created by Homebrew (add to ~/.zshrc or ~/.bashrc):
            export AGENTICOS_HOME="#{var}/agenticos"
+
+         The workspace directory has already been created at #{var}/agenticos.
+         Keep it separate from any source checkout — binary and workspace are independent.
 
       2. Bootstrap one officially supported agent:
 
