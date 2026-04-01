@@ -1,4 +1,4 @@
-<!-- agenticos-template: v4 -->
+<!-- agenticos-template: v6 -->
 # CLAUDE.md — 360teams
 
 ## Adapter Role
@@ -18,13 +18,14 @@ It must expose the same canonical policy as other agent adapters while allowing 
 - Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.
 ## Guardrail Protocol (MANDATORY)
 
-For implementation-affecting work:
+Implementation work must use the executable guardrail flow:
 
 1. call `agenticos_preflight` before editing
-2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
-3. before PR creation or merge, call `agenticos_pr_scope_check`
+2. if preflight returns `REDIRECT` because workspace isolation is missing, call `agenticos_branch_bootstrap`
+3. if preflight returns `REDIRECT` because declared change classes are mixed, split the work into phases before editing
+4. do not submit a PR before running `agenticos_pr_scope_check`
 
-If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
+If any guardrail returns `BLOCK`, stop and resolve the blocking reason first.
 
 ## MANDATORY: Recording Protocol
 
@@ -53,6 +54,21 @@ When the user signals session end (says goodbye, thanks, done, or stops respondi
 2. Call `agenticos_save` to commit to Git
 
 **If you skip this step, all context from this session is permanently lost.**
+
+## Cumulative Review Log Protocol (MANDATORY for multi-step work)
+
+When work spans multiple landed steps, broad cleanup, migration, or any change set that should later be reviewed as one sequence:
+
+1. create one stable cumulative log under `tasks/`, for example `tasks/topic-global-log.md`
+2. if available, start from `tasks/templates/global-review-log.md`
+3. append each landed step with:
+   - intent
+   - changed surfaces
+   - verification
+   - residual risks
+4. use that one stable log as the basis for later whole-pass review
+
+Do not leave the review narrative scattered only across dated scratch notes or implicit chat history.
 
 ---
 

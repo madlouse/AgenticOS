@@ -85,11 +85,12 @@ export async function withElectronPage(fn) {
     );
   }
 
-  // Find the main page target (type 'page' or 'other', skip devtools/background)
+  // Find the main page target — validate it's actually a 360Teams renderer
   const target = targets.find(
     (t) => (t.type === 'page' || t.type === 'other') &&
             !t.url.startsWith('devtools://') &&
-            !t.url.includes('background')
+            !t.url.includes('background') &&
+            (t.url.includes('360teams') || t.url.includes('360td'))
   );
   if (!target) {
     throw new Error(

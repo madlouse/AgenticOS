@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     coverage: {
       provider: 'v8',
-      include: ['clis/360teams/helpers.js'],
+      include: ['clis/360teams/helpers.js', 'clis/360teams/todo.js'],
       thresholds: {
         lines: 100,
         functions: 100,
