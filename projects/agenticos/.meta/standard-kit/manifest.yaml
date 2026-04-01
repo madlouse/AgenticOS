@@ -49,6 +49,10 @@ layers:
         canonical_source: projects/agenticos/.meta/templates/sub-agent-handoff.md
         inheritance: copied_template
         customizable: yes
+      - path: tasks/templates/global-review-log.md
+        canonical_source: projects/agenticos/.meta/templates/global-review-log.md
+        inheritance: copied_template
+        customizable: yes
       - path: tasks/templates/submission-evidence.md
         canonical_source: projects/agenticos/.meta/templates/submission-evidence.md
         inheritance: copied_template
@@ -66,8 +70,8 @@ layers:
 
 upgrade_rules:
   template_marker_version:
-    AGENTS.md: 4
-    CLAUDE.md: 4
+    AGENTS.md: 6
+    CLAUDE.md: 6
   compatibility_rule: >
     Generated files may be upgraded in place by distill when the template marker version changes.
   copied_template_rule: >
