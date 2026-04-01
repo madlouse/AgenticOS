@@ -42,6 +42,19 @@ async function waitFor(page, expression, timeoutMs) {
 }
 
 /**
+ * Wait for the detail panel to become visible after clicking a todo item.
+ * Returns 'visible' when found, null on timeout.
+ */
+async function waitForDetailPanel(page) {
+  return await waitFor(page,
+    "(function() {" +
+    "return document.querySelector('.approval-detail, .todo-detail, .el-drawer__body, [class*=\"detail\"]') ? 'visible' : null;" +
+    "})()",
+    5000
+  );
+}
+
+/**
  * Evaluate `expression` which must return {x, y} | null, then dispatch a
  * real mouse click at those viewport coordinates.
  */
@@ -509,24 +522,30 @@ async function selectPerson(page, personName) {
     "  var a = document.querySelector(areaSels[ai]);" +
     "  if (a) areas.push(a);" +
     "}" +
+    "function getCoords(el) {" +
+    "  var inner = el.querySelector('.el-checkbox__inner') || el.querySelector('label.el-checkbox');" +
+    "  if (!inner) return null;" +
+    "  var r = inner.getBoundingClientRect();" +
+    "  return r.width > 0 ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;" +
+    "}" +
+    "var substringMatches = [];" +
     "for (var i = 0; i < areas.length; i++) {" +
     "  var wrappers = areas[i].querySelectorAll('.checkbox-wrapper');" +
     "  for (var wi = 0; wi < wrappers.length; wi++) {" +
     "    var txt = (wrappers[wi].innerText || '').trim();" +
-    "    if (txt.indexOf(name) >= 0 && txt.indexOf('、') < 0) {" +
-    "      var inner = wrappers[wi].querySelector('.el-checkbox__inner') || wrappers[wi].querySelector('label.el-checkbox');" +
-    "      if (inner) {" +
-    "        var r = inner.getBoundingClientRect();" +
-    "        if (r.width > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };" +
-    "      }" +
-    "    }" +
+    "    if (txt.indexOf('、') >= 0) continue;" +
+    "    if (txt === name) { var c = getCoords(wrappers[wi]); if (c) return c; }" +
+    "    if (txt.indexOf(name) >= 0) substringMatches.push(wrappers[wi]);" +
     "  }" +
     "}" +
+    "if (substringMatches.length === 1) { var sc = getCoords(substringMatches[0]); if (sc) return sc; }" +
+    "if (substringMatches.length > 1) return { ambiguous: true, count: substringMatches.length };" +
     "return null;" +
     "})(" + JSON.stringify(personName) + ")"
   );
 
   if (!cbCoords) return { success: false, reason: `未找到人员「${personName}」` };
+  if (cbCoords.ambiguous) return { success: false, reason: `「${personName}」匹配到 ${cbCoords.count} 位人员，请使用更完整的姓名` };
 
   await page.dispatchMouseEvent(cbCoords.x, cbCoords.y);
   await sleep(500);
@@ -571,6 +590,15 @@ async function selectPerson(page, personName) {
 async function performAction(page, action, comment, to) {
   const detail = await extractTodoDetail(page);
   const type = detail.type;
+  const itemTitle = detail.lines && detail.lines.length > 0 ? detail.lines[0] : '-';
+
+  if (type === 'unknown') {
+    return {
+      success: false,
+      itemTitle,
+      reason: `无法识别待办类型 (按钮列表: ${detail.buttons.join(', ') || '空'})。请运行 todo view --id N 确认详情面板已加载。`,
+    };
+  }
 
   if (comment) {
     await fillComment(page, comment);
@@ -633,6 +661,7 @@ async function performAction(page, action, comment, to) {
     action,
     button: buttonLabel,
     type,
+    itemTitle,
     comment: comment || '',
     to: to || '',
     confirmResult,
@@ -721,7 +750,10 @@ cli({
         return [{ Status: 'Error', Message: `待办第 ${id} 项未找到，请先运行 todo list 确认序号` }];
       }
 
-      await sleep(2000);
+      const panelVisible = await waitForDetailPanel(page);
+      if (!panelVisible) {
+        return [{ Status: 'Error', Message: `待办第 ${id} 项详情面板未出现，请重试` }];
+      }
 
       const detail = await extractTodoDetail(page);
       return [{
@@ -757,13 +789,15 @@ cli({
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
 
-      await sleep(2000);
+      const panelVisible = await waitForDetailPanel(page);
+      if (!panelVisible) return [{ Status: 'Error', Message: `待办第 ${id} 项详情面板未出现，请重试` }];
 
       const result = await performAction(page, 'approve', kwargs.comment, '');
       return [{
         Status: result.success ? 'OK' : 'Error',
         Action: '批准/同意',
         TodoId: id,
+        Item: result.itemTitle || '-',
         Type: result.type || '-',
         Comment: result.comment || '-',
         Message: result.success ? `已点击「${result.button}」` : result.reason,
@@ -796,13 +830,15 @@ cli({
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
 
-      await sleep(2000);
+      const panelVisible = await waitForDetailPanel(page);
+      if (!panelVisible) return [{ Status: 'Error', Message: `待办第 ${id} 项详情面板未出现，请重试` }];
 
       const result = await performAction(page, 'reject', kwargs.comment, '');
       return [{
         Status: result.success ? 'OK' : 'Error',
         Action: '退回/驳回',
         TodoId: id,
+        Item: result.itemTitle || '-',
         Type: result.type || '-',
         Comment: result.comment || '-',
         Message: result.success ? `已点击「${result.button}」` : result.reason,
@@ -837,13 +873,15 @@ cli({
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
 
-      await sleep(2000);
+      const panelVisible = await waitForDetailPanel(page);
+      if (!panelVisible) return [{ Status: 'Error', Message: `待办第 ${id} 项详情面板未出现，请重试` }];
 
       const result = await performAction(page, 'forward', kwargs.comment, kwargs.to);
       return [{
         Status: result.success ? 'OK' : 'Error',
         Action: '转发',
         TodoId: id,
+        Item: result.itemTitle || '-',
         Type: result.type || '-',
         To: kwargs.to,
         Comment: result.comment || '-',
@@ -879,13 +917,15 @@ cli({
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
 
-      await sleep(2000);
+      const panelVisible = await waitForDetailPanel(page);
+      if (!panelVisible) return [{ Status: 'Error', Message: `待办第 ${id} 项详情面板未出现，请重试` }];
 
       const result = await performAction(page, 'assign', kwargs.comment, kwargs.to);
       return [{
         Status: result.success ? 'OK' : 'Error',
         Action: '指派',
         TodoId: id,
+        Item: result.itemTitle || '-',
         Type: result.type || '-',
         To: kwargs.to,
         Comment: result.comment || '-',
