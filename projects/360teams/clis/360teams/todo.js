@@ -78,7 +78,7 @@ async function clickByBounds(page, expression) {
  */
 async function navigateToTodo(page) {
   // 1. Click 日程会议
-  await page.evaluate(
+  const navResult = await page.evaluate(
     "(function() {" +
     "var items = document.querySelectorAll('.sidenav-item');" +
     "for (var i = 0; i < items.length; i++) {" +
@@ -87,6 +87,8 @@ async function navigateToTodo(page) {
     "}" +
     "return 'not found'; })()"
   );
+  if (navResult !== 'clicked') throw new Error('导航失败：未找到「日程会议」菜单项');
+
   await sleep(2000);
 
   // 2. Click 审批 sub-menu item
@@ -99,6 +101,8 @@ async function navigateToTodo(page) {
     "}" +
     "return 'not found'; })()"
   );
+  if (approvalResult !== 'clicked') throw new Error('导航失败：未找到「审批」菜单项，请确认当前用户有审批权限');
+
   await sleep(2500);
 
   // 3. Click 待办 tab
@@ -111,9 +115,9 @@ async function navigateToTodo(page) {
     "}" +
     "return 'not found'; })()"
   );
-  await sleep(2000);
+  if (todoTabResult !== 'clicked') throw new Error('导航失败：未找到「待办」tab，可能已被其他流程占用');
 
-  return { approvalResult, todoTabResult };
+  await sleep(2000);
 }
 
 // ─── List Parser ──────────────────────────────────────────────────────────────
@@ -443,35 +447,27 @@ async function clickActionButton(page, labelText) {
 
 /**
  * Handle any confirmation dialog that appears after an action.
+ * Only clicks buttons with explicit confirm labels — no blind fallback clicks.
  */
 async function handleConfirmDialog(page) {
   await sleep(800);
-  const confirmed = await page.evaluate(
+  return await page.evaluate(
     "(function() {" +
     "var dlgSels = ['.el-message-box','.el-dialog','[role=\"dialog\"]','.el-popconfirm__main'];" +
-    "var dialogs = [];" +
+    "var confirmLabels = ['确定','确认','同意','OK','是'];" +
+    "var skipLabels = ['取消','Cancel','否'];" +
     "for (var di = 0; di < dlgSels.length; di++) {" +
     "  var dlg = document.querySelector(dlgSels[di]);" +
-    "  if (dlg) dialogs.push(dlg);" +
-    "}" +
-    "var confirmLabels = ['确定','确认','同意','OK','是'];" +
-    "for (var i = 0; i < dialogs.length; i++) {" +
-    "  var btns = dialogs[i].querySelectorAll('button');" +
+    "  if (!dlg) continue;" +
+    "  var btns = dlg.querySelectorAll('button');" +
     "  for (var bi = 0; bi < btns.length; bi++) {" +
     "    var text = (btns[bi].innerText || '').trim();" +
     "    if (confirmLabels.indexOf(text) >= 0) { btns[bi].click(); return 'confirmed: ' + text; }" +
     "  }" +
     "}" +
-    "var skipLabels = ['取消','Cancel','否'];" +
-    "var confirmBtns = document.querySelectorAll('.el-popconfirm__action button, .el-message-box__btns button');" +
-    "for (var ci = 0; ci < confirmBtns.length; ci++) {" +
-    "  var ct = (confirmBtns[ci].innerText || '').trim();" +
-    "  if (skipLabels.indexOf(ct) < 0 && ct.length > 0) { confirmBtns[ci].click(); return 'confirmed: ' + ct; }" +
-    "}" +
     "return 'no dialog';" +
     "})()"
   );
-  return confirmed;
 }
 
 // ─── Person Picker ────────────────────────────────────────────────────────────
@@ -654,10 +650,15 @@ async function performAction(page, action, comment, to) {
 
   const confirmResult = await handleConfirmDialog(page);
 
+  // For approve/reject, absence of a confirm dialog is suspicious — the backend
+  // may not have received the request. For forward/assign, no dialog is normal.
+  const noDialogForApproval = (action === 'approve' || action === 'reject') &&
+    confirmResult === 'no dialog';
+
   await sleep(1000);
 
   return {
-    success: true,
+    success: !noDialogForApproval,
     action,
     button: buttonLabel,
     type,
@@ -697,7 +698,9 @@ cli({
   ],
   func: async (_page, kwargs) => {
     return await withElectronPage(async (page) => {
-      await navigateToTodo(page);
+      let navErr;
+      try { await navigateToTodo(page); } catch (e) { navErr = e.message; }
+      if (navErr) return [{ Status: 'Error', Message: navErr }];
 
       const items = await parseTodoList(page);
       const limit = parseInt(kwargs.limit, 10) || 20;
@@ -743,7 +746,9 @@ cli({
     }
 
     return await withElectronPage(async (page) => {
-      await navigateToTodo(page);
+      let navErr;
+      try { await navigateToTodo(page); } catch (e) { navErr = e.message; }
+      if (navErr) return [{ Status: 'Error', Message: navErr }];
 
       const clicked = await clickTodoItem(page, id);
       if (!clicked) {
@@ -784,7 +789,9 @@ cli({
     if (!id || id < 1) return [{ Status: 'Error', Message: '--id must be a positive integer' }];
 
     return await withElectronPage(async (page) => {
-      await navigateToTodo(page);
+      let navErr;
+      try { await navigateToTodo(page); } catch (e) { navErr = e.message; }
+      if (navErr) return [{ Status: 'Error', Message: navErr }];
 
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
@@ -825,7 +832,9 @@ cli({
     if (!id || id < 1) return [{ Status: 'Error', Message: '--id must be a positive integer' }];
 
     return await withElectronPage(async (page) => {
-      await navigateToTodo(page);
+      let navErr;
+      try { await navigateToTodo(page); } catch (e) { navErr = e.message; }
+      if (navErr) return [{ Status: 'Error', Message: navErr }];
 
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
@@ -868,7 +877,9 @@ cli({
     if (!kwargs.to) return [{ Status: 'Error', Message: '--to is required for forward' }];
 
     return await withElectronPage(async (page) => {
-      await navigateToTodo(page);
+      let navErr;
+      try { await navigateToTodo(page); } catch (e) { navErr = e.message; }
+      if (navErr) return [{ Status: 'Error', Message: navErr }];
 
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
@@ -912,7 +923,9 @@ cli({
     if (!kwargs.to) return [{ Status: 'Error', Message: '--to is required for assign' }];
 
     return await withElectronPage(async (page) => {
-      await navigateToTodo(page);
+      let navErr;
+      try { await navigateToTodo(page); } catch (e) { navErr = e.message; }
+      if (navErr) return [{ Status: 'Error', Message: navErr }];
 
       const clicked = await clickTodoItem(page, id);
       if (!clicked) return [{ Status: 'Error', Message: `待办第 ${id} 项未找到` }];
