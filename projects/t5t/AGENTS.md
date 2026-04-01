@@ -1,4 +1,4 @@
-<!-- agenticos-template: v4 -->
+<!-- agenticos-template: v6 -->
 # AGENTS.md — T5T
 
 ## Adapter Role
@@ -21,8 +21,9 @@ It must expose the same canonical policy as other agent adapters rather than def
 Implementation work must use the executable guardrail flow:
 
 1. call `agenticos_preflight` before editing
-2. if preflight returns `REDIRECT`, call `agenticos_branch_bootstrap`
-3. do not submit a PR before running `agenticos_pr_scope_check`
+2. if preflight returns `REDIRECT` because workspace isolation is missing, call `agenticos_branch_bootstrap`
+3. if preflight returns `REDIRECT` because declared change classes are mixed, split the work into phases before editing
+4. do not submit a PR before running `agenticos_pr_scope_check`
 
 If any guardrail returns `BLOCK`, stop and resolve the blocking reason first.
 
@@ -46,6 +47,22 @@ Call the MCP tool `agenticos_record` with:
 2. Before ending the session (MANDATORY — context is lost otherwise)
 
 After recording, call `agenticos_save` to commit to Git.
+
+## Cumulative Review Log Protocol (MANDATORY for multi-step work)
+
+When work spans multiple landed steps, broad cleanup, migration, or any change set that should later be reviewed as one sequence:
+
+1. create one stable cumulative log under `tasks/`, for example `tasks/topic-global-log.md`
+2. if available, start from `tasks/templates/global-review-log.md`
+3. append each landed step with:
+   - intent
+   - changed surfaces
+   - verification
+   - residual risks
+4. use that one stable log as the basis for later whole-pass review
+
+Do not leave the review narrative scattered only across dated scratch notes or implicit chat history.
+
 
 ### Session Start
 
@@ -75,5 +92,6 @@ Then greet the user with: project name, last progress, current pending items, su
 | `tasks/templates/agent-preflight-checklist.yaml` | Preflight checklist template |
 | `tasks/templates/issue-design-brief.md` | Design-loop template |
 | `tasks/templates/non-code-evaluation-rubric.yaml` | Non-code evaluation rubric |
+| `tasks/templates/global-review-log.md` | Cumulative review log template |
 | `tasks/templates/submission-evidence.md` | Submission evidence template |
 | `artifacts/` | Outputs and deliverables |

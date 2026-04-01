@@ -1,6 +1,6 @@
 {
   "name": "agenticos-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP Server for AgenticOS - AI-native project management system",
   "type": "module",
   "bin": {
