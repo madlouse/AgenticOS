@@ -86,16 +86,20 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-03-29T16:31:43.133Z
+**Last Updated**: 2026-04-01T12:53:16.634Z
 
-**Current Task**: No active task (status: unknown)
+**Current Task**: 360teams 项目 AgenticOS 规范检查 (status: completed)
 
 **Active Items**:
-- Define project goals
-- Set up initial tasks
+- 将 state.yaml 和 CLAUDE.md Current State 节变更作为 P3 小修复提交
+- PR #153 合并后主项目自动达到 v6 合规
 
+**Recent Decisions**:
+- feat/issue-141-todo-cli 分支包含所有 v6 合规文件，PR #153 合并后主项目自动达标
+- vitest.config.js 已含 todo.js，覆盖阈值 100%（lines/functions/branches/statements）
+- AGENTS.md 已在 origin/main 上更新到 v6（commit 1b189c6），CLAUDE.md v4→v6 升级在 PR #153 中
 
-**Next Action**: Define project goals
+**Next Action**: 将 state.yaml 和 CLAUDE.md Current State 节变更作为 P3 小修复提交
 <!-- AGENT_CONTEXT_END -->
 
 ---
