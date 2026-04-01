@@ -1,6 +1,6 @@
 version: 1.0.0
-last_updated: 2026-04-01T06:30:00.000Z
-active_project: null
+last_updated: 2026-04-01T06:55:00.000Z
+active_project: agenticos
 projects:
   - id: ghostty-optimization
     name: Ghostty Optimization
@@ -20,12 +20,19 @@ projects:
     status: active
     created: 2026-03-16
     last_accessed: 2026-03-16T08:24:00Z
+  - id: agent-cli-api
+    name: Agent-CLI-API
+    path: projects/agent-cli-api
+    status: active
+    created: 2026-04-01
+    last_accessed: 2026-04-01T06:29:55.074Z
+    last_recorded: 2026-04-01T06:23:59.471Z
   - id: agenticos
     name: AgenticOS
     path: projects/agenticos
     status: active
     created: 2026-03-23
-    last_accessed: 2026-04-01T06:00:00.000Z
+    last_accessed: 2026-04-01T06:55:00.000Z
   - id: 360teams
     name: 360teams
     path: projects/360teams
