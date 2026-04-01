@@ -7,12 +7,16 @@
  *   - 工单 : has "同意" / "驳回" buttons
  *
  * Commands:
- *   opencli 360teams todo list    [--type oa|ticket] [--limit N]
+ *   opencli 360teams todo list    [--limit N]
  *   opencli 360teams todo view    --id N
  *   opencli 360teams todo approve --id N [--comment TEXT]
  *   opencli 360teams todo reject  --id N [--comment TEXT]
  *   opencli 360teams todo forward --id N  --to PERSON [--comment TEXT]
  *   opencli 360teams todo assign  --id N  --to PERSON [--comment TEXT]
+ *
+ * NOTE: All page.evaluate() strings use var + function (no const/let/arrow functions)
+ * because the 360Teams Electron webview V8 context rejects modern syntax.
+ * See knowledge/cdp-patterns.md for details.
  */
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { withElectronPage } from './cdp.js';
@@ -20,13 +24,14 @@ import { withElectronPage } from './cdp.js';
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise(function(r) { setTimeout(r, ms); });
 }
 
 /**
  * Poll `expression` on `page` until it returns a truthy value or timeout.
  */
-async function waitFor(page, expression, timeoutMs = 6000) {
+async function waitFor(page, expression, timeoutMs) {
+  if (timeoutMs === undefined) timeoutMs = 6000;
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const result = await page.evaluate(expression);
@@ -61,11 +66,11 @@ async function clickByBounds(page, expression) {
 async function navigateToTodo(page) {
   // 1. Click 日程会议
   await page.evaluate(
-    "(() => {" +
-    "const items = document.querySelectorAll('.sidenav-item');" +
-    "for (const item of items) {" +
-    "  if (item.innerText && item.innerText.trim() === '日程会议') {" +
-    "    item.click(); return 'clicked'; }" +
+    "(function() {" +
+    "var items = document.querySelectorAll('.sidenav-item');" +
+    "for (var i = 0; i < items.length; i++) {" +
+    "  if (items[i].innerText && items[i].innerText.trim() === '日程会议') {" +
+    "    items[i].click(); return 'clicked'; }" +
     "}" +
     "return 'not found'; })()"
   );
@@ -73,11 +78,11 @@ async function navigateToTodo(page) {
 
   // 2. Click 审批 sub-menu item
   const approvalResult = await page.evaluate(
-    "(() => {" +
-    "const all = document.querySelectorAll('.sidenav-item, .sidenav-submenu-item, div, span, button, a, li');" +
-    "for (const el of all) {" +
-    "  const text = (el.innerText || '').trim();" +
-    "  if (text === '审批') { el.click(); return 'clicked'; }" +
+    "(function() {" +
+    "var all = document.querySelectorAll('.sidenav-item, .sidenav-submenu-item, div, span, button, a, li');" +
+    "for (var i = 0; i < all.length; i++) {" +
+    "  var text = (all[i].innerText || '').trim();" +
+    "  if (text === '审批') { all[i].click(); return 'clicked'; }" +
     "}" +
     "return 'not found'; })()"
   );
@@ -85,11 +90,11 @@ async function navigateToTodo(page) {
 
   // 3. Click 待办 tab
   const todoTabResult = await page.evaluate(
-    "(() => {" +
-    "const all = document.querySelectorAll('.tab-item, .el-tabs__item, [role=\"tab\"], div, span');" +
-    "for (const el of all) {" +
-    "  const text = (el.innerText || '').trim();" +
-    "  if (text === '待办') { el.click(); return 'clicked'; }" +
+    "(function() {" +
+    "var all = document.querySelectorAll('.tab-item, .el-tabs__item, [role=\"tab\"], div, span');" +
+    "for (var i = 0; i < all.length; i++) {" +
+    "  var text = (all[i].innerText || '').trim();" +
+    "  if (text === '待办') { all[i].click(); return 'clicked'; }" +
     "}" +
     "return 'not found'; })()"
   );
@@ -103,9 +108,10 @@ async function navigateToTodo(page) {
 /**
  * Extract todo items from the left-side list panel.
  *
- * We attempt two strategies:
+ * We attempt three strategies:
  *  A) Vue component data extraction (accurate, structured)
- *  B) innerText-based line parsing (fallback)
+ *  B) DOM-based extraction (fallback)
+ *  C) innerText rough parsing (last resort)
  *
  * Each item shape:
  *  {
@@ -120,89 +126,86 @@ async function navigateToTodo(page) {
  */
 async function parseTodoList(page) {
   // Strategy A: try to pull structured data from Vue component
-  const vueData = await page.evaluate(`(() => {
-    try {
-      // Walk all elements to find one that has a todoList / pendingList in its Vue data
-      const allEls = document.querySelectorAll('*');
-      let comp = null;
-      for (const el of allEls) {
-        const v = el.__vue__;
-        if (!v) continue;
-        const d = v.$data || {};
-        if (Array.isArray(d.todoList) && d.todoList.length > 0) { comp = v; break; }
-        if (Array.isArray(d.pendingList) && d.pendingList.length > 0) { comp = v; break; }
-        if (Array.isArray(d.approvalList) && d.approvalList.length > 0) { comp = v; break; }
-        if (Array.isArray(d.list) && d.list.length > 0 && d.list[0] && d.list[0].title) { comp = v; break; }
-      }
-      if (!comp) return null;
-
-      const raw = comp.$data.todoList || comp.$data.pendingList || comp.$data.approvalList || comp.$data.list;
-      return raw.map((item, idx) => ({
-        index: idx + 1,
-        title: item.title || item.name || item.flowName || item.processName || '',
-        status: item.status || item.statusName || item.state || '',
-        from: item.createUserName || item.sponsorName || item.initiator || item.from || '',
-        arrived: item.arriveTime || item.createTime || item.startTime || '',
-        waiting: item.waitTime || item.duration || '',
-        overtime: !!(item.overtime || item.isOvertime || item.timeout),
-      }));
-    } catch (e) {
-      return null;
-    }
-  })()`);
+  const vueData = await page.evaluate(
+    "(function() {" +
+    "try {" +
+    "  var allEls = document.querySelectorAll('*');" +
+    "  var comp = null;" +
+    "  for (var i = 0; i < allEls.length; i++) {" +
+    "    var v = allEls[i].__vue__;" +
+    "    if (!v) continue;" +
+    "    var d = v.$data || {};" +
+    "    if (Array.isArray(d.todoList) && d.todoList.length > 0) { comp = v; break; }" +
+    "    if (Array.isArray(d.pendingList) && d.pendingList.length > 0) { comp = v; break; }" +
+    "    if (Array.isArray(d.approvalList) && d.approvalList.length > 0) { comp = v; break; }" +
+    "    if (Array.isArray(d.list) && d.list.length > 0 && d.list[0] && d.list[0].title) { comp = v; break; }" +
+    "  }" +
+    "  if (!comp) return null;" +
+    "  var raw = comp.$data.todoList || comp.$data.pendingList || comp.$data.approvalList || comp.$data.list;" +
+    "  return raw.map(function(item, idx) {" +
+    "    return {" +
+    "      index: idx + 1," +
+    "      title: item.title || item.name || item.flowName || item.processName || ''," +
+    "      status: item.status || item.statusName || item.state || ''," +
+    "      from: item.createUserName || item.sponsorName || item.initiator || item.from || ''," +
+    "      arrived: item.arriveTime || item.createTime || item.startTime || ''," +
+    "      waiting: item.waitTime || item.duration || ''," +
+    "      overtime: !!(item.overtime || item.isOvertime || item.timeout)" +
+    "    };" +
+    "  });" +
+    "} catch(e) { return null; }" +
+    "})()"
+  );
 
   if (vueData && vueData.length > 0) {
     return vueData;
   }
 
   // Strategy B: DOM-based extraction — read each list item element
-  const domData = await page.evaluate(`(() => {
-    try {
-      // Common selectors for todo list items
-      const containers = [
-        '.approval-list .list-item',
-        '.todo-list .list-item',
-        '.pending-list .list-item',
-        '.approval-item',
-        '.todo-item',
-        '[class*="todo"] [class*="item"]',
-        '[class*="approval"] [class*="item"]',
-        '[class*="pending"] [class*="item"]',
-      ];
-
-      let items = [];
-      for (const sel of containers) {
-        items = Array.from(document.querySelectorAll(sel));
-        if (items.length > 0) break;
-      }
-
-      if (items.length === 0) return null;
-
-      return items.map((el, idx) => {
-        const text = (el.innerText || '').trim();
-        const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
-
-        // Check if any child has an overtime/warning class
-        const hasOvertime = !!(
-          el.querySelector('[class*="overtime"], [class*="timeout"], [class*="warn"], [class*="danger"]') ||
-          el.querySelector('[style*="color: red"], [style*="color: orange"]')
-        );
-
-        // First line is usually the title; subsequent lines carry metadata
-        return {
-          index: idx + 1,
-          title: lines[0] || '',
-          status: lines.find(l => l.includes('审批中') || l.includes('待处理') || l.includes('审核中')) || '',
-          from: lines.find(l => l.length > 0 && l !== lines[0]) || '',
-          arrived: '',
-          waiting: '',
-          overtime: hasOvertime,
-        };
-      });
-    } catch (e) {
-      return null;
-    }
-  })()`);
+  const domData = await page.evaluate(
+    "(function() {" +
+    "try {" +
+    "  var containers = [" +
+    "    '.approval-list .list-item'," +
+    "    '.todo-list .list-item'," +
+    "    '.pending-list .list-item'," +
+    "    '.approval-item'," +
+    "    '.todo-item'," +
+    "    '[class*=\"todo\"] [class*=\"item\"]'," +
+    "    '[class*=\"approval\"] [class*=\"item\"]'," +
+    "    '[class*=\"pending\"] [class*=\"item\"]'" +
+    "  ];" +
+    "  var items = [];" +
+    "  for (var ci = 0; ci < containers.length; ci++) {" +
+    "    items = Array.from(document.querySelectorAll(containers[ci]));" +
+    "    if (items.length > 0) break;" +
+    "  }" +
+    "  if (items.length === 0) return null;" +
+    "  return items.map(function(el, idx) {" +
+    "    var text = (el.innerText || '').trim();" +
+    "    var lines = text.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });" +
+    "    var hasOvertime = !!(el.querySelector('[class*=\"overtime\"], [class*=\"timeout\"], [class*=\"warn\"], [class*=\"danger\"]') ||" +
+    "      el.querySelector('[style*=\"color: red\"], [style*=\"color: orange\"]'));" +
+    "    var statusLine = '';" +
+    "    for (var li = 0; li < lines.length; li++) {" +
+    "      if (lines[li].indexOf('审批中') >= 0 || lines[li].indexOf('待处理') >= 0 || lines[li].indexOf('审核中') >= 0) {" +
+    "        statusLine = lines[li]; break;" +
+    "      }" +
+    "    }" +
+    "    var fromLine = lines.length > 1 ? lines[1] : '';" +
+    "    return {" +
+    "      index: idx + 1," +
+    "      title: lines[0] || ''," +
+    "      status: statusLine," +
+    "      from: fromLine," +
+    "      arrived: ''," +
+    "      waiting: ''," +
+    "      overtime: hasOvertime" +
+    "    };" +
+    "  });" +
+    "} catch(e) { return null; }" +
+    "})()"
+  );
 
   if (domData && domData.length > 0) {
     return domData;
@@ -234,7 +237,6 @@ function parseTodoFromText(text) {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    // If next line is a status keyword, current line is a title
     const nextLine = lines[i + 1] || '';
     if (!isNoise(line) && statusKeywords.some(k => nextLine.includes(k))) {
       const item = {
@@ -260,113 +262,90 @@ function parseTodoFromText(text) {
 
 /**
  * After clicking a todo item, extract detail information and detect the todo type.
- * Returns { type: 'OA' | '工单' | 'unknown', buttons: string[], detail: object }
+ * Returns { type: 'OA' | '工单' | 'unknown', buttons: string[], lines: string[] }
  */
 async function extractTodoDetail(page) {
-  return await page.evaluate(`(() => {
-    try {
-      // Find detail panel — try common panel/drawer selectors
-      const panelSelectors = [
-        '.approval-detail',
-        '.todo-detail',
-        '.el-drawer__body',
-        '.detail-panel',
-        '[class*="detail"]',
-        '.main-content',
-      ];
-
-      let panel = null;
-      for (const sel of panelSelectors) {
-        panel = document.querySelector(sel);
-        if (panel) break;
-      }
-      if (!panel) panel = document.body;
-
-      // Collect all visible button texts
-      const buttons = Array.from(panel.querySelectorAll('button, .btn, [class*="btn"]'))
-        .map(b => (b.innerText || '').trim())
-        .filter(t => t.length > 0 && !['×', '✕', '关闭'].includes(t));
-
-      // Determine type from available action buttons
-      let type = 'unknown';
-      const hasApprove = buttons.some(b => b === '批准');
-      const hasReject = buttons.some(b => b === '退回');
-      const hasAgree = buttons.some(b => b === '同意');
-      const hasDismiss = buttons.some(b => b === '驳回');
-
-      if (hasApprove || hasReject) type = 'OA';
-      else if (hasAgree || hasDismiss) type = '工单';
-
-      // Extract key text fields
-      const text = (panel.innerText || '').trim();
-      const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
-
-      return { type, buttons, lines: lines.slice(0, 30) };
-    } catch (e) {
-      return { type: 'unknown', buttons: [], lines: [], error: e.message };
-    }
-  })()`);
+  return await page.evaluate(
+    "(function() {" +
+    "try {" +
+    "  var panelSelectors = [" +
+    "    '.approval-detail', '.todo-detail', '.el-drawer__body'," +
+    "    '.detail-panel', '[class*=\"detail\"]', '.main-content'" +
+    "  ];" +
+    "  var panel = null;" +
+    "  for (var si = 0; si < panelSelectors.length; si++) {" +
+    "    panel = document.querySelector(panelSelectors[si]);" +
+    "    if (panel) break;" +
+    "  }" +
+    "  if (!panel) panel = document.body;" +
+    "  var rawBtns = Array.from(panel.querySelectorAll('button, .btn, [class*=\"btn\"]'));" +
+    "  var buttons = [];" +
+    "  for (var bi = 0; bi < rawBtns.length; bi++) {" +
+    "    var bt = (rawBtns[bi].innerText || '').trim();" +
+    "    if (bt.length > 0 && bt !== '×' && bt !== '✕' && bt !== '关闭') buttons.push(bt);" +
+    "  }" +
+    "  var type = 'unknown';" +
+    "  var hasApprove = buttons.indexOf('批准') >= 0;" +
+    "  var hasReject = buttons.indexOf('退回') >= 0;" +
+    "  var hasAgree = buttons.indexOf('同意') >= 0;" +
+    "  var hasDismiss = buttons.indexOf('驳回') >= 0;" +
+    "  if (hasApprove || hasReject) type = 'OA';" +
+    "  else if (hasAgree || hasDismiss) type = '工单';" +
+    "  var text = (panel.innerText || '').trim();" +
+    "  var lines = text.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });" +
+    "  return { type: type, buttons: buttons, lines: lines.slice(0, 30) };" +
+    "} catch(e) { return { type: 'unknown', buttons: [], lines: [], error: e.message }; }" +
+    "})()"
+  );
 }
 
 // ─── Item Selector ────────────────────────────────────────────────────────────
+
+const TODO_ITEM_SELECTORS =
+  "'.approval-list .list-item'," +
+  "'.todo-list .list-item'," +
+  "'.pending-list .list-item'," +
+  "'.approval-item'," +
+  "'.todo-item'," +
+  "'[class*=\"todo\"] [class*=\"item\"]'," +
+  "'[class*=\"approval\"] [class*=\"item\"]'," +
+  "'[class*=\"pending\"] [class*=\"item\"]'";
 
 /**
  * Click the Nth todo item in the left panel (1-based index).
  * Returns true if clicked successfully.
  */
 async function clickTodoItem(page, index) {
-  const clicked = await page.evaluate(`((idx) => {
-    const containers = [
-      '.approval-list .list-item',
-      '.todo-list .list-item',
-      '.pending-list .list-item',
-      '.approval-item',
-      '.todo-item',
-      '[class*="todo"] [class*="item"]',
-      '[class*="approval"] [class*="item"]',
-      '[class*="pending"] [class*="item"]',
-    ];
-
-    let items = [];
-    for (const sel of containers) {
-      items = Array.from(document.querySelectorAll(sel));
-      if (items.length > 0) break;
-    }
-
-    if (items.length === 0 || idx < 1 || idx > items.length) return false;
-
-    const target = items[idx - 1];
-    const rect = target.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      // Try direct click first (may not trigger Vue events)
-      target.click();
-      return true;
-    }
-    return false;
-  })(${index})`);
+  const clicked = await page.evaluate(
+    "(function(idx) {" +
+    "var containers = [" + TODO_ITEM_SELECTORS + "];" +
+    "var items = [];" +
+    "for (var ci = 0; ci < containers.length; ci++) {" +
+    "  items = Array.from(document.querySelectorAll(containers[ci]));" +
+    "  if (items.length > 0) break;" +
+    "}" +
+    "if (items.length === 0 || idx < 1 || idx > items.length) return false;" +
+    "var target = items[idx - 1];" +
+    "var rect = target.getBoundingClientRect();" +
+    "if (rect.width > 0 && rect.height > 0) { target.click(); return true; }" +
+    "return false;" +
+    "})(" + index + ")"
+  );
 
   if (!clicked) {
-    // Fallback: use mouse event via getBoundingClientRect coordinates
-    return await clickByBounds(page, `((idx) => {
-      const containers = [
-        '.approval-list .list-item',
-        '.todo-list .list-item',
-        '.pending-list .list-item',
-        '.approval-item',
-        '.todo-item',
-        '[class*="todo"] [class*="item"]',
-        '[class*="approval"] [class*="item"]',
-        '[class*="pending"] [class*="item"]',
-      ];
-      let items = [];
-      for (const sel of containers) {
-        items = Array.from(document.querySelectorAll(sel));
-        if (items.length > 0) break;
-      }
-      if (!items.length || idx < 1 || idx > items.length) return null;
-      const rect = items[idx - 1].getBoundingClientRect();
-      return rect.width > 0 ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null;
-    })(${index})`);
+    return await clickByBounds(page,
+      "(function(idx) {" +
+      "var containers = [" + TODO_ITEM_SELECTORS + "];" +
+      "var items = [];" +
+      "for (var ci = 0; ci < containers.length; ci++) {" +
+      "  items = Array.from(document.querySelectorAll(containers[ci]));" +
+      "  if (items.length > 0) break;" +
+      "}" +
+      "if (!items.length || idx < 1 || idx > items.length) return null;" +
+      "var rect = items[idx - 1].getBoundingClientRect();" +
+      "return rect.width > 0 ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null;" +
+      "})(" + index + ")"
+    );
   }
 
   return clicked;
@@ -379,122 +358,106 @@ async function clickTodoItem(page, index) {
  */
 async function fillComment(page, comment) {
   if (!comment) return 'skipped';
-  return await page.evaluate(`((comment) => {
-    const panelSelectors = [
-      '.approval-detail textarea',
-      '.todo-detail textarea',
-      '.el-drawer__body textarea',
-      '[class*="detail"] textarea',
-      'textarea[placeholder*="意见"]',
-      'textarea[placeholder*="备注"]',
-      'textarea[placeholder*="原因"]',
-      'textarea[placeholder*="说明"]',
-      'textarea',
-    ];
-
-    for (const sel of panelSelectors) {
-      const ta = document.querySelector(sel);
-      if (ta) {
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(ta, comment);
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
-        ta.dispatchEvent(new Event('change', { bubbles: true }));
-        return 'filled';
-      }
-    }
-    return 'not found';
-  })(${JSON.stringify(comment)})`);
+  return await page.evaluate(
+    "(function(comment) {" +
+    "var sels = [" +
+    "  '.approval-detail textarea', '.todo-detail textarea'," +
+    "  '.el-drawer__body textarea', '[class*=\"detail\"] textarea'," +
+    "  'textarea[placeholder*=\"意见\"]', 'textarea[placeholder*=\"备注\"]'," +
+    "  'textarea[placeholder*=\"原因\"]', 'textarea[placeholder*=\"说明\"]'," +
+    "  'textarea'" +
+    "];" +
+    "for (var si = 0; si < sels.length; si++) {" +
+    "  var ta = document.querySelector(sels[si]);" +
+    "  if (ta) {" +
+    "    var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;" +
+    "    setter.call(ta, comment);" +
+    "    ta.dispatchEvent(new Event('input', { bubbles: true }));" +
+    "    ta.dispatchEvent(new Event('change', { bubbles: true }));" +
+    "    return 'filled';" +
+    "  }" +
+    "}" +
+    "return 'not found';" +
+    "})(" + JSON.stringify(comment) + ")"
+  );
 }
 
 // ─── Action Button Clicker ────────────────────────────────────────────────────
+
+const DETAIL_PANEL_SEL =
+  "'.approval-detail, .todo-detail, .el-drawer__body, [class*=\"detail\"]'";
 
 /**
  * Click an action button by its exact text label.
  * Tries direct click first, then mouse event as fallback.
  */
 async function clickActionButton(page, labelText) {
-  // Try direct click
-  const directClicked = await page.evaluate(`((label) => {
-    const panelSelectors = [
-      '.approval-detail',
-      '.todo-detail',
-      '.el-drawer__body',
-      '[class*="detail"]',
-      'body',
-    ];
-    let panel = null;
-    for (const sel of panelSelectors) {
-      panel = document.querySelector(sel);
-      if (panel) break;
-    }
-    if (!panel) panel = document.body;
-
-    const buttons = panel.querySelectorAll('button, .btn, [class*="btn-"]');
-    for (const btn of buttons) {
-      if ((btn.innerText || '').trim() === label) {
-        btn.click();
-        return 'clicked';
-      }
-    }
-    return 'not found';
-  })(${JSON.stringify(labelText)})`);
+  const directClicked = await page.evaluate(
+    "(function(label) {" +
+    "var panelSels = ['.approval-detail','.todo-detail','.el-drawer__body','[class*=\"detail\"]','body'];" +
+    "var panel = null;" +
+    "for (var si = 0; si < panelSels.length; si++) {" +
+    "  panel = document.querySelector(panelSels[si]);" +
+    "  if (panel) break;" +
+    "}" +
+    "if (!panel) panel = document.body;" +
+    "var buttons = panel.querySelectorAll('button, .btn, [class*=\"btn-\"]');" +
+    "for (var bi = 0; bi < buttons.length; bi++) {" +
+    "  if ((buttons[bi].innerText || '').trim() === label) { buttons[bi].click(); return 'clicked'; }" +
+    "}" +
+    "return 'not found';" +
+    "})(" + JSON.stringify(labelText) + ")"
+  );
 
   if (directClicked === 'clicked') return true;
 
-  // Fallback: mouse event
-  return await clickByBounds(page, `((label) => {
-    const panel = document.querySelector('.approval-detail, .todo-detail, .el-drawer__body, [class*="detail"]') || document.body;
-    const buttons = panel.querySelectorAll('button, .btn, [class*="btn-"]');
-    for (const btn of buttons) {
-      if ((btn.innerText || '').trim() === label) {
-        const r = btn.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-      }
-    }
-    return null;
-  })(${JSON.stringify(labelText)})`);
+  return await clickByBounds(page,
+    "(function(label) {" +
+    "var panel = document.querySelector(" + DETAIL_PANEL_SEL + ") || document.body;" +
+    "var buttons = panel.querySelectorAll('button, .btn, [class*=\"btn-\"]');" +
+    "for (var bi = 0; bi < buttons.length; bi++) {" +
+    "  if ((buttons[bi].innerText || '').trim() === label) {" +
+    "    var r = buttons[bi].getBoundingClientRect();" +
+    "    if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };" +
+    "  }" +
+    "}" +
+    "return null;" +
+    "})(" + JSON.stringify(labelText) + ")"
+  );
 }
 
 // ─── Confirm Dialog Handler ───────────────────────────────────────────────────
 
 /**
  * Handle any confirmation dialog that appears after an action.
- * Looks for common confirm/OK buttons in dialogs.
  */
 async function handleConfirmDialog(page) {
   await sleep(800);
-  const confirmed = await page.evaluate(`(() => {
-    // Common dialog containers
-    const dialogs = [
-      document.querySelector('.el-message-box'),
-      document.querySelector('.el-dialog'),
-      document.querySelector('[role="dialog"]'),
-      document.querySelector('.el-popconfirm__main'),
-    ].filter(Boolean);
-
-    for (const dlg of dialogs) {
-      const buttons = dlg.querySelectorAll('button');
-      for (const btn of buttons) {
-        const text = (btn.innerText || '').trim();
-        if (['确定', '确认', '同意', 'OK', '是'].includes(text)) {
-          btn.click();
-          return 'confirmed: ' + text;
-        }
-      }
-    }
-
-    // Also try popconfirm confirm button outside dialog containers
-    const confirmBtns = document.querySelectorAll('.el-popconfirm__action button, .el-message-box__btns button');
-    for (const btn of confirmBtns) {
-      const text = (btn.innerText || '').trim();
-      if (!['取消', 'Cancel', '否'].includes(text) && text.length > 0) {
-        btn.click();
-        return 'confirmed: ' + text;
-      }
-    }
-
-    return 'no dialog';
-  })()`);
+  const confirmed = await page.evaluate(
+    "(function() {" +
+    "var dlgSels = ['.el-message-box','.el-dialog','[role=\"dialog\"]','.el-popconfirm__main'];" +
+    "var dialogs = [];" +
+    "for (var di = 0; di < dlgSels.length; di++) {" +
+    "  var dlg = document.querySelector(dlgSels[di]);" +
+    "  if (dlg) dialogs.push(dlg);" +
+    "}" +
+    "var confirmLabels = ['确定','确认','同意','OK','是'];" +
+    "for (var i = 0; i < dialogs.length; i++) {" +
+    "  var btns = dialogs[i].querySelectorAll('button');" +
+    "  for (var bi = 0; bi < btns.length; bi++) {" +
+    "    var text = (btns[bi].innerText || '').trim();" +
+    "    if (confirmLabels.indexOf(text) >= 0) { btns[bi].click(); return 'confirmed: ' + text; }" +
+    "  }" +
+    "}" +
+    "var skipLabels = ['取消','Cancel','否'];" +
+    "var confirmBtns = document.querySelectorAll('.el-popconfirm__action button, .el-message-box__btns button');" +
+    "for (var ci = 0; ci < confirmBtns.length; ci++) {" +
+    "  var ct = (confirmBtns[ci].innerText || '').trim();" +
+    "  if (skipLabels.indexOf(ct) < 0 && ct.length > 0) { confirmBtns[ci].click(); return 'confirmed: ' + ct; }" +
+    "}" +
+    "return 'no dialog';" +
+    "})()"
+  );
   return confirmed;
 }
 
@@ -502,88 +465,94 @@ async function handleConfirmDialog(page) {
 
 /**
  * Fill target person in a forward/assign dialog.
- * Similar to calendar.js attendee-picker pattern.
  */
 async function selectPerson(page, personName) {
   await sleep(500);
 
-  // Look for person search input
-  const inputFound = await page.evaluate(`((name) => {
-    const inputs = [
-      ...document.querySelectorAll('.selectPerson-wrapper input[placeholder*="搜索"]'),
-      ...document.querySelectorAll('[class*="forward"] input, [class*="assign"] input, [class*="transfer"] input'),
-      ...document.querySelectorAll('.el-dialog input[placeholder*="搜索"], .el-dialog input'),
-    ];
-    for (const inp of inputs) {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      setter.call(inp, '');
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
-      setter.call(inp, name);
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
-      inp.dispatchEvent(new Event('change', { bubbles: true }));
-      return 'filled';
-    }
-    return 'not found';
-  })(${JSON.stringify(personName)})`);
+  const inputFound = await page.evaluate(
+    "(function(name) {" +
+    "var q1 = Array.from(document.querySelectorAll('.selectPerson-wrapper input[placeholder*=\"搜索\"]'));" +
+    "var q2 = Array.from(document.querySelectorAll('[class*=\"forward\"] input, [class*=\"assign\"] input, [class*=\"transfer\"] input'));" +
+    "var q3 = Array.from(document.querySelectorAll('.el-dialog input[placeholder*=\"搜索\"], .el-dialog input'));" +
+    "var inputs = q1.concat(q2).concat(q3);" +
+    "for (var ii = 0; ii < inputs.length; ii++) {" +
+    "  var inp = inputs[ii];" +
+    "  var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;" +
+    "  setter.call(inp, '');" +
+    "  inp.dispatchEvent(new Event('input', { bubbles: true }));" +
+    "  setter.call(inp, name);" +
+    "  inp.dispatchEvent(new Event('input', { bubbles: true }));" +
+    "  inp.dispatchEvent(new Event('change', { bubbles: true }));" +
+    "  return 'filled';" +
+    "}" +
+    "return 'not found';" +
+    "})(" + JSON.stringify(personName) + ")"
+  );
 
   if (inputFound === 'not found') return { success: false, reason: '搜索框未找到' };
 
-  // Wait for results
-  await waitFor(page, `(() => {
-    const items = document.querySelectorAll(
-      '.selectPerson-wrapper .checkbox-wrapper, .search-result .checkbox-wrapper, .el-dialog .checkbox-wrapper'
-    );
-    return items.length > 0 ? 'found' : null;
-  })()`, 5000);
+  await waitFor(page,
+    "(function() {" +
+    "var items = document.querySelectorAll(" +
+    "  '.selectPerson-wrapper .checkbox-wrapper, .search-result .checkbox-wrapper, .el-dialog .checkbox-wrapper'" +
+    ");" +
+    "return items.length > 0 ? 'found' : null;" +
+    "})()",
+    5000
+  );
 
-  // Click matching result
-  const cbCoords = await page.evaluate(`((name) => {
-    const searchAreas = [
-      document.querySelector('.selectPerson-wrapper .search-result'),
-      document.querySelector('.selectPerson-wrapper'),
-      document.querySelector('.el-dialog'),
-    ].filter(Boolean);
-
-    for (const area of searchAreas) {
-      for (const wrapper of area.querySelectorAll('.checkbox-wrapper')) {
-        const txt = (wrapper.innerText || '').trim();
-        if (txt.indexOf(name) >= 0 && !txt.includes('、')) {
-          const inner = wrapper.querySelector('.el-checkbox__inner') || wrapper.querySelector('label.el-checkbox');
-          if (inner) {
-            const r = inner.getBoundingClientRect();
-            if (r.width > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-          }
-        }
-      }
-    }
-    return null;
-  })(${JSON.stringify(personName)})`);
+  const cbCoords = await page.evaluate(
+    "(function(name) {" +
+    "var areaSels = ['.selectPerson-wrapper .search-result','.selectPerson-wrapper','.el-dialog'];" +
+    "var areas = [];" +
+    "for (var ai = 0; ai < areaSels.length; ai++) {" +
+    "  var a = document.querySelector(areaSels[ai]);" +
+    "  if (a) areas.push(a);" +
+    "}" +
+    "for (var i = 0; i < areas.length; i++) {" +
+    "  var wrappers = areas[i].querySelectorAll('.checkbox-wrapper');" +
+    "  for (var wi = 0; wi < wrappers.length; wi++) {" +
+    "    var txt = (wrappers[wi].innerText || '').trim();" +
+    "    if (txt.indexOf(name) >= 0 && txt.indexOf('、') < 0) {" +
+    "      var inner = wrappers[wi].querySelector('.el-checkbox__inner') || wrappers[wi].querySelector('label.el-checkbox');" +
+    "      if (inner) {" +
+    "        var r = inner.getBoundingClientRect();" +
+    "        if (r.width > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };" +
+    "      }" +
+    "    }" +
+    "  }" +
+    "}" +
+    "return null;" +
+    "})(" + JSON.stringify(personName) + ")"
+  );
 
   if (!cbCoords) return { success: false, reason: `未找到人员「${personName}」` };
 
   await page.dispatchMouseEvent(cbCoords.x, cbCoords.y);
   await sleep(500);
 
-  // Click 确定 in dialog
-  const confirmed = await clickByBounds(page, `(() => {
-    const dialogs = [
-      document.querySelector('.selectPerson-wrapper'),
-      document.querySelector('.el-dialog'),
-    ].filter(Boolean);
-    for (const dlg of dialogs) {
-      for (const btn of dlg.querySelectorAll('button')) {
-        if ((btn.innerText || '').trim() === '确定') {
-          const r = btn.getBoundingClientRect();
-          return r.width > 0 ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
-        }
-      }
-    }
-    return null;
-  })()`);
+  const confirmed = await clickByBounds(page,
+    "(function() {" +
+    "var dlgSels = ['.selectPerson-wrapper','.el-dialog'];" +
+    "for (var di = 0; di < dlgSels.length; di++) {" +
+    "  var dlg = document.querySelector(dlgSels[di]);" +
+    "  if (!dlg) continue;" +
+    "  var btns = dlg.querySelectorAll('button');" +
+    "  for (var bi = 0; bi < btns.length; bi++) {" +
+    "    if ((btns[bi].innerText || '').trim() === '确定') {" +
+    "      var r = btns[bi].getBoundingClientRect();" +
+    "      if (r.width > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };" +
+    "    }" +
+    "  }" +
+    "}" +
+    "return null;" +
+    "})()"
+  );
 
-  await waitFor(page, `(() => {
-    return !document.querySelector('.selectPerson-wrapper') ? 'closed' : null;
-  })()`, 3000);
+  await waitFor(page,
+    "(function() { return !document.querySelector('.selectPerson-wrapper') ? 'closed' : null; })()",
+    3000
+  );
 
   return { success: confirmed, reason: confirmed ? '已选择' : '确定按钮未找到' };
 }
@@ -600,11 +569,9 @@ async function selectPerson(page, personName) {
  * @returns {object} result
  */
 async function performAction(page, action, comment, to) {
-  // Detect todo type to pick correct button labels
   const detail = await extractTodoDetail(page);
   const type = detail.type;
 
-  // Fill comment first (before clicking action button)
   if (comment) {
     await fillComment(page, comment);
   }
@@ -627,10 +594,8 @@ async function performAction(page, action, comment, to) {
       return { success: false, reason: `未知操作: ${action}` };
   }
 
-  // Click the action button
   const clicked = await clickActionButton(page, buttonLabel);
   if (!clicked) {
-    // Try alternate labels when exact label not found
     const altLabels = {
       approve: ['同意', '批准', '通过', '审批通过'],
       reject: ['驳回', '退回', '拒绝', '不同意'],
@@ -651,7 +616,6 @@ async function performAction(page, action, comment, to) {
 
   await sleep(800);
 
-  // For forward/assign: select target person
   if ((action === 'forward' || action === 'assign') && to) {
     const personResult = await selectPerson(page, to);
     if (!personResult.success) {
@@ -660,7 +624,6 @@ async function performAction(page, action, comment, to) {
     await sleep(500);
   }
 
-  // Handle any confirmation dialog
   const confirmResult = await handleConfirmDialog(page);
 
   await sleep(1000);
@@ -678,17 +641,12 @@ async function performAction(page, action, comment, to) {
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
-/**
- * Truncate a string with ellipsis if it exceeds maxLen.
- */
-function truncate(str, maxLen = 16) {
+function truncate(str, maxLen) {
+  if (maxLen === undefined) maxLen = 16;
   if (!str) return '';
   return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
 }
 
-/**
- * Format a waiting duration string. Adds a warning prefix if overtime.
- */
 function formatWaiting(waiting, overtime) {
   if (!waiting) return '';
   return overtime ? `⚠️ ${waiting}` : waiting;
@@ -706,7 +664,6 @@ cli({
   strategy: Strategy.PUBLIC,
   browser: false,
   args: [
-    { name: 'type', required: false, default: '', help: 'Filter by type: oa | ticket' },
     { name: 'limit', required: false, default: '20', help: 'Max items to show' },
   ],
   func: async (_page, kwargs) => {
@@ -715,20 +672,13 @@ cli({
 
       const items = await parseTodoList(page);
       const limit = parseInt(kwargs.limit, 10) || 20;
-      const typeFilter = (kwargs.type || '').toLowerCase();
 
       if (!items || items.length === 0) {
-        return [{ No: '-', Title: '暂无待办', Status: '-', From: '-', Arrived: '-', Waiting: '-', Type: '-' }];
+        return [{ No: '-', Title: '暂无待办', Status: '-', From: '-', Arrived: '-', Waiting: '-' }];
       }
 
       const rows = items
         .slice(0, limit)
-        .filter(item => {
-          if (!typeFilter) return true;
-          if (typeFilter === 'oa') return item.type === 'OA';
-          if (typeFilter === 'ticket' || typeFilter === '工单') return item.type === '工单';
-          return true;
-        })
         .map(item => ({
           No: item.index,
           Title: truncate(item.title, 18),
@@ -736,12 +686,11 @@ cli({
           From: truncate(item.from, 8),
           Arrived: item.arrived ? item.arrived.replace(/^\d{4}-/, '') : '',
           Waiting: formatWaiting(item.waiting, item.overtime),
-          Type: item.type || '-',
         }));
 
       return rows.length > 0
         ? rows
-        : [{ No: '-', Title: '无匹配待办', Status: '-', From: '-', Arrived: '-', Waiting: '-', Type: '-' }];
+        : [{ No: '-', Title: '无匹配待办', Status: '-', From: '-', Arrived: '-', Waiting: '-' }];
     });
   },
 });
@@ -767,7 +716,6 @@ cli({
     return await withElectronPage(async (page) => {
       await navigateToTodo(page);
 
-      // Click item
       const clicked = await clickTodoItem(page, id);
       if (!clicked) {
         return [{ Status: 'Error', Message: `待办第 ${id} 项未找到，请先运行 todo list 确认序号` }];
