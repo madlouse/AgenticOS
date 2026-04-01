@@ -23,7 +23,7 @@ import { withElectronPage } from './cdp.js';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function sleep(ms) {
+export function sleep(ms) {
   return new Promise(function(r) { setTimeout(r, ms); });
 }
 
@@ -232,7 +232,7 @@ async function parseTodoList(page) {
 /**
  * Very rough innerText-based todo list extractor (Strategy C fallback).
  */
-function parseTodoFromText(text) {
+export function parseTodoFromText(text) {
   if (!text) return [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const results = [];
@@ -670,13 +670,13 @@ async function performAction(page, action, comment, to) {
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
-function truncate(str, maxLen) {
+export function truncate(str, maxLen) {
   if (maxLen === undefined) maxLen = 16;
   if (!str) return '';
   return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
 }
 
-function formatWaiting(waiting, overtime) {
+export function formatWaiting(waiting, overtime) {
   if (!waiting) return '';
   return overtime ? `⚠️ ${waiting}` : waiting;
 }
