@@ -77,13 +77,13 @@ run_afr001() {
 run_afr002() {
   local file="$1"
   log "Running AFR-002 (Installation Unambiguity)..."
-  python3 "${SCRIPT_DIR}/_afr002.py" "$file" 2>&1 | while IFS= read -r line; do
+  while IFS= read -r line; do
     if [[ "$line" == *"ERROR:"* ]]; then
       err "AFR-002 $file — ${line#*: }"
     elif [[ "$line" == *"WARNING:"* ]]; then
       warn "AFR-002 $file — ${line#*: }"
     fi
-  done
+  done < <(python3 "${SCRIPT_DIR}/_afr002.py" "$file" 2>&1)
 }
 
 #-------------------------------------------------------------------------------
@@ -92,9 +92,9 @@ run_afr002() {
 run_afr003() {
   local file="$1"
   log "Running AFR-003 (Code Fence Language)..."
-  python3 "${SCRIPT_DIR}/_afr003.py" "$file" 2>&1 | while IFS= read -r line; do
+  while IFS= read -r line; do
     warn "AFR-003 $file — ${line#*: }"
-  done
+  done < <(python3 "${SCRIPT_DIR}/_afr003.py" "$file" 2>&1)
 }
 
 #-------------------------------------------------------------------------------
@@ -103,9 +103,9 @@ run_afr003() {
 run_afr004() {
   local file="$1"
   log "Running AFR-004 (Tool Name Consistency)..."
-  python3 "${SCRIPT_DIR}/_afr004.py" "$file" 2>&1 | while IFS= read -r line; do
+  while IFS= read -r line; do
     warn "AFR-004 $file — ${line#*: }"
-  done
+  done < <(python3 "${SCRIPT_DIR}/_afr004.py" "$file" 2>&1)
 }
 
 #-------------------------------------------------------------------------------
@@ -114,9 +114,9 @@ run_afr004() {
 run_afr005() {
   local file="$1"
   log "Running AFR-005 (Semantic Warning Markers)..."
-  python3 "${SCRIPT_DIR}/_afr005.py" "$file" 2>&1 | while IFS= read -r line; do
+  while IFS= read -r line; do
     warn "AFR-005 $file — ${line#*: }"
-  done
+  done < <(python3 "${SCRIPT_DIR}/_afr005.py" "$file" 2>&1)
 }
 
 #-------------------------------------------------------------------------------
@@ -151,9 +151,9 @@ run_afr006() {
 run_afr007() {
   local file="$1"
   log "Running AFR-007 (Link Integrity)..."
-  python3 "${SCRIPT_DIR}/_afr007.py" "$file" 2>&1 | while IFS= read -r line; do
+  while IFS= read -r line; do
     warn "AFR-007 $file — ${line#*: }"
-  done
+  done < <(python3 "${SCRIPT_DIR}/_afr007.py" "$file" 2>&1)
 }
 
 #-------------------------------------------------------------------------------

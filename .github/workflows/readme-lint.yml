@@ -57,17 +57,17 @@ jobs:
             first_line=$(head -1 "$readme")
             if [[ "$first_line" != "# "* ]]; then
               echo "::error file=$readme,line=1::AFR-001: First line must be a single H1 heading (found: '${first_line:0:80}')"
-              ((errors++))
+              errors=$((errors+1))
             fi
             if ! grep -qE '^## [^#]' "$readme"; then
               echo "::error file=$readme::AFR-001: README must contain at least one H2 heading (##)"
-              ((errors++))
+              errors=$((errors+1))
             fi
             first_h2=$(grep -nE '^## [^#]' "$readme" | head -1 | cut -d: -f1 || true)
             first_h3=$(grep -nE '^### ' "$readme" | head -1 | cut -d: -f1 || true)
             if [[ -n "$first_h3" && -n "$first_h2" && "$first_h3" -lt "$first_h2" ]]; then
               echo "::error file=$readme,line=$first_h3::AFR-001: H3 heading appears before first H2 (H2 at line $first_h2)"
-              ((errors++))
+              errors=$((errors+1))
             fi
           done
           exit $errors
@@ -79,16 +79,16 @@ jobs:
         run: |
           errors=0
           for readme in $READMES; do
-            python3 scripts/_afr002.py "$readme" 2>&1 | while IFS= read -r line; do
+            while IFS= read -r line; do
               level=$(echo "$line" | cut -d: -f1)
               msg="${line#*: }"
               if [[ "$level" == "ERROR" ]]; then
                 echo "::error file=$readme::$msg"
-                ((errors++))
+                errors=$((errors+1))
               else
                 echo "::warning file=$readme::$msg"
               fi
-            done
+            done < <(python3 scripts/_afr002.py "$readme" 2>&1)
           done
           exit $errors
 
@@ -99,9 +99,9 @@ jobs:
         continue-on-error: true
         run: |
           for readme in $READMES; do
-            python3 scripts/_afr003.py "$readme" 2>&1 | while IFS= read -r line; do
+            while IFS= read -r line; do
               echo "::warning file=$readme::AFR-003: ${line#*: }"
-            done
+            done < <(python3 scripts/_afr003.py "$readme" 2>&1)
           done
 
       - name: AFR-004: Tool name consistency
@@ -111,9 +111,9 @@ jobs:
         continue-on-error: true
         run: |
           for readme in $READMES; do
-            python3 scripts/_afr004.py "$readme" 2>&1 | while IFS= read -r line; do
+            while IFS= read -r line; do
               echo "::warning file=$readme::AFR-004: ${line#*: }"
-            done
+            done < <(python3 scripts/_afr004.py "$readme" 2>&1)
           done
 
       - name: AFR-005: Semantic warning markers
@@ -123,9 +123,9 @@ jobs:
         continue-on-error: true
         run: |
           for readme in $READMES; do
-            python3 scripts/_afr005.py "$readme" 2>&1 | while IFS= read -r line; do
+            while IFS= read -r line; do
               echo "::warning file=$readme::AFR-005: ${line#*: }"
-            done
+            done < <(python3 scripts/_afr005.py "$readme" 2>&1)
           done
 
       - name: AFR-006: AI execution entry
@@ -153,9 +153,9 @@ jobs:
         continue-on-error: true
         run: |
           for readme in $READMES; do
-            python3 scripts/_afr007.py "$readme" 2>&1 | while IFS= read -r line; do
+            while IFS= read -r line; do
               echo "::warning file=$readme::AFR-007: ${line#*: }"
-            done
+            done < <(python3 scripts/_afr007.py "$readme" 2>&1)
           done
 
       - name: AFR-008: Installation single source
