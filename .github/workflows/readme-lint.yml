@@ -1,0 +1,236 @@
+name: README Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - '.github/workflows/readme-lint.yml'
+      - 'scripts/readme-lint.sh'
+      - 'scripts/_afr*.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.md'
+      - '.github/workflows/readme-lint.yml'
+      - 'scripts/readme-lint.sh'
+      - 'scripts/_afr*.py'
+  schedule:
+    # Weekly baseline scan — Monday 09:00 UTC
+    - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  readme-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Find all README files
+        id: find-readmes
+        run: |
+          mapfile -t READMES < <(find . -name "README.md" \
+            -not -path "./node_modules/*" \
+            -not -path "./.git/*" \
+            -not -path "./projects/*/node_modules/*" \
+            | sort)
+          echo "readme_count=${#READMES[@]}" >> $GITHUB_OUTPUT
+          echo "readme_files=${READMES[*]}" >> $GITHUB_OUTPUT
+          for f in "${READMES[@]}"; do echo "  - $f"; done
+
+      - name: AFR-001: Heading hierarchy
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        run: |
+          errors=0
+          for readme in $READMES; do
+            first_line=$(head -1 "$readme")
+            if [[ "$first_line" != "# "* ]]; then
+              echo "::error file=$readme,line=1::AFR-001: First line must be a single H1 heading (found: '${first_line:0:80}')"
+              ((errors++))
+            fi
+            if ! grep -qE '^## [^#]' "$readme"; then
+              echo "::error file=$readme::AFR-001: README must contain at least one H2 heading (##)"
+              ((errors++))
+            fi
+            first_h2=$(grep -nE '^## [^#]' "$readme" | head -1 | cut -d: -f1 || true)
+            first_h3=$(grep -nE '^### ' "$readme" | head -1 | cut -d: -f1 || true)
+            if [[ -n "$first_h3" && -n "$first_h2" && "$first_h3" -lt "$first_h2" ]]; then
+              echo "::error file=$readme,line=$first_h3::AFR-001: H3 heading appears before first H2 (H2 at line $first_h2)"
+              ((errors++))
+            fi
+          done
+          exit $errors
+
+      - name: AFR-002: Installation disambiguation
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        run: |
+          errors=0
+          for readme in $READMES; do
+            python3 scripts/_afr002.py "$readme" 2>&1 | while IFS= read -r line; do
+              level=$(echo "$line" | cut -d: -f1)
+              msg="${line#*: }"
+              if [[ "$level" == "ERROR" ]]; then
+                echo "::error file=$readme::$msg"
+                ((errors++))
+              else
+                echo "::warning file=$readme::$msg"
+              fi
+            done
+          done
+          exit $errors
+
+      - name: AFR-003: Code fence language
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            python3 scripts/_afr003.py "$readme" 2>&1 | while IFS= read -r line; do
+              echo "::warning file=$readme::AFR-003: ${line#*: }"
+            done
+          done
+
+      - name: AFR-004: Tool name consistency
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            python3 scripts/_afr004.py "$readme" 2>&1 | while IFS= read -r line; do
+              echo "::warning file=$readme::AFR-004: ${line#*: }"
+            done
+          done
+
+      - name: AFR-005: Semantic warning markers
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            python3 scripts/_afr005.py "$readme" 2>&1 | while IFS= read -r line; do
+              echo "::warning file=$readme::AFR-005: ${line#*: }"
+            done
+          done
+
+      - name: AFR-006: AI execution entry
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            if grep -qiE '(?i)execute now|exec now|立即执行' "$readme"; then
+              echo "::notice file=$readme::AFR-006 PASS: EXECUTE NOW block found"
+            elif grep -qE '\[.*install.*\]\(.*install.*\.md\)' "$readme"; then
+              echo "::notice file=$readme::AFR-006 PASS: install.md link found"
+            elif sed -n '/^## \(Quick Start\|Quickstart\|快速开始\)/,/^## /p' "$readme" | grep -qE '^\s*\$ |^\s*(npm |brew |curl |git |pip )'; then
+              echo "::notice file=$readme::AFR-006 PASS: Executable commands in Quick Start"
+            else
+              echo "::notice file=$readme::AFR-006 RECOMMENDATION: No clear AI-executable entry found"
+            fi
+          done
+
+      - name: AFR-007: Link integrity
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            python3 scripts/_afr007.py "$readme" 2>&1 | while IFS= read -r line; do
+              echo "::warning file=$readme::AFR-007: ${line#*: }"
+            done
+          done
+
+      - name: AFR-008: Installation single source
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            if [[ -f "install.md" ]] || [[ -f "INSTALL.md" ]]; then
+              install_file="install.md"
+              [[ -f "INSTALL.md" ]] && install_file="INSTALL.md"
+              lines=$(sed -n '/^## \(Installation\|安装\)/,/^## /p' "$readme" | grep -c . || echo "0")
+              if [[ "${lines:-0}" -gt 10 ]]; then
+                echo "::warning file=$readme::AFR-008: ## Installation block has ${lines} lines (>10) while $install_file exists"
+              fi
+              if ! grep -qE 'install\.md|INSTALL\.md' "$readme"; then
+                echo "::warning file=$readme::AFR-008: ## Installation exists but does not reference $install_file"
+              fi
+            fi
+          done
+
+      - name: AFR-009: llms.txt existence
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          found=0
+          for doc in llms.txt .github/llms.txt docs/ai-summary.md docs/llms.md AI_SUMMARY.md; do
+            if [[ -f "$doc" ]]; then
+              echo "::notice::$AFR-009 PASS: Found $doc"
+              found=1
+              break
+            fi
+          done
+          if [[ "$found" -eq 0 ]]; then
+            for readme in $READMES; do
+              echo "::notice file=$readme::AFR-009 RECOMMENDATION: No dedicated AI documentation file found"
+              break
+            done
+          fi
+
+      - name: AFR-010: README length
+        if: steps.find-readmes.outputs.readme_count != '0'
+        env:
+          READMES: ${{ steps.find-readmes.outputs.readme_files }}
+        continue-on-error: true
+        run: |
+          for readme in $READMES; do
+            lines=$(wc -l < "$readme")
+            if [[ "$lines" -gt 500 ]]; then
+              echo "::notice file=$readme::AFR-010 INFO: README has $lines lines (guideline: <= 500)"
+            fi
+            badges=$(head -20 "$readme" | grep -cE '!\[.*\]\(.*\)' || echo "0")
+            if [[ "$badges" -gt 5 ]]; then
+              echo "::notice file=$readme::AFR-010 INFO: First 20 lines contain $badges badges (>5)"
+            fi
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "========================================"
+          echo "README Lint completed — rules version: v1.0"
+          echo "========================================"
+          echo ""
+          echo "AFR-001 (Heading hierarchy):   ERROR level — blocks merge on failure"
+          echo "AFR-002 (Installation):         ERROR level — blocks merge on failure"
+          echo "AFR-003 (Code fence language): WARNING level — fix recommended"
+          echo "AFR-004 (Tool consistency):    WARNING level — fix recommended"
+          echo "AFR-005 (Warning markers):      WARNING level — fix recommended"
+          echo "AFR-006 (AI execution entry):  RECOMMENDATION level — noted"
+          echo "AFR-007 (Link integrity):       WARNING level — fix recommended"
+          echo "AFR-008 (Single source):         WARNING level — fix recommended"
+          echo "AFR-009 (llms.txt):             RECOMMENDATION level — noted"
+          echo "AFR-010 (README length):        INFO level — noted"
