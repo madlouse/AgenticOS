@@ -68,6 +68,36 @@ layers:
       - path: .claude/worktrees/
         reason: local_runtime_state
 
+  downstream_doc_standards:
+    description: Documentation quality standards that downstream projects are encouraged to adopt.
+    entries:
+      - id: agent-friendly-readme
+        spec_version: "1.0"
+        spec_file: standards/knowledge/agent-friendly-readme-spec-v1.md
+        research_file: standards/knowledge/agent-friendly-readme-research-2026-04-02.md
+        scope:
+          - README.md
+          - install.md
+          - CONTRIBUTING.md
+        validation_tool: .github/workflows/readme-lint.yml
+        lint_script: scripts/readme-lint.sh
+        inheritance: recommended
+        severity_summary:
+          errors_block_merge:
+            - AFR-001  # heading hierarchy
+            - AFR-002  # installation disambiguation
+          warnings_fix_recommended:
+            - AFR-003  # code fence language
+            - AFR-004  # tool name consistency
+            - AFR-005  # semantic warning markers
+            - AFR-007  # link integrity
+            - AFR-008  # single source of truth
+          recommendations_noted:
+            - AFR-006  # AI execution entry
+            - AFR-009  # llms.txt existence
+          informational:
+            - AFR-010  # README length
+
 upgrade_rules:
   template_marker_version:
     AGENTS.md: 6
