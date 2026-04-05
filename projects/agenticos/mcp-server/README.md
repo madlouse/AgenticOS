@@ -18,7 +18,13 @@ A project management system designed for AI collaboration. When you work on comp
 
 ### Quick Start
 
-Install AgenticOS, set `AGENTICOS_HOME` explicitly, bootstrap one supported agent, restart that agent, then explicitly verify `agenticos_list` works before relying on project-intent routing.
+Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
+On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
+Use `agenticos-bootstrap --verify` to audit the selected agents and optional persistence layers without mutating them.
+`--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
+
+After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
+MCP registration can be correct while the live client session is still holding an older server process.
 
 When the client supports a pre-edit hook or local command wrapper, point that layer at `tools/check-edit-boundary.sh` so implementation edits fail closed unless project alignment and matching PASS preflight evidence already exist.
 
@@ -75,7 +81,7 @@ Transport bootstrap and project-intent routing are different concerns.
 
 ### Claude Code
 
-- canonical bootstrap: `claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp`
+- canonical bootstrap: `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
 - verify:
   - `claude mcp list`
   - `/mcp`
@@ -86,7 +92,7 @@ Transport bootstrap and project-intent routing are different concerns.
 
 ### Codex
 
-- canonical bootstrap: `codex mcp add agenticos -- agenticos-mcp`
+- canonical bootstrap: `codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
 - canonical config location: `~/.codex/config.toml`
 - verify:
   - `codex mcp list`
@@ -97,7 +103,7 @@ Transport bootstrap and project-intent routing are different concerns.
 
 ### Cursor
 
-- canonical bootstrap: add `agenticos` to `~/.cursor/mcp.json`
+- canonical bootstrap: add `agenticos` with explicit `env.AGENTICOS_HOME` to `~/.cursor/mcp.json`
 - verify:
   - restart Cursor
   - check Cursor MCP settings or `cursor-agent mcp list` if the Cursor CLI is installed
@@ -108,7 +114,7 @@ Transport bootstrap and project-intent routing are different concerns.
 
 ### Gemini CLI
 
-- canonical bootstrap: `gemini mcp add -s user agenticos agenticos-mcp`
+- canonical bootstrap: `gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp`
 - canonical config location: `~/.gemini/settings.json`
 - verify:
   - `gemini mcp list`
@@ -132,7 +138,7 @@ Claude Code repair flow:
 ```bash
 claude mcp get agenticos
 claude mcp remove agenticos -s user
-claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
 
 Codex repair flow:
@@ -141,10 +147,11 @@ Codex repair flow:
 codex mcp list
 codex mcp get agenticos
 codex mcp remove agenticos
-codex mcp add agenticos -- agenticos-mcp
+codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
 
 If Codex reports that `agenticos` does not exist yet, skip the remove step and add it directly.
+If `codex mcp get agenticos` shows `env: -`, treat that registration as incomplete and re-add it with explicit `AGENTICOS_HOME`.
 After any registration change, restart the agent, confirm the server appears in its MCP diagnostics, and call `agenticos_list`.
 
 This verification remains manual by design.

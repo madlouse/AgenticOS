@@ -71,6 +71,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         'tasks/templates/submission-evidence.md',
       ],
       required_behavior: [
+        'operator_intent_resolution',
         'memory_layer_contracts',
         'cross_agent_policy_contract',
         'implementation_preflight',
@@ -89,7 +90,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   await writeFile(join(templateRoot, 'quick-start.md'), '# Quick Start\n\n> Contract: concise project-level orientation for fast resume.\n> Do not store full session history, exhaustive decision logs, or issue-by-issue execution details here.\n\n## Project Snapshot\n- **Project**: [Project Name]\n- **Goal**: [Main objective]\n- **Status**: [Current phase]\n- **Last Action**: [What was done last]\n- **Current Focus**: [What to do next]\n- **Resume Here**: [What to do next]\n\n## Key Facts\n- [Important fact 1]\n- [Important fact 2]\n\n## Canonical Layers\n- Operational state: `.context/state.yaml`\n- Session history: `.context/conversations/`\n- Durable knowledge: `knowledge/`\n- Execution plans: `tasks/`\n- Deliverables: `artifacts/`\n', 'utf-8');
   await writeFile(join(templateRoot, 'state.yaml'), '# Contract:\n# - Mutable operational working state only\n# - Keep current task, working memory, and latest guardrail evidence here\n# - Do not append raw conversation transcripts here\n# - Durable synthesis belongs in knowledge/\nsession:\n  id: "session-001"\n  started: "YYYY-MM-DDTHH:MM:SSZ"\n  agent: "claude-sonnet-4.6"\ncurrent_task:\n  id: null\n  title: null\n  status: "pending"\n  next_step: null\nworking_memory:\n  facts: []\n  decisions: []\n  pending: []\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\nloaded_context:\n  - ".project.yaml"\n', 'utf-8');
   await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.2\n', 'utf-8');
-  await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n', 'utf-8');
+  await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n\n## Objective Synthesis\n- User-stated request:\n- Inferred end goal:\n- Operator signals / partial methods:\n- Constraints:\n- Contradictions or weak assumptions to resolve:\n- Non-goals:\n', 'utf-8');
   await writeFile(join(templateRoot, 'non-code-evaluation-rubric.yaml'), 'version: 0.1\nname: non-code-evaluation-rubric\n', 'utf-8');
   await writeFile(join(templateRoot, 'sub-agent-handoff.md'), '# Sub-Agent Handoff\n', 'utf-8');
   await writeFile(join(templateRoot, 'submission-evidence.md'), '# Submission Evidence\n', 'utf-8');
@@ -240,8 +241,10 @@ describe('standard kit commands', () => {
 
     const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
-    expect(agentsMd).toContain('agenticos-template: v4');
-    expect(claudeMd).toContain('agenticos-template: v4');
+    expect(agentsMd).toContain('agenticos-template: v7');
+    expect(claudeMd).toContain('agenticos-template: v7');
+    expect(agentsMd).toContain('## Task Intake Rule');
+    expect(claudeMd).toContain('recover operator intent');
   });
 
   it('upgrade check reports missing, stale, matching, and diverged files', async () => {
@@ -311,7 +314,7 @@ describe('standard kit commands', () => {
     expect(result.created_files).toContain('.project.yaml');
 
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('agenticos-template: v4');
+    expect(claudeMd).toContain('agenticos-template: v7');
     expect(claudeMd).toContain('custom dna');
     expect(claudeMd).toContain('## Current State');
   });
@@ -321,7 +324,7 @@ describe('standard kit commands', () => {
     process.env.AGENTICOS_HOME = home;
 
     await writeFile(join(projectRoot, 'AGENTS.md'), generateAgentsMd('Sample Project', ''), 'utf-8');
-    await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- agenticos-template: v4 -->\ncurrent claude\n', 'utf-8');
+    await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- agenticos-template: v7 -->\ncurrent claude\n', 'utf-8');
 
     const result = JSON.parse(await runStandardKitUpgradeCheck({ project_path: projectRoot })) as {
       generated_files: Array<{ path: string; status: string; current_version: number | null }>;
@@ -329,11 +332,11 @@ describe('standard kit commands', () => {
 
     expect(result.generated_files.find((item) => item.path === 'AGENTS.md')).toMatchObject({
       status: 'current',
-      current_version: 4,
+      current_version: 7,
     });
     expect(result.generated_files.find((item) => item.path === 'CLAUDE.md')).toMatchObject({
       status: 'current',
-      current_version: 4,
+      current_version: 7,
     });
   });
 
@@ -375,7 +378,7 @@ describe('standard kit commands', () => {
       project_name: 'Sample Project',
       project_description: 'Broken conformance project',
     });
-    await writeFile(join(projectRoot, 'AGENTS.md'), '<!-- agenticos-template: v4 -->\n# AGENTS.md — Sample Project\n', 'utf-8');
+    await writeFile(join(projectRoot, 'AGENTS.md'), '<!-- agenticos-template: v7 -->\n# AGENTS.md — Sample Project\n', 'utf-8');
 
     const result = JSON.parse(await runStandardKitConformanceCheck({
       project_path: projectRoot,
@@ -496,7 +499,7 @@ describe('standard kit commands', () => {
 
     expect(result.upgraded_generated_files).toContain('AGENTS.md');
     const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
-    expect(agentsMd).toContain('agenticos-template: v4');
+    expect(agentsMd).toContain('agenticos-template: v7');
     expect(agentsMd).toContain('Guardrail Protocol');
   });
 
