@@ -72,7 +72,9 @@ export function extractMessages(messages, limit = 20) {
     Time: m.sentTime ? new Date(m.sentTime).toLocaleString() : '',
     Sender: m.senderUserId ?? '',
     Type: m.messageType ?? m.objectName ?? '',
-    Content: m.content?.content ?? m.content?.text ?? '',
+    Content: typeof m.content?.content === 'string'
+      ? m.content.content
+      : m.content?.text ?? m.content?.digest ?? '',
   }));
 }
 

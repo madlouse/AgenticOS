@@ -295,11 +295,14 @@ function parseSheetsContent(raw, limit) {
  * Format: JSON array of OT ops: [op_type, text_content, style_string]
  * op_type 20 = insert text. Concatenate text_content into paragraphs.
  */
-function parseDocsContent(raw, limit) {
+export function parseDocsContent(raw, limit) {
   let ops;
   try {
     ops = JSON.parse(raw);
   } catch {
+    const tokenRows = parseLengthPrefixedDocsContent(raw, limit);
+    if (tokenRows.length > 0) return tokenRows;
+
     /* Not JSON — fall back to raw text lines */
     return raw
       .split('\n')
@@ -331,6 +334,73 @@ function parseDocsContent(raw, limit) {
     .filter((p) => p.length > 0)
     .slice(0, limit)
     .map((p) => ({ Name: p.substring(0, 100), Creator: p.length > 100 ? p.substring(100) : '', Time: '' }));
+}
+
+function parseLengthPrefixedDocsContent(raw, limit) {
+  const segments = extractLengthPrefixedSegments(raw);
+  if (segments.length === 0) return [];
+
+  const lines = stitchDocSegments(segments).filter((line) => line.length > 0);
+  return lines.slice(0, limit).map((line) => ({
+    Name: line.substring(0, 100),
+    Creator: line.length > 100 ? line.substring(100) : '',
+    Time: '',
+  }));
+}
+
+export function extractLengthPrefixedSegments(raw) {
+  const matches = [...raw.matchAll(/!(\d+)!([^!]{1,240})!/g)];
+  return matches
+    .map((m) => {
+      const len = Number(m[1]);
+      return {
+        len,
+        text: sliceCodePoints(m[2], len).trim(),
+      };
+    })
+    .filter((m) => m.len > 0 && m.text && !/^[@$:#*0-9 .,-]+$/.test(m.text));
+}
+
+export function stitchDocSegments(segments) {
+  const lines = [];
+  let current = '';
+
+  const hardBreak = /^(重点项目|会议时间|会议地点|汇报人|\d+）|- |其他：|Pages?:|Sections?:|Words?:)/;
+  const attachNoSpace = /^[，。；：！？、,.:;!?）)]/;
+
+  for (const { text } of segments) {
+    if (!text) continue;
+
+    if (!current) {
+      current = text;
+      continue;
+    }
+
+    if (hardBreak.test(text)) {
+      lines.push(current);
+      current = text;
+      continue;
+    }
+
+    if (attachNoSpace.test(text) || /[（(]$/.test(current) || /^[）)]/.test(text)) {
+      current += text;
+      continue;
+    }
+
+    if (/^[A-Za-z0-9]/.test(text) && /[A-Za-z0-9]$/.test(current)) {
+      current += ' ' + text;
+      continue;
+    }
+
+    current += text;
+  }
+
+  if (current) lines.push(current);
+  return lines;
+}
+
+function sliceCodePoints(text, len) {
+  return Array.from(text).slice(0, len).join('');
 }
 
 // ─── Status Check ────────────────────────────────────────────────────────────

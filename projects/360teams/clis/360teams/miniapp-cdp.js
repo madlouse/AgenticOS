@@ -11,6 +11,85 @@ import { ensureDebugMode } from './launcher.js';
 const CDP_HOST = process.env.TEAMS_CDP_HOST || 'localhost';
 const CDP_PORT = parseInt(process.env.TEAMS_CDP_PORT || '9234', 10);
 const MAIN_CHAT_URL_PATTERN = 'localhost:33013';
+const IFRAME_CONTEXT_TIMEOUT_MS = 5000;
+
+function getEvaluationError(exceptionDetails) {
+  return exceptionDetails.exception?.description || exceptionDetails.text || 'Unknown CDP error';
+}
+
+function isStaleContextError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Cannot find context with specified id')
+    || message.includes('Execution context was destroyed')
+    || message.includes('Cannot find object with given id');
+}
+
+async function waitForIframeFrame(Page, iframeUrlPattern, missingMessage) {
+  const deadline = Date.now() + IFRAME_CONTEXT_TIMEOUT_MS;
+  let iframeFrame = null;
+
+  while (Date.now() < deadline) {
+    const { frameTree } = await Page.getFrameTree();
+    iframeFrame = findIframeInTree(frameTree, iframeUrlPattern);
+    if (iframeFrame) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (!iframeFrame) {
+    throw new Error(missingMessage);
+  }
+
+  return iframeFrame;
+}
+
+async function createIframeExecutionContext(Page, iframeUrlPattern, worldName, missingMessage) {
+  const iframeFrame = await waitForIframeFrame(Page, iframeUrlPattern, missingMessage);
+  const { executionContextId } = await Page.createIsolatedWorld({
+    frameId: iframeFrame.frame.id,
+    worldName,
+    grantUniveralAccess: true,
+  });
+  return executionContextId;
+}
+
+function makeEvaluator(Runtime, contextId) {
+  return (expr) =>
+    Runtime.evaluate({
+      expression: expr,
+      contextId,
+      awaitPromise: true,
+      returnByValue: true,
+    }).then(({ result, exceptionDetails }) => {
+      if (exceptionDetails) {
+        throw new Error(getEvaluationError(exceptionDetails));
+      }
+      return result.value;
+    });
+}
+
+function makeResilientIframeEvaluator(Page, Runtime, iframeUrlPattern, initialContextId, worldNamePrefix, missingMessage) {
+  let contextId = initialContextId;
+
+  return async (expr) => {
+    let attempt = 0;
+    while (true) {
+      try {
+        return await makeEvaluator(Runtime, contextId)(expr);
+      } catch (error) {
+        if (attempt === 2 || !isStaleContextError(error)) {
+          throw error;
+        }
+        attempt += 1;
+        contextId = await createIframeExecutionContext(
+          Page,
+          iframeUrlPattern,
+          `${worldNamePrefix}-${Date.now()}`,
+          missingMessage
+        );
+      }
+    }
+  };
+}
 
 /**
  * Connect to a specific CDP target by ID.
@@ -211,44 +290,31 @@ export async function connectToTargetWithIframe(targetId, iframeUrlPattern) {
   await Page.enable();
   await Runtime.enable();
 
-  /* Poll for iframe to appear in frame tree (may still be loading) */
-  let iframeFrame = null;
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    const { frameTree } = await Page.getFrameTree();
-    iframeFrame = findIframeInTree(frameTree, iframeUrlPattern);
-    if (iframeFrame) break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-
-  if (!iframeFrame) {
+  let executionContextId;
+  try {
+    executionContextId = await createIframeExecutionContext(
+      Page,
+      iframeUrlPattern,
+      'iframe-reader',
+      `No iframe matching "${iframeUrlPattern}" found in frame tree`
+    );
+  } catch (error) {
     await client.close();
-    throw new Error(`No iframe matching "${iframeUrlPattern}" found in frame tree`);
+    throw error;
   }
-
-  const { executionContextId } = await Page.createIsolatedWorld({
-    frameId: iframeFrame.frame.id,
-    worldName: 'iframe-reader',
-    grantUniveralAccess: true,
-  });
-
-  const makeEvaluator = (contextId) => (expr) =>
-    Runtime.evaluate({
-      expression: expr,
-      contextId,
-      awaitPromise: true,
-      returnByValue: true,
-    }).then(({ result, exceptionDetails }) => {
-      if (exceptionDetails) {
-        const msg = exceptionDetails.exception?.description || exceptionDetails.text || 'Unknown CDP error';
-        throw new Error(msg);
-      }
-      return result.value;
-    });
 
   return {
-    page: { evaluate: makeEvaluator(undefined) },
-    iframePage: { evaluate: makeEvaluator(executionContextId) },
+    page: { evaluate: makeEvaluator(Runtime, undefined) },
+    iframePage: {
+      evaluate: makeResilientIframeEvaluator(
+        Page,
+        Runtime,
+        iframeUrlPattern,
+        executionContextId,
+        'iframe-reader',
+        `No iframe matching "${iframeUrlPattern}" found in frame tree`
+      ),
+    },
     _client: client,
     _Page: Page,
     _Runtime: Runtime,
@@ -265,38 +331,22 @@ export async function connectToTargetWithIframe(targetId, iframeUrlPattern) {
  * @returns {{ evaluate: Function }} new iframePage object
  */
 export async function refreshIframeContext(Page, Runtime, iframeUrlPattern) {
-  const deadline = Date.now() + 5000;
-  let iframeFrame = null;
-  while (Date.now() < deadline) {
-    const { frameTree } = await Page.getFrameTree();
-    iframeFrame = findIframeInTree(frameTree, iframeUrlPattern);
-    if (iframeFrame) break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (!iframeFrame) {
-    throw new Error(`No iframe matching "${iframeUrlPattern}" found after navigation`);
-  }
-
-  const { executionContextId } = await Page.createIsolatedWorld({
-    frameId: iframeFrame.frame.id,
-    worldName: 'iframe-reader-' + Date.now(),
-    grantUniveralAccess: true,
-  });
+  const executionContextId = await createIframeExecutionContext(
+    Page,
+    iframeUrlPattern,
+    'iframe-reader-' + Date.now(),
+    `No iframe matching "${iframeUrlPattern}" found after navigation`
+  );
 
   return {
-    evaluate: (expr) =>
-      Runtime.evaluate({
-        expression: expr,
-        contextId: executionContextId,
-        awaitPromise: true,
-        returnByValue: true,
-      }).then(({ result, exceptionDetails }) => {
-        if (exceptionDetails) {
-          const msg = exceptionDetails.exception?.description || exceptionDetails.text || 'Unknown CDP error';
-          throw new Error(msg);
-        }
-        return result.value;
-      }),
+    evaluate: makeResilientIframeEvaluator(
+      Page,
+      Runtime,
+      iframeUrlPattern,
+      executionContextId,
+      'iframe-reader',
+      `No iframe matching "${iframeUrlPattern}" found after navigation`
+    ),
   };
 }
 

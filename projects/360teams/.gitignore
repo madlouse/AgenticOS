@@ -1,0 +1,13 @@
+node_modules/
+clis/360teams/node_modules/
+clis/360teams/package-lock.json
+start-debug.sh
+coverage/
+.DS_Store
+# AgenticOS project scaffolding (local only, not part of this package)
+.context/
+.project.yaml
+artifacts/
+tasks/
+fetch-weekly*.mjs
+test-e2e.js
