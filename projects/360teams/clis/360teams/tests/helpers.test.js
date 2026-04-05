@@ -5,7 +5,7 @@ import {
   extractContacts,
   extractGroups,
   extractMessages,
-} from './helpers.js';
+} from '../helpers.js';
 
 // ── extractUserInfo ──────────────────────────────────────────────────────────
 
