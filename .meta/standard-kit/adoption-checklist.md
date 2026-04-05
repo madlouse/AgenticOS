@@ -19,10 +19,12 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 - [ ] generate or upgrade `AGENTS.md`
 - [ ] generate or upgrade `CLAUDE.md`
 - [ ] confirm the generated files contain the guardrail protocol
+- [ ] confirm the generated files contain the compact task-intake rule for operator-intent resolution
 - [ ] confirm the template marker version matches the current distill version
 
 ## Execution Expectations
 
+- [ ] task intake resolves operator intent before workflow fragments are treated as the plan
 - [ ] implementation work runs `agenticos_preflight`
 - [ ] redirected implementation work uses `agenticos_branch_bootstrap`
 - [ ] PR submission or merge runs `agenticos_pr_scope_check`

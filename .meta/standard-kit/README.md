@@ -87,6 +87,27 @@ The canonical rationale lives in:
 
 - `projects/agenticos/standards/knowledge/sub-agent-inheritance-protocol-2026-03-25.md`
 
+## Operator Intent Intake Protocol
+
+The kit also carries a compact default rule for operator-intent resolution at task intake.
+
+Downstream projects inherit this in two lightweight forms:
+
+- generated adapter guidance in `AGENTS.md` and `CLAUDE.md`
+- intake structure inside `tasks/templates/issue-design-brief.md`
+
+The rule is intentionally compact in downstream runtime surfaces:
+
+- interpret user input first
+- recover intended outcome before treating named methods as the plan
+- collapse the result into a clean execution objective before deeper autonomous work continues
+
+Downstream projects should inherit the intake rule, not the whole standards-history discussion by default.
+
+The canonical rationale lives in:
+
+- `projects/agenticos/standards/knowledge/operator-intent-interpretation-protocol-2026-04-04.md`
+
 ## Package Contents
 
 See:

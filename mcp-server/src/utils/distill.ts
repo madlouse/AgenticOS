@@ -5,7 +5,7 @@ import { readFileSync } from 'fs';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 4;
+export const CURRENT_TEMPLATE_VERSION = 7;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -38,6 +38,13 @@ export const CLAUDE_RUNTIME_GUIDANCE_TITLE = 'Claude Runtime Notes';
 export const CLAUDE_RUNTIME_GUIDANCE_BULLETS = [
   'Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.',
   'Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.',
+] as const;
+
+export const TASK_INTAKE_RULE_TITLE = 'Task Intake Rule';
+export const TASK_INTAKE_RULE_BULLETS = [
+  'At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.',
+  'Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.',
+  'Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.',
 ] as const;
 
 /** Extract template version from an existing file. Returns 0 if no marker found (v1 or earlier). */
@@ -84,7 +91,7 @@ export function generateAgentsMd(name: string, description: string): string {
 ${AGENTS_ADAPTER_LINES[0]}
 ${AGENTS_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 Implementation work must use the executable guardrail flow:
 
@@ -226,7 +233,7 @@ function buildClaudeMdContent(name: string, description: string, state?: StateYa
 ${CLAUDE_ADAPTER_LINES[0]}
 ${CLAUDE_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 For implementation-affecting work:
 
