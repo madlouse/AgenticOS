@@ -371,6 +371,47 @@ describe('connectToTargetWithIframe', () => {
     expect(Page.createIsolatedWorld).toHaveBeenCalledTimes(2);
   });
 
+  it('does not share stale-context retry budget across independent iframe evaluations', async () => {
+    const { client, Page } = makeIframeClient({
+      frameTrees: [
+        {
+          frame: { id: 'root', url: 'https://host.example.com' },
+          childFrames: [{ frame: { id: 'iframe-ctx-a1', url: 'https://doc.example.com/frame' } }],
+        },
+        {
+          frame: { id: 'root', url: 'https://host.example.com' },
+          childFrames: [{ frame: { id: 'iframe-ctx-a2', url: 'https://doc.example.com/frame' } }],
+        },
+        {
+          frame: { id: 'root', url: 'https://host.example.com' },
+          childFrames: [{ frame: { id: 'iframe-ctx-b1', url: 'https://doc.example.com/frame' } }],
+        },
+        {
+          frame: { id: 'root', url: 'https://host.example.com' },
+          childFrames: [{ frame: { id: 'iframe-ctx-b2', url: 'https://doc.example.com/frame' } }],
+        },
+      ],
+      createIsolatedWorld: [
+        { executionContextId: 71 },
+        { executionContextId: 72 },
+        { executionContextId: 73 },
+        { executionContextId: 74 },
+      ],
+      runtimeResponses: [
+        new Error('Cannot find context with specified id'),
+        { result: { value: 'first-recovered' } },
+        new Error('Execution context was destroyed'),
+        { result: { value: 'second-recovered' } },
+      ],
+    });
+    cdpFactory.mockResolvedValueOnce(client);
+
+    const connected = await miniapp.connectToTargetWithIframe('iframe-target', 'doc.example.com');
+    await expect(connected.iframePage.evaluate('iframe-first()')).resolves.toBe('first-recovered');
+    await expect(connected.iframePage.evaluate('iframe-second()')).resolves.toBe('second-recovered');
+    expect(Page.createIsolatedWorld).toHaveBeenCalledTimes(3);
+  });
+
   it('throws after three stale-context retries are exhausted', async () => {
     const { client, Page } = makeIframeClient({
       frameTrees: [

@@ -69,9 +69,9 @@ function makeEvaluator(Runtime, contextId) {
 
 function makeResilientIframeEvaluator(Page, Runtime, iframeUrlPattern, initialContextId, worldNamePrefix, missingMessage) {
   let contextId = initialContextId;
-  let attempt = 0;
 
   return async (expr) => {
+    let attempt = 0;
     while (true) {
       try {
         return await makeEvaluator(Runtime, contextId)(expr);
