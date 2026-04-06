@@ -18,9 +18,14 @@ const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue(
   project_id: 'agenticos',
   state_path: '/repo/.context/state.yaml',
 }));
+const resolveGuardrailProjectTargetMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistGuardrailEvidence: persistGuardrailEvidenceMock,
+}));
+
+vi.mock('../../utils/repo-boundary.js', () => ({
+  resolveGuardrailProjectTarget: resolveGuardrailProjectTargetMock,
 }));
 
 vi.mock('fs/promises', () => ({
@@ -41,6 +46,20 @@ describe('runBranchBootstrap', () => {
       project_id: 'agenticos',
       state_path: '/repo/.context/state.yaml',
     });
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'active_project',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/workspace/projects/agenticos/standards',
+        statePath: '/workspace/projects/agenticos/standards/.context/state.yaml',
+        projectYamlPath: '/workspace/projects/agenticos/standards/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
   });
 
   it('returns CREATED and issues git worktree add from the intended remote base', async () => {
@@ -48,10 +67,16 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('rev-parse origin/main')) {
         return { stdout: 'base123\n', stderr: '' };
       }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/mcp-server\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
+      }
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/36-guardrail-helper')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/tmp/worktrees/mcp-server-36-guardrail-helper" -b feat/36-guardrail-helper base123')) {
+      if (cmd.includes('worktree add "/tmp/worktrees/repo-36-guardrail-helper" -b feat/36-guardrail-helper base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -69,7 +94,7 @@ describe('runBranchBootstrap', () => {
     expect(result.status).toBe('CREATED');
     expect(result.branch_name).toBe('feat/36-guardrail-helper');
     expect(result.base_commit).toBe('base123');
-    expect(result.worktree_path).toBe('/tmp/worktrees/mcp-server-36-guardrail-helper');
+    expect(result.worktree_path).toBe('/tmp/worktrees/repo-36-guardrail-helper');
     expect(result.notes.join(' ')).toContain('origin/main');
     expect(mkdirMock).toHaveBeenCalledWith('/tmp/worktrees', { recursive: true });
     expect(result.persistence?.persisted).toBe(true);
@@ -80,6 +105,12 @@ describe('runBranchBootstrap', () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
       if (cmd.includes('rev-parse origin/main')) {
         return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/mcp-server\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
       }
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/36-guardrail-helper')) {
         return { stdout: '', stderr: '' };
@@ -105,6 +136,12 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('rev-parse origin/main')) {
         return { stdout: 'base123\n', stderr: '' };
       }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/mcp-server\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
+      }
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/36-guardrail-helper')) {
         throw new Error('branch missing');
       }
@@ -122,7 +159,7 @@ describe('runBranchBootstrap', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.block_reasons[0]).toContain('worktree path already exists');
-    expect(result.worktree_path).toBe('/tmp/worktrees/mcp-server-36-guardrail-helper');
+    expect(result.worktree_path).toBe('/tmp/worktrees/repo-36-guardrail-helper');
     expect(mkdirMock).not.toHaveBeenCalled();
   });
 
@@ -140,5 +177,34 @@ describe('runBranchBootstrap', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.block_reasons[0]).toContain('failed to resolve remote base');
+  });
+
+  it('returns BLOCK when the git common repo root is not declared for the target project', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/worktrees/issue-160\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/external/.git\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse origin/main')) {
+        return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('show-ref --verify --quiet refs/heads/fix/160-boundary')) {
+        throw new Error('branch missing');
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '160',
+      branch_type: 'fix',
+      slug: 'boundary',
+      repo_path: '/repo/worktrees/issue-160',
+      worktree_root: '/tmp/worktrees',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
   });
 });

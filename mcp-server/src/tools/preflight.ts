@@ -1,16 +1,21 @@
 import { exec } from 'child_process';
+import { dirname, resolve } from 'path';
 import { promisify } from 'util';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
+import {
+  isImplementationAffectingTask,
+  resolveGuardrailProjectTarget,
+  type GuardrailTaskType,
+} from '../utils/repo-boundary.js';
 
 const execAsync = promisify(exec);
 
-type TaskType = 'discussion_only' | 'analysis_or_doc' | 'implementation' | 'bootstrap';
 type WorkspaceType = 'main' | 'isolated_worktree';
 type GuardrailStatus = 'PASS' | 'BLOCK' | 'REDIRECT';
 
 interface PreflightArgs {
   issue_id?: string;
-  task_type?: TaskType;
+  task_type?: GuardrailTaskType;
   repo_path?: string;
   project_path?: string;
   remote_base_branch?: string;
@@ -33,6 +38,15 @@ interface PreflightResult {
   block_reasons: string[];
   redirect_actions: string[];
   evidence: {
+    active_project: string | null;
+    target_project_id: string | null;
+    target_project_path: string | null;
+    target_project_yaml_path: string | null;
+    declared_source_repo_roots: string[];
+    git_worktree_root: string;
+    git_common_dir: string;
+    git_common_repo_root: string;
+    git_remote_origin: string | null;
     current_branch: string;
     current_head: string;
     remote_base_branch: string;
@@ -105,6 +119,15 @@ function makeBaseResult(remoteBaseBranch: string): PreflightResult {
     redirect_actions: [],
     evidence: {
       current_branch: '',
+      active_project: null,
+      target_project_id: null,
+      target_project_path: null,
+      target_project_yaml_path: null,
+      declared_source_repo_roots: [],
+      git_worktree_root: '',
+      git_common_dir: '',
+      git_common_repo_root: '',
+      git_remote_origin: null,
       current_head: '',
       remote_base_branch: remoteBaseBranch,
       remote_base_head: '',
@@ -124,7 +147,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     remote_base_branch = 'origin/main',
     declared_target_files = [],
     structural_move = false,
-    worktree_required = task_type === 'implementation',
+    worktree_required = isImplementationAffectingTask(task_type),
     root_scoped_exceptions = ['.github/'],
     clean_reproducibility_gate = [],
   } = args;
@@ -136,33 +159,80 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     return JSON.stringify(finalizeResult(result), null, 2);
   }
 
-  if (task_type === 'implementation' && !issue_id) {
-    result.block_reasons.push('issue_id is required for implementation work');
+  if (isImplementationAffectingTask(task_type) && !issue_id) {
+    result.block_reasons.push(`issue_id is required for ${task_type} work`);
   }
 
-  if (task_type === 'implementation' && declared_target_files.length === 0) {
-    result.block_reasons.push('declared_target_files is required for implementation work');
+  if (isImplementationAffectingTask(task_type) && declared_target_files.length === 0) {
+    result.block_reasons.push(`declared_target_files is required for ${task_type} work`);
+  }
+
+  const projectResolution = await resolveGuardrailProjectTarget({
+    commandName: 'agenticos_preflight',
+    repoPath: repo_path,
+    projectPath: project_path,
+  });
+  result.evidence.active_project = projectResolution.activeProjectId;
+  result.evidence.target_project_id = projectResolution.targetProject?.id || null;
+  result.evidence.target_project_path = projectResolution.targetProject?.path || null;
+  result.evidence.target_project_yaml_path = projectResolution.targetProject?.projectYamlPath || null;
+  result.evidence.declared_source_repo_roots = projectResolution.targetProject?.sourceRepoRoots || [];
+
+  if (!projectResolution.targetProject) {
+    result.block_reasons.push(...projectResolution.resolutionErrors);
+    if (!projectResolution.activeProjectId) {
+      result.redirect_actions.push('call agenticos_switch or pass project_path before implementation-affecting work');
+    } else {
+      result.redirect_actions.push('pass project_path explicitly if the active project is not the intended target');
+    }
   }
 
   try {
-    const gitRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
-    result.repo_identity_confirmed = gitRoot.length > 0;
+    const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
+    const gitCommonDirRaw = await runGit(repo_path, 'rev-parse --git-common-dir');
+    const gitCommonDir = resolve(gitWorktreeRoot, gitCommonDirRaw);
+    const gitCommonRepoRoot = dirname(gitCommonDir);
+
+    result.evidence.git_worktree_root = gitWorktreeRoot;
+    result.evidence.git_common_dir = gitCommonDir;
+    result.evidence.git_common_repo_root = gitCommonRepoRoot;
+    result.evidence.git_remote_origin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
     result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
     result.evidence.current_head = await runGit(repo_path, 'rev-parse HEAD');
     result.evidence.remote_base_head = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
     result.evidence.branch_fork_point = await runGit(repo_path, `merge-base HEAD ${remote_base_branch}`);
     result.branch_ancestry_verified = true;
     result.evidence.workspace_type = await detectWorkspaceType(repo_path);
+
+    if (projectResolution.targetProject) {
+      if (!projectResolution.targetProject.sourceRepoRootsDeclared || projectResolution.targetProject.sourceRepoRoots.length === 0) {
+        result.block_reasons.push(
+          `target project "${projectResolution.targetProject.id}" is missing execution.source_repo_roots in ${projectResolution.targetProject.projectYamlPath}`,
+        );
+        result.redirect_actions.push(
+          `declare execution.source_repo_roots in ${projectResolution.targetProject.projectYamlPath} before ${task_type} work`,
+        );
+      } else if (!projectResolution.targetProject.sourceRepoRoots.includes(gitCommonRepoRoot)) {
+        result.block_reasons.push(
+          `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject.id}"`,
+        );
+        result.redirect_actions.push(
+          `rerun in a declared source repo root: ${projectResolution.targetProject.sourceRepoRoots.join(', ')}`,
+        );
+      } else {
+        result.repo_identity_confirmed = true;
+      }
+    }
   } catch {
     result.block_reasons.push('failed to resolve git repository identity or remote base');
     const finalized = finalizeResult(result);
     finalized.persistence = await persistGuardrailEvidence({
       command: 'agenticos_preflight',
       repo_path,
-      project_path,
+      project_path: projectResolution.targetProject?.path || project_path,
       payload: {
         issue_id: issue_id || null,
-        project_path: project_path || null,
+        project_path: projectResolution.targetProject?.path || project_path || null,
         task_type,
         declared_target_files,
         structural_move,
@@ -186,7 +256,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     result.worktree_ok = true;
   }
 
-  if (task_type === 'implementation') {
+  if (isImplementationAffectingTask(task_type)) {
     const subjectsRaw = await runGit(repo_path, `log --format=%s ${remote_base_branch}..HEAD`).catch(() => '');
     const subjects = normalizeLines(subjectsRaw);
     result.evidence.commit_subjects_since_base = subjects;
@@ -229,10 +299,10 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
   finalized.persistence = await persistGuardrailEvidence({
     command: 'agenticos_preflight',
     repo_path,
-    project_path,
+    project_path: projectResolution.targetProject?.path || project_path,
     payload: {
       issue_id: issue_id || null,
-      project_path: project_path || null,
+      project_path: projectResolution.targetProject?.path || project_path || null,
       task_type,
       declared_target_files,
       structural_move,

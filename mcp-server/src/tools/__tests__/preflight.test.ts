@@ -17,8 +17,15 @@ const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue(
   state_path: '/repo/.context/state.yaml',
 }));
 
+const resolveGuardrailProjectTargetMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistGuardrailEvidence: persistGuardrailEvidenceMock,
+}));
+
+vi.mock('../../utils/repo-boundary.js', () => ({
+  isImplementationAffectingTask: (taskType: string) => taskType === 'implementation' || taskType === 'bugfix',
+  resolveGuardrailProjectTarget: resolveGuardrailProjectTargetMock,
 }));
 
 import { runPreflight } from '../preflight.js';
@@ -43,11 +50,27 @@ describe('runPreflight', () => {
       project_id: 'agenticos',
       state_path: '/repo/.context/state.yaml',
     });
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'active_project',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/workspace/projects/agenticos/standards',
+        statePath: '/workspace/projects/agenticos/standards/.context/state.yaml',
+        projectYamlPath: '/workspace/projects/agenticos/standards/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
   });
 
   it('returns PASS for a correctly isolated implementation branch', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
       'rev-parse --abbrev-ref HEAD': 'feat/36-guardrail-preflight\n',
       'rev-parse HEAD': 'abc123\n',
       'rev-parse origin/main': 'base999\n',
@@ -74,6 +97,8 @@ describe('runPreflight', () => {
   it('returns REDIRECT when implementation starts on main workspace', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
       'rev-parse --abbrev-ref HEAD': 'main\n',
       'rev-parse HEAD': 'abc123\n',
       'rev-parse origin/main': 'base999\n',
@@ -97,6 +122,8 @@ describe('runPreflight', () => {
   it('passes project_path through to guardrail evidence persistence when provided', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
       'rev-parse --abbrev-ref HEAD': 'feat/113-fail-closed-edit-boundaries\n',
       'rev-parse HEAD': 'abc123\n',
       'rev-parse origin/main': 'base999\n',
@@ -115,6 +142,46 @@ describe('runPreflight', () => {
     });
 
     expect(persistGuardrailEvidenceMock).toHaveBeenCalledWith(expect.objectContaining({
+      project_path: '/workspace/projects/agenticos/standards',
+    }));
+  });
+
+  it('persists the resolved active project path even when repo_path is a larger checkout root', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
+      'rev-parse --abbrev-ref HEAD': 'feat/160-source-repo-boundary-enforcement\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/160-source-repo-boundary-enforcement\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos-standards',
+      resolutionSource: 'active_project',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos-standards',
+        name: 'agenticos-standards',
+        path: '/repo/projects/agenticos/standards',
+        statePath: '/repo/projects/agenticos/standards/.context/state.yaml',
+        projectYamlPath: '/repo/projects/agenticos/standards/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+
+    await runPreflight({
+      issue_id: '160',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    });
+
+    expect(persistGuardrailEvidenceMock).toHaveBeenCalledWith(expect.objectContaining({
       project_path: '/repo/projects/agenticos/standards',
     }));
   });
@@ -122,6 +189,8 @@ describe('runPreflight', () => {
   it('returns BLOCK when branch contains unrelated commits relative to origin/main', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
       'rev-parse --abbrev-ref HEAD': 'fix/43-mcp-server-clean-install-baseline\n',
       'rev-parse HEAD': 'abc123\n',
       'rev-parse origin/main': 'base999\n',
@@ -145,6 +214,8 @@ describe('runPreflight', () => {
   it('returns BLOCK for structural move without root exception or reproducibility gate', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
       'rev-parse --abbrev-ref HEAD': 'feat/40-self-hosting\n',
       'rev-parse HEAD': 'abc123\n',
       'rev-parse origin/main': 'base999\n',
@@ -167,5 +238,30 @@ describe('runPreflight', () => {
     expect(result.status).toBe('BLOCK');
     expect(result.block_reasons.join(' ')).toContain('.github/');
     expect(result.block_reasons.join(' ')).toContain('clean_reproducibility_gate');
+  });
+
+  it('returns BLOCK when the git common repo root is not declared for the active project', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-160\n',
+      'rev-parse --git-common-dir': '/external/.git\n',
+      'config --get remote.origin.url': 'git@github.com:wrong/repo.git\n',
+      'rev-parse --abbrev-ref HEAD': 'fix/160-source-repo-boundary-enforcement\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo/worktrees/issue-160\nHEAD abc123\nbranch refs/heads/fix/160-source-repo-boundary-enforcement\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '160',
+      task_type: 'bugfix',
+      repo_path: '/repo/worktrees/issue-160',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
   });
 });

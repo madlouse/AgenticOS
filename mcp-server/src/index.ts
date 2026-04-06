@@ -130,7 +130,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
           task_type: {
             type: 'string',
-            enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bootstrap'],
+            enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bugfix', 'bootstrap'],
             description: 'Classified task type',
           },
           repo_path: { type: 'string', description: 'Absolute repository or worktree path to evaluate' },
@@ -166,8 +166,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current edit.' },
           task_type: {
             type: 'string',
-            enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bootstrap'],
-            description: 'Classified task type. Enforcement applies to implementation.',
+            enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bugfix', 'bootstrap'],
+            description: 'Classified task type. Enforcement applies to implementation-affecting tasks.',
           },
           repo_path: { type: 'string', description: 'Absolute repository or worktree path where the edit would occur.' },
           project_path: { type: 'string', description: 'Optional explicit managed project root when repo_path is not itself inside the managed project.' },
@@ -190,6 +190,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           branch_type: { type: 'string', description: 'Branch prefix such as feat, fix, or chore' },
           slug: { type: 'string', description: 'Short task slug used to derive branch and worktree names' },
           repo_path: { type: 'string', description: 'Absolute repository path where the branch should be created' },
+          project_path: { type: 'string', description: 'Optional managed project root when repo_path is a larger checkout or worktree.' },
           remote_base_branch: { type: 'string', description: 'Remote base branch to branch from (default: origin/main)' },
           worktree_root: { type: 'string', description: 'Absolute root directory under which the new worktree should be created' },
         },
@@ -204,6 +205,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
           repo_path: { type: 'string', description: 'Absolute repository or worktree path to evaluate' },
+          project_path: { type: 'string', description: 'Optional managed project root when repo_path is a larger checkout or worktree.' },
           remote_base_branch: { type: 'string', description: 'Remote base branch to compare against (default: origin/main)' },
           declared_target_files: {
             type: 'array',
