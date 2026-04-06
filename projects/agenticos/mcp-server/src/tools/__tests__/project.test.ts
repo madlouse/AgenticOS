@@ -323,7 +323,10 @@ describe('switchProject', () => {
     });
 
     fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({ meta: { description: '' } }))
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
       .mockResolvedValueOnce(JSON.stringify({
         working_memory: { pending: [], decisions: [] },
         issue_bootstrap: {
@@ -845,6 +848,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
       })
@@ -874,6 +878,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
         issue_bootstrap: {
