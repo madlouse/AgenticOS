@@ -25,3 +25,7 @@ status:
   phase: planning
   last_updated: 2026-03-30
   next_action: Define project goals
+
+execution:
+  source_repo_roots:
+    - ../..
