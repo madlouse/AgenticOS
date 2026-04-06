@@ -68,15 +68,27 @@ describe('initProject', () => {
     delete process.env.AGENTICOS_HOME;
 
     await expect(
-      initProject({ name: 'Test Project', description: 'A test project' }),
+      initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' }),
     ).rejects.toThrow('AGENTICOS_HOME is not set.');
+  });
+
+  it('fails when topology is missing', async () => {
+    await expect(
+      initProject({ name: 'Test Project', description: 'A test project' }),
+    ).rejects.toThrow('topology is required');
+  });
+
+  it('fails when github_versioned is missing github_repo', async () => {
+    await expect(
+      initProject({ name: 'Test Project', description: 'A test project', topology: 'github_versioned' }),
+    ).rejects.toThrow('github_repo is required');
   });
 
   it('creates directories with correct structure', async () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
-    await initProject({ name: 'Test Project', description: 'A test project' });
+    await initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' });
 
     // Collect all mkdir calls
     const mkdirCalls = fsPromisesMock.mkdir.mock.calls.map((c) => c[0]);
@@ -102,7 +114,7 @@ describe('initProject', () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
-    await initProject({ name: 'Test Project', description: 'A test project' });
+    await initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' });
 
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
     const projectYamlCall = writeCalls.find((c) => c[0].endsWith('.project.yaml'));
@@ -114,15 +126,35 @@ describe('initProject', () => {
     expect(parsed.meta.id).toBe('test-project');
     expect(parsed.meta.description).toBe('A test project');
     expect(parsed.meta.version).toBe('1.0.0');
+    expect(parsed.source_control.topology).toBe('local_directory_only');
     expect(parsed.agent_context.quick_start).toBe('.context/quick-start.md');
     expect(parsed.agent_context.current_state).toBe('.context/state.yaml');
+  });
+
+  it('writes github versioned source control metadata and repo root binding', async () => {
+    await initProject({
+      name: 'Test Project',
+      description: 'A test project',
+      topology: 'github_versioned',
+      github_repo: 'madlouse/test-project',
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const projectYamlCall = writeCalls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.source_control.topology).toBe('github_versioned');
+    expect(parsed.source_control.github_repo).toBe('madlouse/test-project');
+    expect(parsed.source_control.branch_strategy).toBe('github_flow');
+    expect(parsed.execution.source_repo_roots).toEqual(['.']);
   });
 
   it('writes state.yaml with correct structure', async () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
-    await initProject({ name: 'Test Project', description: 'A test project' });
+    await initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' });
 
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
     const stateYamlCall = writeCalls.find((c) => c[0].endsWith('state.yaml'));
@@ -144,7 +176,7 @@ describe('initProject', () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
-    await initProject({ name: 'Test Project', description: 'A test project' });
+    await initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' });
 
     // find the writeFile call for the registry
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
@@ -184,7 +216,7 @@ describe('initProject', () => {
     // Path exists → access succeeds (no ENOENT)
     fsPromisesMock.access.mockResolvedValue(undefined);
 
-    await initProject({ name: 'Test Project', description: 'Updated' });
+    await initProject({ name: 'Test Project', description: 'Updated', topology: 'local_directory_only', normalize_existing: true });
 
     // Find the registry write call
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
@@ -205,7 +237,7 @@ describe('initProject', () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
-    const result = await initProject({ name: 'Test Project', description: 'A test project' });
+    const result = await initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' });
 
     expect(result).toContain('Test Project');
     expect(result).toContain('test-project');
@@ -217,7 +249,7 @@ describe('initProject', () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));
 
-    await initProject({ name: 'My Test Project', description: 'Test description' });
+    await initProject({ name: 'My Test Project', description: 'Test description', topology: 'local_directory_only' });
 
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
     const quickStartCall = writeCalls.find((c) => c[0].endsWith('quick-start.md'));
@@ -227,5 +259,34 @@ describe('initProject', () => {
     expect(content).toContain('# My Test Project - Quick Start');
     expect(content).toContain('Test description');
     expect(content).toContain('Status: Active');
+  });
+
+  it('fails closed for an existing legacy project until normalize_existing is true', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        version: '1.0.0',
+        last_updated: '2025-01-01T00:00:00.000Z',
+        active_project: 'test-project',
+        projects: [
+          {
+            id: 'test-project',
+            name: 'Test Project',
+            path: '/home/testuser/AgenticOS/projects/test-project',
+            status: 'active',
+            created: '2025-01-01',
+            last_accessed: '2025-01-01T00:00:00.000Z',
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { id: 'test-project', name: 'Test Project' },
+      }));
+
+    const result = await initProject({ name: 'Test Project', topology: 'local_directory_only' });
+
+    expect(result).toContain('is not registered');
+    expect(result).toContain('normalize_existing=true');
   });
 });

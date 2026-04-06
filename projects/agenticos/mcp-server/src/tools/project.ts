@@ -5,7 +5,7 @@ import yaml from 'yaml';
 import { loadRegistry, saveRegistry } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
-import { buildArchivedReferenceMessage, isArchivedReferenceProject } from '../utils/project-contract.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
@@ -192,6 +192,11 @@ export async function switchProject(args: any): Promise<string> {
     return `❌ ${buildArchivedReferenceMessage(found.name, projectYaml?.archive_contract?.replacement_project)}`;
   }
 
+  const topologyValidation = validateManagedProjectTopology(found.name, projectYaml);
+  if (!topologyValidation.ok) {
+    return `❌ ${topologyValidation.message}`;
+  }
+
   registry.active_project = found.id;
   found.last_accessed = new Date().toISOString();
   await saveRegistry(registry);
@@ -294,6 +299,11 @@ export async function getStatus(): Promise<string> {
 
   if (isArchivedReferenceProject(projectYaml, project.status)) {
     return `❌ ${buildArchivedReferenceMessage(project.name, projectYaml?.archive_contract?.replacement_project)}`;
+  }
+
+  const topologyValidation = validateManagedProjectTopology(project.name, projectYaml);
+  if (!topologyValidation.ok) {
+    return `❌ ${topologyValidation.message}`;
   }
 
   const contextPaths = resolveManagedProjectContextPaths(project.path, projectYaml);
