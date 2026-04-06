@@ -211,6 +211,33 @@ describe('saveState', () => {
     expect(result).toContain('Test Project');
   });
 
+  it('stages only runtime-managed paths instead of the whole project tree', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    await saveState({ message: 'runtime-only save' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('/test/path/.context/state.yaml');
+    expect(addCommand).toContain('/test/path/.context/.last_record');
+    expect(addCommand).toContain('/test/path/.context/conversations');
+    expect(addCommand).toContain('/test/path/CLAUDE.md');
+    expect(addCommand).not.toContain('add "/test/path/"');
+  });
+
   it('notes when CLAUDE.md had to be auto-generated during save', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     mockProjectFiles({ state: { session: {} } });
