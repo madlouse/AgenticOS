@@ -305,6 +305,51 @@ describe('switchProject', () => {
     expect(result).toContain('create an isolated issue branch/worktree');
   });
 
+  it('shows the latest issue bootstrap summary in switch output when evidence exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          updated_at: '2025-01-02T15:00:00.000Z',
+          latest: {
+            issue_id: '179',
+            issue_title: 'Implement bootstrap evidence',
+            recorded_at: '2025-01-02T15:00:00.000Z',
+            current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            startup_context_paths: ['.project.yaml', '.context/quick-start.md'],
+            additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
+          },
+        },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
+    expect(result).toContain('Title: Implement bootstrap evidence');
+    expect(result).toContain('2 startup surface(s), 1 additional context document(s)');
+  });
+
   it('inlines actionable project context into switch output', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -782,6 +827,78 @@ describe('getStatus', () => {
     const result = await getStatus();
 
     expect(result).toContain('🛡️ Latest guardrail: None recorded');
+  });
+
+  it('shows a friendly issue bootstrap placeholder when no issue bootstrap evidence exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('🧭 Latest issue bootstrap: None recorded');
+  });
+
+  it('shows the latest issue bootstrap summary in status output when evidence exists', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          updated_at: '2025-01-02T15:00:00.000Z',
+          latest: {
+            issue_id: '179',
+            issue_title: 'Implement bootstrap evidence',
+            recorded_at: '2025-01-02T15:00:00.000Z',
+            current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            startup_context_paths: ['.project.yaml', '.context/quick-start.md'],
+            additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
+          },
+        },
+      })
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
+    expect(result).toContain('Title: Implement bootstrap evidence');
   });
 
   it('shows the latest BLOCK guardrail summary and reason', async () => {

@@ -33,6 +33,29 @@ interface GuardrailEvidenceState {
   pr_scope_check?: GuardrailEvidenceEntry;
 }
 
+interface IssueBootstrapAdditionalContextEntry {
+  path: string;
+  reason: string;
+}
+
+interface IssueBootstrapRecord {
+  recorded_at?: string;
+  issue_id?: string | null;
+  issue_title?: string | null;
+  startup_context_paths?: string[];
+  additional_context?: IssueBootstrapAdditionalContextEntry[];
+  current_branch?: string | null;
+}
+
+interface IssueBootstrapState {
+  updated_at?: string;
+  latest?: IssueBootstrapRecord | null;
+}
+
+interface IssueBootstrapSummaryInput {
+  issueBootstrap?: IssueBootstrapState;
+}
+
 interface SwitchContextSummaryInput {
   description?: string;
   quickStart?: string;
@@ -107,6 +130,43 @@ function buildGuardrailSummaryLines(guardrailEvidence?: GuardrailEvidenceState):
   }
 
   const detail = summarizeGuardrailDetail(latestGuardrail);
+  if (detail) {
+    lines.push(`   Detail: ${detail}`);
+  }
+
+  return lines;
+}
+
+function summarizeIssueBootstrapDetail(entry: IssueBootstrapRecord): string | null {
+  const startupCount = Array.isArray(entry.startup_context_paths) ? entry.startup_context_paths.length : 0;
+  const additionalCount = Array.isArray(entry.additional_context) ? entry.additional_context.length : 0;
+
+  if (startupCount > 0 || additionalCount > 0) {
+    return `${startupCount} startup surface(s), ${additionalCount} additional context document(s)`;
+  }
+
+  return null;
+}
+
+function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): string[] {
+  const latestBootstrap = input.issueBootstrap?.latest;
+  if (!latestBootstrap) {
+    return ['🧭 Latest issue bootstrap: None recorded'];
+  }
+
+  const recordedAt =
+    formatTimestamp(latestBootstrap.recorded_at) ||
+    formatTimestamp(input.issueBootstrap?.updated_at) ||
+    'Unknown time';
+  const issueLabel = latestBootstrap.issue_id ? `#${latestBootstrap.issue_id}` : 'unknown issue';
+  const branchDetail = latestBootstrap.current_branch ? ` on ${latestBootstrap.current_branch}` : '';
+  const lines = [`🧭 Latest issue bootstrap: ${issueLabel}${branchDetail} (${recordedAt})`];
+
+  if (latestBootstrap.issue_title) {
+    lines.push(`   Title: ${latestBootstrap.issue_title}`);
+  }
+
+  const detail = summarizeIssueBootstrapDetail(latestBootstrap);
   if (detail) {
     lines.push(`   Detail: ${detail}`);
   }
@@ -246,6 +306,9 @@ export async function switchProject(args: any): Promise<string> {
 
   const bootstrap = bootstrapNotes.length > 0 ? '\n\n' + bootstrapNotes.join('\n') : '';
   const guardrailSummary = buildGuardrailSummaryLines(state?.guardrail_evidence as GuardrailEvidenceState | undefined);
+  const issueBootstrapSummary = buildIssueBootstrapSummaryLines({
+    issueBootstrap: state?.issue_bootstrap as IssueBootstrapState | undefined,
+  });
   const contextSummary = buildSwitchContextSummaryLines({
     description,
     quickStart,
@@ -253,7 +316,7 @@ export async function switchProject(args: any): Promise<string> {
     lastRecorded: found.last_recorded,
   });
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
@@ -332,6 +395,9 @@ export async function getStatus(): Promise<string> {
   }
 
   lines.push(...buildGuardrailSummaryLines(state.guardrail_evidence as GuardrailEvidenceState | undefined));
+  lines.push(...buildIssueBootstrapSummaryLines({
+    issueBootstrap: state.issue_bootstrap as IssueBootstrapState | undefined,
+  }));
 
   lines.push('');
   if (state.current_task) {
