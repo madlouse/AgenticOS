@@ -4,7 +4,8 @@
   "description": "MCP Server for AgenticOS - AI-native project management system",
   "type": "module",
   "bin": {
-    "agenticos-mcp": "./build/index.js"
+    "agenticos-mcp": "./build/index.js",
+    "agenticos-bootstrap": "./build/bootstrap.js"
   },
   "scripts": {
     "build": "tsc",
