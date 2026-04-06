@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const execAsyncMock = vi.hoisted(() => vi.fn());
+const readFileMock = vi.hoisted(() => vi.fn());
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+}));
 
 vi.mock('child_process', () => ({
   exec: vi.fn(),
@@ -8,6 +12,14 @@ vi.mock('child_process', () => ({
 
 vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
+}));
+
+vi.mock('fs/promises', () => ({
+  readFile: readFileMock,
+}));
+
+vi.mock('yaml', () => ({
+  default: yamlMock,
 }));
 
 const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue({
@@ -21,6 +33,7 @@ const resolveGuardrailProjectTargetMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistGuardrailEvidence: persistGuardrailEvidenceMock,
+  extractLatestIssueBootstrap: (state: any) => state?.issue_bootstrap?.latest || null,
 }));
 
 vi.mock('../../utils/repo-boundary.js', () => ({
@@ -64,6 +77,27 @@ describe('runPreflight', () => {
         sourceRepoRootsDeclared: true,
       },
     });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      issue_bootstrap: {
+        updated_at: '2026-04-06T00:00:00.000Z',
+        latest: {
+          recorded_at: '2026-04-06T00:00:00.000Z',
+          issue_id: '36',
+          repo_path: '/repo',
+          current_branch: 'feat/36-guardrail-preflight',
+          startup_context_paths: [
+            '/workspace/projects/agenticos/standards/.project.yaml',
+            '/workspace/projects/agenticos/standards/.context/quick-start.md',
+          ],
+          stages: {
+            context_reset_performed: true,
+            project_hot_load_performed: true,
+            issue_payload_attached: true,
+          },
+        },
+      },
+    }));
+    yamlMock.parse.mockImplementation((content: string) => JSON.parse(content));
   });
 
   it('returns PASS for a correctly isolated implementation branch', async () => {
@@ -131,6 +165,21 @@ describe('runPreflight', () => {
       'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/113-fail-closed-edit-boundaries\n',
       'log --format=%s origin/main..HEAD': '',
     });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      issue_bootstrap: {
+        latest: {
+          issue_id: '113',
+          repo_path: '/repo',
+          current_branch: 'feat/113-fail-closed-edit-boundaries',
+          startup_context_paths: ['/repo/projects/agenticos/standards/.project.yaml'],
+          stages: {
+            context_reset_performed: true,
+            project_hot_load_performed: true,
+            issue_payload_attached: true,
+          },
+        },
+      },
+    }));
 
     await runPreflight({
       issue_id: '113',
@@ -172,6 +221,21 @@ describe('runPreflight', () => {
         sourceRepoRootsDeclared: true,
       },
     });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      issue_bootstrap: {
+        latest: {
+          issue_id: '160',
+          repo_path: '/repo',
+          current_branch: 'feat/160-source-repo-boundary-enforcement',
+          startup_context_paths: ['/repo/projects/agenticos/standards/.project.yaml'],
+          stages: {
+            context_reset_performed: true,
+            project_hot_load_performed: true,
+            issue_payload_attached: true,
+          },
+        },
+      },
+    }));
 
     await runPreflight({
       issue_id: '160',
@@ -209,6 +273,72 @@ describe('runPreflight', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.block_reasons[0]).toContain('unrelated commits');
+  });
+
+  it('returns BLOCK when no matching issue bootstrap evidence is recorded', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
+      'rev-parse --abbrev-ref HEAD': 'feat/36-guardrail-preflight\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/36-guardrail-preflight\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+    readFileMock.mockResolvedValue(JSON.stringify({}));
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '36',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('no issue bootstrap evidence');
+  });
+
+  it('returns BLOCK when the latest issue bootstrap belongs to a different issue', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
+      'rev-parse --abbrev-ref HEAD': 'feat/36-guardrail-preflight\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/36-guardrail-preflight\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      issue_bootstrap: {
+        latest: {
+          issue_id: '999',
+          repo_path: '/repo',
+          current_branch: 'feat/36-guardrail-preflight',
+          startup_context_paths: ['/workspace/projects/agenticos/standards/.project.yaml'],
+          stages: {
+            context_reset_performed: true,
+            project_hot_load_performed: true,
+            issue_payload_attached: true,
+          },
+        },
+      },
+    }));
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '36',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('does not match requested issue');
   });
 
   it('returns BLOCK for structural move without root exception or reproducibility gate', async () => {
