@@ -83,6 +83,9 @@ function mockProjectFiles(options?: {
       id: 'test-project',
       name: 'Test Project',
     },
+    source_control: {
+      topology: 'local_directory_only',
+    },
   };
   const state = options?.state || {
     session: {},
@@ -429,7 +432,10 @@ describe('recordSession', () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {
       if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
       }
       if (path.endsWith('/state.yaml')) {
         return JSON.stringify({ session: {}, working_memory: { decisions: [], facts: [], pending: [] } });
@@ -459,7 +465,10 @@ describe('recordSession', () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {
       if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
       }
       if (path.endsWith('/state.yaml')) {
         throw new Error('missing state');
@@ -495,7 +504,10 @@ describe('recordSession', () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {
       if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
       }
       if (path.endsWith('/state.yaml')) {
         return 'not-json';
@@ -523,7 +535,10 @@ describe('recordSession', () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {
       if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({ meta: { id: 'test-project', name: 'Test Project' } });
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
       }
       if (path.endsWith('/state.yaml')) {
         return 'null';
@@ -603,6 +618,9 @@ describe('recordSession', () => {
         meta: {
           id: 'wrong-project',
           name: 'Test Project',
+        },
+        source_control: {
+          topology: 'local_directory_only',
         },
       },
     });

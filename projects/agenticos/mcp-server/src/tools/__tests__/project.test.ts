@@ -67,6 +67,10 @@ describe('switchProject', () => {
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      source_control: { topology: 'local_directory_only' },
+    }));
   });
 
   afterEach(() => {
@@ -91,7 +95,10 @@ describe('switchProject', () => {
     });
 
     // Mock readFile for .project.yaml and state.yaml
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      source_control: { topology: 'local_directory_only' },
+    }));
 
     const result = await switchProject({ project: 'my-project' });
 
@@ -118,7 +125,10 @@ describe('switchProject', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      source_control: { topology: 'local_directory_only' },
+    }));
 
     const result = await switchProject({ project: 'My Project' });
 
@@ -177,7 +187,10 @@ describe('switchProject', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      source_control: { topology: 'local_directory_only' },
+    }));
 
     await switchProject({ project: 'my-project' });
 
@@ -204,7 +217,10 @@ describe('switchProject', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({ meta: { description: '' } }));
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      source_control: { topology: 'local_directory_only' },
+    }));
 
     await switchProject({ project: 'my-project' });
 
@@ -234,6 +250,7 @@ describe('switchProject', () => {
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
         meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
       })
@@ -264,6 +281,7 @@ describe('switchProject', () => {
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
         meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
         guardrail_evidence: {
           updated_at: '2025-01-02T14:00:00.000Z',
           last_command: 'agenticos_preflight',
@@ -305,7 +323,10 @@ describe('switchProject', () => {
     });
 
     fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({ meta: { description: '' } }))
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
       .mockResolvedValueOnce(JSON.stringify({
         working_memory: { pending: [], decisions: [] },
         issue_bootstrap: {
@@ -348,7 +369,10 @@ describe('switchProject', () => {
     });
 
     fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({ meta: { description: 'Agent-first project operating system' } }))
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: 'Agent-first project operating system' },
+        source_control: { topology: 'local_directory_only' },
+      }))
       .mockResolvedValueOnce(
         JSON.stringify({
           current_task: {
@@ -394,6 +418,7 @@ describe('switchProject', () => {
     fsPromisesMock.readFile
       .mockResolvedValueOnce(JSON.stringify({
         meta: { description: 'Self-hosting product' },
+        source_control: { topology: 'local_directory_only' },
         agent_context: {
           quick_start: 'standards/.context/quick-start.md',
           current_state: 'standards/.context/state.yaml',
@@ -431,7 +456,10 @@ describe('switchProject', () => {
     });
 
     fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({ meta: { description: '' } }))
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
       .mockResolvedValueOnce(
         JSON.stringify({
           working_memory: {
@@ -481,6 +509,33 @@ describe('switchProject', () => {
 
     expect(result).toContain('archived reference content');
     expect(result).toContain('agenticos-standards');
+    expect(registryMock.saveRegistry).not.toHaveBeenCalled();
+  });
+
+  it('refuses to switch into a legacy project that has not completed topology initialization', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'legacy-project',
+          name: 'Legacy Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { id: 'legacy-project', name: 'Legacy Project' },
+    }));
+
+    const result = await switchProject({ project: 'legacy-project' });
+
+    expect(result).toContain('has not completed source-control topology initialization');
     expect(registryMock.saveRegistry).not.toHaveBeenCalled();
   });
 });
@@ -631,6 +686,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         current_task: { title: 'Implement X', status: 'in_progress' },
         working_memory: {
@@ -669,6 +725,7 @@ describe('getStatus', () => {
     fsPromisesMock.readFile
       .mockResolvedValueOnce(JSON.stringify({
         meta: { id: 'agenticos', name: 'AgenticOS' },
+        source_control: { topology: 'local_directory_only' },
         agent_context: { current_state: 'standards/.context/state.yaml' },
       }))
       .mockResolvedValueOnce(JSON.stringify({
@@ -699,7 +756,11 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockRejectedValue(new Error('ENOENT'));
 
     const result = await getStatus();
 
@@ -726,6 +787,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
       })
@@ -756,6 +818,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
       })
@@ -785,6 +848,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
       })
@@ -814,6 +878,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
         issue_bootstrap: {
@@ -855,6 +920,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
         guardrail_evidence: {
@@ -899,6 +965,7 @@ describe('getStatus', () => {
 
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
+        source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
         guardrail_evidence: {
@@ -956,5 +1023,31 @@ describe('getStatus', () => {
 
     expect(result).toContain('archived reference content');
     expect(result).toContain('agenticos-standards');
+  });
+
+  it('refuses status for an active project that has not completed topology initialization', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'legacy-project',
+      projects: [
+        {
+          id: 'legacy-project',
+          name: 'Legacy Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { id: 'legacy-project', name: 'Legacy Project' },
+    }));
+
+    const result = await getStatus();
+
+    expect(result).toContain('has not completed source-control topology initialization');
   });
 });
