@@ -1,8 +1,11 @@
 import { exec } from 'child_process';
+import { readFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
+import yaml from 'yaml';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
+import { matchesRuntimeReviewExcludedPath, resolveRuntimeReviewSurfacePaths } from '../utils/runtime-review-surface.js';
 
 const execAsync = promisify(exec);
 
@@ -20,6 +23,7 @@ interface PrScopeCheckResult {
   summary: string;
   commit_count: number;
   changed_files: string[];
+  runtime_managed_files: string[];
   unexpected_files: string[];
   unrelated_commit_subjects: string[];
   branch_ancestry_verified: boolean;
@@ -33,6 +37,10 @@ interface PrScopeCheckResult {
 async function runGit(repoPath: string, args: string): Promise<string> {
   const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
   return stdout.trim();
+}
+
+async function loadProjectYaml(projectYamlPath: string): Promise<any> {
+  return yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
 }
 
 function normalizeLines(content: string): string[] {
@@ -89,6 +97,7 @@ function makeBaseResult(remoteBaseBranch: string, expectedIssueScope: string): P
     summary: '',
     commit_count: 0,
     changed_files: [],
+    runtime_managed_files: [],
     unexpected_files: [],
     unrelated_commit_subjects: [],
     branch_ancestry_verified: false,
@@ -146,6 +155,7 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
           summary: result.summary,
           commit_count: result.commit_count,
           changed_files: result.changed_files,
+          runtime_managed_files: result.runtime_managed_files,
           unexpected_files: result.unexpected_files,
           unrelated_commit_subjects: result.unrelated_commit_subjects,
           branch_ancestry_verified: result.branch_ancestry_verified,
@@ -202,6 +212,7 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
           summary: result.summary,
           commit_count: result.commit_count,
           changed_files: result.changed_files,
+          runtime_managed_files: result.runtime_managed_files,
           unexpected_files: result.unexpected_files,
           unrelated_commit_subjects: result.unrelated_commit_subjects,
           branch_ancestry_verified: result.branch_ancestry_verified,
@@ -221,14 +232,26 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   const changedFiles = normalizeLines(
     await runGit(repo_path, `diff --name-only ${remote_base_branch}...HEAD`).catch(() => ''),
   );
+  const projectYaml = await loadProjectYaml(projectResolution.targetProject!.projectYamlPath);
+  const runtimeTrackedPaths = resolveRuntimeReviewSurfacePaths(
+    projectResolution.targetProject!.path,
+    projectYaml,
+    { include_claude_state_mirror: true },
+  ).tracked_review_excluded_paths;
 
   result.commit_count = subjects.length;
   result.changed_files = changedFiles;
+  result.runtime_managed_files = changedFiles.filter((file) => matchesRuntimeReviewExcludedPath(file, runtimeTrackedPaths));
   result.unrelated_commit_subjects = subjects.filter((subject) => !subject.includes(`#${issue_id}`));
-  result.unexpected_files = changedFiles.filter((file) => !fileMatchesDeclaredScope(file, declared_target_files));
+  const productReviewFiles = changedFiles.filter((file) => !matchesRuntimeReviewExcludedPath(file, runtimeTrackedPaths));
+  result.unexpected_files = productReviewFiles.filter((file) => !fileMatchesDeclaredScope(file, declared_target_files));
 
   if (result.unrelated_commit_subjects.length > 0) {
     result.block_reasons.push(`branch includes unrelated commits relative to ${remote_base_branch}`);
+  }
+
+  if (result.runtime_managed_files.length > 0 && productReviewFiles.length > 0) {
+    result.block_reasons.push('runtime-managed files are mixed into a normal product review slice');
   }
 
   if (result.unexpected_files.length > 0) {
@@ -256,6 +279,7 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
           summary: result.summary,
           commit_count: result.commit_count,
           changed_files: result.changed_files,
+          runtime_managed_files: result.runtime_managed_files,
           unexpected_files: result.unexpected_files,
           unrelated_commit_subjects: result.unrelated_commit_subjects,
           branch_ancestry_verified: result.branch_ancestry_verified,
@@ -289,6 +313,7 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
         summary: result.summary,
         commit_count: result.commit_count,
         changed_files: result.changed_files,
+        runtime_managed_files: result.runtime_managed_files,
         unexpected_files: result.unexpected_files,
         unrelated_commit_subjects: result.unrelated_commit_subjects,
         branch_ancestry_verified: result.branch_ancestry_verified,

@@ -10,3 +10,4 @@ export { runEditGuard } from './edit-guard.js';
 export { runEntrySurfaceRefresh } from './entry-surface-refresh.js';
 export { runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck } from './standard-kit.js';
 export { runNonCodeEvaluate } from './non-code-evaluate.js';
+export { runArchiveImportEvaluate } from './archive-import-evaluate.js';

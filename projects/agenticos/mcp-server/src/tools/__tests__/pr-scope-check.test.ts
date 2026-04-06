@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const execAsyncMock = vi.hoisted(() => vi.fn());
+const readFileMock = vi.hoisted(() => vi.fn());
+const yamlMock = vi.hoisted(() => ({
+  parse: vi.fn(),
+}));
 
 vi.mock('child_process', () => ({
   exec: vi.fn(),
@@ -8,6 +12,14 @@ vi.mock('child_process', () => ({
 
 vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
+}));
+
+vi.mock('fs/promises', () => ({
+  readFile: readFileMock,
+}));
+
+vi.mock('yaml', () => ({
+  default: yamlMock,
 }));
 
 const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue({
@@ -42,6 +54,10 @@ function mockGitResponses(responses: Record<string, string>): void {
 describe('runPrScopeCheck', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    readFileMock.mockResolvedValue('{"meta":{"id":"agenticos","name":"AgenticOS"}}');
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
     persistGuardrailEvidenceMock.mockResolvedValue({
       attempted: true,
       persisted: true,
@@ -79,9 +95,10 @@ describe('runPrScopeCheck', () => {
       repo_path: '/repo',
       declared_target_files: ['projects/agenticos/mcp-server/src/tools/**', 'projects/agenticos/mcp-server/src/index.ts'],
       expected_issue_scope: 'single_guardrail_feature',
-    })) as { status: string; unexpected_files: string[]; unrelated_commit_subjects: string[]; persistence?: { persisted: boolean } };
+    })) as { status: string; runtime_managed_files: string[]; unexpected_files: string[]; unrelated_commit_subjects: string[]; persistence?: { persisted: boolean } };
 
     expect(result.status).toBe('PASS');
+    expect(result.runtime_managed_files).toEqual([]);
     expect(result.unexpected_files).toEqual([]);
     expect(result.unrelated_commit_subjects).toEqual([]);
     expect(result.persistence?.persisted).toBe(true);
@@ -154,6 +171,71 @@ describe('runPrScopeCheck', () => {
     expect(result.status).toBe('BLOCK');
     expect(result.unexpected_files).toContain('README.md');
     expect(result.block_reasons.join(' ')).toContain('declared target scope');
+  });
+
+  it('returns PASS when the diff is runtime-managed only', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: { id: 'agenticos', name: 'AgenticOS' },
+      agent_context: {
+        current_state: 'standards/.context/state.yaml',
+        conversations: 'standards/.context/conversations/',
+        last_record_marker: 'standards/.context/.last_record',
+      },
+    }));
+
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-171\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'feat(mcp-server): isolate runtime review surfaces (#171)\n',
+      'diff --name-only origin/main...HEAD': 'standards/.context/state.yaml\nstandards/.context/.last_record\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '171',
+      repo_path: '/repo/worktrees/issue-171',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/**'],
+      expected_issue_scope: 'runtime_review_surface',
+    })) as { status: string; runtime_managed_files: string[]; unexpected_files: string[] };
+
+    expect(result.status).toBe('PASS');
+    expect(result.runtime_managed_files).toEqual([
+      'standards/.context/state.yaml',
+      'standards/.context/.last_record',
+    ]);
+    expect(result.unexpected_files).toEqual([]);
+  });
+
+  it('returns BLOCK when runtime-managed files are mixed into a normal product review slice', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: { id: 'agenticos', name: 'AgenticOS' },
+      agent_context: {
+        current_state: 'standards/.context/state.yaml',
+        conversations: 'standards/.context/conversations/',
+        last_record_marker: 'standards/.context/.last_record',
+      },
+    }));
+
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-171\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'feat(mcp-server): isolate runtime review surfaces (#171)\n',
+      'diff --name-only origin/main...HEAD': 'projects/agenticos/mcp-server/src/tools/save.ts\nstandards/.context/state.yaml\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '171',
+      repo_path: '/repo/worktrees/issue-171',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/**'],
+      expected_issue_scope: 'runtime_review_surface',
+    })) as { status: string; runtime_managed_files: string[]; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.runtime_managed_files).toEqual(['standards/.context/state.yaml']);
+    expect(result.block_reasons.join(' ')).toContain('runtime-managed files are mixed');
   });
 
   it('returns BLOCK when the branch is not comparable to the intended remote base', async () => {

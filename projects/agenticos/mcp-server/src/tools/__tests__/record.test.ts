@@ -445,6 +445,16 @@ describe('recordSession', () => {
     expect(result).toContain('✅ Session recorded');
   });
 
+  it('does not read or rewrite quick-start.md during record', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
+
+    await recordSession({ summary: 'runtime-only update' });
+
+    expect(fsPromisesMock.readFile.mock.calls.some((call) => String(call[0]).endsWith('/quick-start.md'))).toBe(false);
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('/quick-start.md'))).toBe(false);
+  });
+
   it('creates a new conversation file and default state when conversation and state files do not exist yet', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {

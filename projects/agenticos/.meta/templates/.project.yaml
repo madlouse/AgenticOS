@@ -31,6 +31,11 @@ execution:
   source_repo_roots:
     - "."  # Relative to the managed project root. Use ../.. when the canonical Git repo root is higher.
 
+archive_import_policy:
+  active_source_allowlist: []
+  provenance_only_allowlist: []
+  reject_list: []
+
 tech:
   languages: []
   platforms: []
