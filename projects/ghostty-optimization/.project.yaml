@@ -4,6 +4,10 @@ meta:
   version: "1.0.0"
   created: "2026-03-16"
 
+execution:
+  source_repo_roots:
+    - ../..
+
 agent_context:
   quick_start: ".context/quick-start.md"
   current_state: ".context/state.yaml"
