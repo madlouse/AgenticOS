@@ -27,6 +27,10 @@ status:
   last_updated: "YYYY-MM-DD"
   next_action: "Define project goals"
 
+execution:
+  source_repo_roots:
+    - "."  # Relative to the managed project root. Use ../.. when the canonical Git repo root is higher.
+
 tech:
   languages: []
   platforms: []

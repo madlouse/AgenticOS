@@ -1,8 +1,9 @@
 import { exec } from 'child_process';
 import { access, mkdir } from 'fs/promises';
-import { basename, join } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import { promisify } from 'util';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
+import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 
 const execAsync = promisify(exec);
 
@@ -11,6 +12,7 @@ interface BranchBootstrapArgs {
   branch_type?: string;
   slug?: string;
   repo_path?: string;
+  project_path?: string;
   remote_base_branch?: string;
   worktree_root?: string;
 }
@@ -64,6 +66,7 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     branch_type = 'feat',
     slug,
     repo_path,
+    project_path,
     remote_base_branch = 'origin/main',
     worktree_root,
   } = args;
@@ -87,8 +90,10 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
+      project_path,
       payload: {
         issue_id: issue_id || null,
+        project_path: project_path || null,
         branch_type,
         slug: slug || null,
         remote_base_branch,
@@ -112,8 +117,10 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
+      project_path,
       payload: {
         issue_id,
+        project_path: project_path || null,
         branch_type,
         slug,
         remote_base_branch,
@@ -131,19 +138,53 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     return JSON.stringify(result, null, 2);
   }
 
-  const repoName = sanitizeSegment(basename(repo_path)) || 'repo';
-  result.branch_name = `${branch_type}/${issue_id}-${sanitizedSlug}`;
-  result.worktree_path = join(worktree_root, `${repoName}-${issue_id}-${sanitizedSlug}`);
+  const projectResolution = await resolveGuardrailProjectTarget({
+    commandName: 'agenticos_branch_bootstrap',
+    repoPath: repo_path,
+    projectPath: project_path,
+  });
+  if (!projectResolution.targetProject) {
+    result.block_reasons.push(...projectResolution.resolutionErrors);
+  }
+
+  let gitCommonRepoRoot: string | null = null;
+  let gitRemoteOrigin: string | null = null;
 
   try {
+    const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
+    const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
+    gitCommonRepoRoot = dirname(gitCommonDir);
+    gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => '');
+    const repoName = sanitizeSegment(basename(gitCommonRepoRoot)) || sanitizeSegment(basename(repo_path)) || 'repo';
+
+    result.branch_name = `${branch_type}/${issue_id}-${sanitizedSlug}`;
+    result.worktree_path = join(worktree_root, `${repoName}-${issue_id}-${sanitizedSlug}`);
     result.base_commit = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
+
+    if (projectResolution.targetProject) {
+      if (!projectResolution.targetProject.sourceRepoRootsDeclared || projectResolution.targetProject.sourceRepoRoots.length === 0) {
+        result.block_reasons.push(
+          `target project "${projectResolution.targetProject.id}" is missing execution.source_repo_roots in ${projectResolution.targetProject.projectYamlPath}`,
+        );
+      } else if (!projectResolution.targetProject.sourceRepoRoots.includes(gitCommonRepoRoot)) {
+        result.block_reasons.push(
+          `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject.id}"`,
+        );
+        result.notes.push(`declared source repo roots: ${projectResolution.targetProject.sourceRepoRoots.join(', ')}`);
+      }
+    }
   } catch {
     result.block_reasons.push(`failed to resolve remote base ${remote_base_branch}`);
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
+      project_path: projectResolution.targetProject?.path || project_path,
       payload: {
         issue_id,
+        target_project_id: projectResolution.targetProject?.id || null,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
         branch_type,
         slug,
         remote_base_branch,
@@ -176,8 +217,13 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
+      project_path: projectResolution.targetProject?.path || project_path,
       payload: {
         issue_id,
+        target_project_id: projectResolution.targetProject?.id || null,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
         branch_type,
         slug,
         remote_base_branch,
@@ -198,7 +244,7 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   await mkdir(worktree_root, { recursive: true });
   await runGit(
     repo_path,
-    `worktree add "${result.worktree_path}" -b ${result.branch_name} ${result.base_commit}`
+    `worktree add "${result.worktree_path}" -b ${result.branch_name} ${result.base_commit}`,
   );
 
   result.status = 'CREATED';
@@ -207,8 +253,13 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   result.persistence = await persistGuardrailEvidence({
     command: 'agenticos_branch_bootstrap',
     repo_path,
+    project_path: projectResolution.targetProject?.path || project_path,
     payload: {
       issue_id,
+      target_project_id: projectResolution.targetProject?.id || null,
+      active_project: projectResolution.activeProjectId,
+      git_common_repo_root: gitCommonRepoRoot,
+      git_remote_origin: gitRemoteOrigin,
       branch_type,
       slug,
       remote_base_branch,

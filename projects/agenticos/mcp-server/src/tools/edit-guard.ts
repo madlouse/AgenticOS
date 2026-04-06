@@ -1,14 +1,19 @@
 import { readFile } from 'fs/promises';
-import { basename, join, resolve, sep } from 'path';
+import { exec } from 'child_process';
+import { dirname, resolve } from 'path';
+import { promisify } from 'util';
 import yaml from 'yaml';
-import { loadRegistry } from '../utils/registry.js';
-
-type TaskType = 'discussion_only' | 'analysis_or_doc' | 'implementation' | 'bootstrap';
+import {
+  isImplementationAffectingTask,
+  resolveGuardrailProjectTarget,
+  type GuardrailTaskType,
+} from '../utils/repo-boundary.js';
 type GuardStatus = 'PASS' | 'BLOCK';
+const execAsync = promisify(exec);
 
 interface EditGuardArgs {
   issue_id?: string;
-  task_type?: TaskType;
+  task_type?: GuardrailTaskType;
   repo_path?: string;
   project_path?: string;
   declared_target_files?: string[];
@@ -23,6 +28,8 @@ interface EditGuardResult {
     name: string;
     path: string;
     state_path: string;
+    project_yaml_path: string;
+    declared_source_repo_roots: string[];
   } | null;
   preflight_ok: boolean;
   scope_ok: boolean;
@@ -31,6 +38,9 @@ interface EditGuardResult {
   evidence: {
     repo_path: string | null;
     project_path: string | null;
+    active_project: string | null;
+    git_worktree_root: string | null;
+    git_common_repo_root: string | null;
     preflight_issue_id: string | null;
     preflight_repo_path: string | null;
     preflight_status: string | null;
@@ -38,77 +48,15 @@ interface EditGuardResult {
   };
 }
 
-function normalizePath(path: string): string {
-  return resolve(path);
-}
-
-function resolveProjectStatePath(projectPath: string, projectYaml: any): string {
-  const configuredStatePath = projectYaml?.agent_context?.current_state;
-  if (typeof configuredStatePath === 'string' && configuredStatePath.trim().length > 0) {
-    return join(projectPath, configuredStatePath.trim());
-  }
-  return join(projectPath, '.context', 'state.yaml');
-}
-
-function isWithinProject(repoPath: string, projectPath: string): boolean {
-  return repoPath === projectPath || repoPath.startsWith(`${projectPath}${sep}`);
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await readFile(path, 'utf-8');
-    return true;
-  } catch {
-    return false;
-  }
+async function runGit(repoPath: string, args: string): Promise<string> {
+  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
+  return stdout.trim();
 }
 
 function normalizeDeclaredTargets(targets: string[]): string[] {
   return targets
     .map((target) => String(target || '').trim())
     .filter((target) => target.length > 0);
-}
-
-async function resolveTargetProject(repoPath: string, explicitProjectPath?: string): Promise<EditGuardResult['target_project']> {
-  if (explicitProjectPath) {
-    const normalizedProjectPath = normalizePath(explicitProjectPath);
-    const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
-    if (!(await fileExists(projectYamlPath))) {
-      return null;
-    }
-
-    const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
-    return {
-      id: String(projectYaml?.meta?.id || basename(normalizedProjectPath)),
-      name: String(projectYaml?.meta?.name || projectYaml?.meta?.id || basename(normalizedProjectPath)),
-      path: normalizedProjectPath,
-      state_path: resolveProjectStatePath(normalizedProjectPath, projectYaml),
-    };
-  }
-
-  const registry = await loadRegistry();
-  const normalizedRepoPath = normalizePath(repoPath);
-  const match = registry.projects
-    .map((project) => ({ ...project, path: normalizePath(project.path) }))
-    .filter((project) => isWithinProject(normalizedRepoPath, project.path))
-    .sort((a, b) => b.path.length - a.path.length)[0];
-
-  if (!match) {
-    return null;
-  }
-
-  const projectYamlPath = join(match.path, '.project.yaml');
-  if (!(await fileExists(projectYamlPath))) {
-    return null;
-  }
-
-  const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
-  return {
-    id: String(projectYaml?.meta?.id || match.id),
-    name: String(projectYaml?.meta?.name || match.name),
-    path: match.path,
-    state_path: resolveProjectStatePath(match.path, projectYaml),
-  };
 }
 
 export async function runEditGuard(args: EditGuardArgs): Promise<string> {
@@ -132,6 +80,9 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
     evidence: {
       repo_path: repo_path || null,
       project_path: project_path || null,
+      active_project: null,
+      git_worktree_root: null,
+      git_common_repo_root: null,
       preflight_issue_id: null,
       preflight_repo_path: null,
       preflight_status: null,
@@ -139,7 +90,7 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
     },
   };
 
-  if (task_type !== 'implementation') {
+  if (!isImplementationAffectingTask(task_type)) {
     result.status = 'PASS';
     result.summary = `edit guard not required for task_type=${task_type}`;
     return JSON.stringify(result, null, 2);
@@ -150,39 +101,67 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
   }
 
   if (!issue_id) {
-    result.block_reasons.push('issue_id is required for implementation edits');
+    result.block_reasons.push(`issue_id is required for ${task_type} edits`);
   }
 
   const attemptedTargets = normalizeDeclaredTargets(declared_target_files);
   if (attemptedTargets.length === 0) {
-    result.block_reasons.push('declared_target_files is required for implementation edits');
+    result.block_reasons.push(`declared_target_files is required for ${task_type} edits`);
   }
 
-  const registry = await loadRegistry();
-  result.active_project = registry.active_project || null;
-  if (!registry.active_project) {
-    result.block_reasons.push('no active project is set');
-    result.recovery_actions.push('call agenticos_switch before attempting implementation edits');
+  const projectResolution = await resolveGuardrailProjectTarget({
+    commandName: 'agenticos_edit_guard',
+    repoPath: repo_path,
+    projectPath: project_path,
+  });
+  result.active_project = projectResolution.activeProjectId;
+  result.evidence.active_project = projectResolution.activeProjectId;
+
+  if (projectResolution.targetProject) {
+    result.target_project = {
+      id: projectResolution.targetProject.id,
+      name: projectResolution.targetProject.name,
+      path: projectResolution.targetProject.path,
+      state_path: projectResolution.targetProject.statePath,
+      project_yaml_path: projectResolution.targetProject.projectYamlPath,
+      declared_source_repo_roots: projectResolution.targetProject.sourceRepoRoots,
+    };
+  } else {
+    result.block_reasons.push(...projectResolution.resolutionErrors);
+    if (!projectResolution.activeProjectId) {
+      result.recovery_actions.push('call agenticos_switch before attempting implementation-affecting edits');
+    }
+    result.recovery_actions.push('pass project_path pointing at the managed project root when needed');
   }
 
   if (repo_path) {
-    result.target_project = await resolveTargetProject(repo_path, project_path);
-  }
+    try {
+      const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
+      const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
+      const gitCommonRepoRoot = dirname(gitCommonDir);
+      result.evidence.git_worktree_root = gitWorktreeRoot;
+      result.evidence.git_common_repo_root = gitCommonRepoRoot;
 
-  if (!result.target_project) {
-    result.block_reasons.push(
-      project_path
-        ? `project_path is not a resolvable managed project: ${project_path}`
-        : 'target project could not be resolved from repo_path; pass project_path explicitly',
-    );
-    result.recovery_actions.push('pass project_path pointing at the managed project root');
-  }
-
-  if (result.active_project && result.target_project && result.active_project !== result.target_project.id) {
-    result.block_reasons.push(
-      `active project "${result.active_project}" does not match target project "${result.target_project.id}"`,
-    );
-    result.recovery_actions.push(`call agenticos_switch for project "${result.target_project.id}" before editing`);
+      if (result.target_project) {
+        if (result.target_project.declared_source_repo_roots.length === 0) {
+          result.block_reasons.push(
+            `target project "${result.target_project.id}" is missing execution.source_repo_roots in ${result.target_project.project_yaml_path}`,
+          );
+          result.recovery_actions.push(
+            `declare execution.source_repo_roots in ${result.target_project.project_yaml_path} before ${task_type} edits`,
+          );
+        } else if (!result.target_project.declared_source_repo_roots.includes(gitCommonRepoRoot)) {
+          result.block_reasons.push(
+            `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${result.target_project.id}"`,
+          );
+          result.recovery_actions.push(
+            `rerun in a declared source repo root: ${result.target_project.declared_source_repo_roots.join(', ')}`,
+          );
+        }
+      }
+    } catch {
+      result.block_reasons.push('failed to resolve git repository identity for the requested edit');
+    }
   }
 
   let state: any = {};
@@ -214,7 +193,7 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
       result.recovery_actions.push(`rerun agenticos_preflight for issue #${issue_id}`);
     }
 
-    if (repo_path && normalizePath(preflight.repo_path || '') !== normalizePath(repo_path)) {
+    if (repo_path && resolve(preflight.repo_path || '') !== resolve(repo_path)) {
       result.block_reasons.push('latest preflight was recorded for a different repo_path');
       result.recovery_actions.push('rerun agenticos_preflight for the current repo_path');
     }

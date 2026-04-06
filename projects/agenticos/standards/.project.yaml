@@ -7,3 +7,6 @@ meta:
 agent_context:
   quick_start: .context/quick-start.md
   current_state: .context/state.yaml
+execution:
+  source_repo_roots:
+    - ../../..

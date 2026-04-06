@@ -16,9 +16,14 @@ const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue(
   project_id: 'agenticos',
   state_path: '/repo/.context/state.yaml',
 }));
+const resolveGuardrailProjectTargetMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistGuardrailEvidence: persistGuardrailEvidenceMock,
+}));
+
+vi.mock('../../utils/repo-boundary.js', () => ({
+  resolveGuardrailProjectTarget: resolveGuardrailProjectTargetMock,
 }));
 
 import { runPrScopeCheck } from '../pr-scope-check.js';
@@ -43,10 +48,26 @@ describe('runPrScopeCheck', () => {
       project_id: 'agenticos',
       state_path: '/repo/.context/state.yaml',
     });
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'active_project',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/workspace/projects/agenticos/standards',
+        statePath: '/workspace/projects/agenticos/standards/.context/state.yaml',
+        projectYamlPath: '/workspace/projects/agenticos/standards/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
   });
 
   it('returns PASS when commits and files stay within the intended issue scope', async () => {
     mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-36\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
       'log --format=%s origin/main..HEAD': 'feat(mcp-server): add agenticos_branch_bootstrap helper (#36)\n',
@@ -69,6 +90,8 @@ describe('runPrScopeCheck', () => {
 
   it('returns PASS when declared exact file paths contain dots', async () => {
     mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-114\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
       'log --format=%s origin/main..HEAD': 'fix(mcp-server): preserve literal dots in pr scope matching (#114)\n',
@@ -91,6 +114,8 @@ describe('runPrScopeCheck', () => {
 
   it('returns BLOCK when commit subjects do not match the current issue', async () => {
     mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-36\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
       'log --format=%s origin/main..HEAD': 'fix(record): defensively parse JSON-stringified array args (fixes #24)\n',
@@ -111,6 +136,8 @@ describe('runPrScopeCheck', () => {
 
   it('returns BLOCK when changed files escape the declared target scope', async () => {
     mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-36\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
       'log --format=%s origin/main..HEAD': 'feat(mcp-server): add agenticos_pr_scope_check (#36)\n',
@@ -142,5 +169,26 @@ describe('runPrScopeCheck', () => {
     expect(result.status).toBe('BLOCK');
     expect(result.branch_ancestry_verified).toBe(false);
     expect(result.block_reasons[0]).toContain('not comparable');
+  });
+
+  it('returns BLOCK when the git common repo root is not declared for the target project', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-160\n',
+      'rev-parse --git-common-dir': '/external/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'fix(mcp-server): enforce source repo bindings (#160)\n',
+      'diff --name-only origin/main...HEAD': 'projects/agenticos/mcp-server/src/tools/preflight.ts\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '160',
+      repo_path: '/repo/worktrees/issue-160',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/**'],
+      expected_issue_scope: 'repo_boundary_enforcement',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
   });
 });

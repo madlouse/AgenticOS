@@ -1,12 +1,15 @@
 import { exec } from 'child_process';
+import { dirname, resolve } from 'path';
 import { promisify } from 'util';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
+import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 
 const execAsync = promisify(exec);
 
 interface PrScopeCheckArgs {
   issue_id?: string;
   repo_path?: string;
+  project_path?: string;
   remote_base_branch?: string;
   declared_target_files?: string[];
   expected_issue_scope?: string;
@@ -100,12 +103,18 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   const {
     issue_id,
     repo_path,
+    project_path,
     remote_base_branch = 'origin/main',
     declared_target_files = [],
     expected_issue_scope = 'unspecified',
   } = args;
 
   const result = makeBaseResult(remote_base_branch, expected_issue_scope);
+  const projectResolution = await resolveGuardrailProjectTarget({
+    commandName: 'agenticos_pr_scope_check',
+    repoPath: repo_path,
+    projectPath: project_path,
+  });
 
   if (!issue_id) {
     result.block_reasons.push('issue_id is required');
@@ -116,14 +125,19 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   if (declared_target_files.length === 0) {
     result.block_reasons.push('declared_target_files is required');
   }
+  if (!projectResolution.targetProject) {
+    result.block_reasons.push(...projectResolution.resolutionErrors);
+  }
 
   if (result.block_reasons.length > 0 || !repo_path || !issue_id || declared_target_files.length === 0) {
     result.summary = result.block_reasons.join('; ');
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_pr_scope_check',
       repo_path,
+      project_path: projectResolution.targetProject?.path || project_path,
       payload: {
         issue_id: issue_id || null,
+        target_project_id: projectResolution.targetProject?.id || null,
         remote_base_branch,
         declared_target_files,
         expected_issue_scope,
@@ -145,7 +159,25 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     return JSON.stringify(result, null, 2);
   }
 
+  let gitCommonRepoRoot: string | null = null;
+  let gitRemoteOrigin: string | null = null;
+
   try {
+    const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
+    const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
+    gitCommonRepoRoot = dirname(gitCommonDir);
+    gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
+
+    if (!projectResolution.targetProject?.sourceRepoRootsDeclared || projectResolution.targetProject.sourceRepoRoots.length === 0) {
+      result.block_reasons.push(
+        `target project "${projectResolution.targetProject?.id || 'unknown'}" is missing execution.source_repo_roots in ${projectResolution.targetProject?.projectYamlPath || 'unknown project metadata'}`,
+      );
+    } else if (!projectResolution.targetProject.sourceRepoRoots.includes(gitCommonRepoRoot)) {
+      result.block_reasons.push(
+        `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject.id}"`,
+      );
+    }
+
     await runGit(repo_path, `rev-parse ${remote_base_branch}`);
     result.branch_fork_point = await runGit(repo_path, `merge-base HEAD ${remote_base_branch}`);
     result.branch_ancestry_verified = true;
@@ -155,8 +187,13 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_pr_scope_check',
       repo_path,
+      project_path: projectResolution.targetProject?.path || project_path,
       payload: {
         issue_id,
+        target_project_id: projectResolution.targetProject?.id || null,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
         remote_base_branch,
         declared_target_files,
         expected_issue_scope,
@@ -179,10 +216,10 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   }
 
   const subjects = normalizeLines(
-    await runGit(repo_path, `log --format=%s ${remote_base_branch}..HEAD`).catch(() => '')
+    await runGit(repo_path, `log --format=%s ${remote_base_branch}..HEAD`).catch(() => ''),
   );
   const changedFiles = normalizeLines(
-    await runGit(repo_path, `diff --name-only ${remote_base_branch}...HEAD`).catch(() => '')
+    await runGit(repo_path, `diff --name-only ${remote_base_branch}...HEAD`).catch(() => ''),
   );
 
   result.commit_count = subjects.length;
@@ -204,8 +241,13 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_pr_scope_check',
       repo_path,
+      project_path: projectResolution.targetProject?.path || project_path,
       payload: {
         issue_id,
+        target_project_id: projectResolution.targetProject?.id || null,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
         remote_base_branch,
         declared_target_files,
         expected_issue_scope,
@@ -232,8 +274,13 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   result.persistence = await persistGuardrailEvidence({
     command: 'agenticos_pr_scope_check',
     repo_path,
+    project_path: projectResolution.targetProject?.path || project_path,
     payload: {
       issue_id,
+      target_project_id: projectResolution.targetProject?.id || null,
+      active_project: projectResolution.activeProjectId,
+      git_common_repo_root: gitCommonRepoRoot,
+      git_remote_origin: gitRemoteOrigin,
       remote_base_branch,
       declared_target_files,
       expected_issue_scope,

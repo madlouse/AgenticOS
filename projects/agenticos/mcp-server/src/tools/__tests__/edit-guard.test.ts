@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const execAsyncMock = vi.hoisted(() => vi.fn());
 const yamlMock = vi.hoisted(() => ({
   parse: vi.fn(),
+}));
+const resolveGuardrailProjectTargetMock = vi.hoisted(() => vi.fn());
+
+vi.mock('child_process', () => ({
+  exec: vi.fn(),
+}));
+
+vi.mock('util', () => ({
+  promisify: vi.fn(() => execAsyncMock),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -16,6 +26,11 @@ vi.mock('../../utils/registry.js', () => ({
   loadRegistry: vi.fn(),
 }));
 
+vi.mock('../../utils/repo-boundary.js', () => ({
+  isImplementationAffectingTask: (taskType: string) => taskType === 'implementation' || taskType === 'bugfix',
+  resolveGuardrailProjectTarget: resolveGuardrailProjectTargetMock,
+}));
+
 import { readFile } from 'fs/promises';
 import { loadRegistry } from '../../utils/registry.js';
 import { runEditGuard } from '../edit-guard.js';
@@ -28,27 +43,32 @@ describe('runEditGuard', () => {
     vi.clearAllMocks();
     loadRegistryMock.mockResolvedValue({
       active_project: 'agenticos-standards',
-      projects: [
-        {
-          id: 'agenticos-standards',
-          name: 'agenticos-standards',
-          path: '/workspace/projects/agenticos/standards',
-          status: 'active',
-          created: '2026-03-20',
-          last_accessed: '2026-03-20T00:00:00.000Z',
-        },
-      ],
+      projects: [],
+    });
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos-standards',
+      resolutionSource: 'active_project',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos-standards',
+        name: 'agenticos-standards',
+        path: '/workspace/projects/agenticos/standards',
+        statePath: '/workspace/projects/agenticos/standards/.context/state.yaml',
+        projectYamlPath: '/workspace/projects/agenticos/standards/.project.yaml',
+        sourceRepoRoots: ['/workspace/source'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/source\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '.git\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
     });
     readFileMock.mockImplementation(async (path: string) => {
-      if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({
-          meta: {
-            id: 'agenticos-standards',
-            name: 'agenticos-standards',
-          },
-        });
-      }
-
       if (path.endsWith('/.context/state.yaml')) {
         return JSON.stringify({
           guardrail_evidence: {
@@ -89,9 +109,11 @@ describe('runEditGuard', () => {
   });
 
   it('blocks when active project does not match the intended target project', async () => {
-    loadRegistryMock.mockResolvedValue({
-      active_project: 'cc-switch',
-      projects: [],
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'cc-switch',
+      resolutionSource: null,
+      resolutionErrors: ['Requested project "beta" does not match active project "cc-switch".'],
+      targetProject: null,
     });
 
     const result = JSON.parse(await runEditGuard({
@@ -105,20 +127,11 @@ describe('runEditGuard', () => {
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('does not match target project');
+    expect(result.block_reasons.join(' ')).toContain('does not match active project');
   });
 
   it('blocks when no preflight evidence is recorded', async () => {
     readFileMock.mockImplementation(async (path: string) => {
-      if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({
-          meta: {
-            id: 'agenticos-standards',
-            name: 'agenticos-standards',
-          },
-        });
-      }
-
       if (path.endsWith('/.context/state.yaml')) {
         return JSON.stringify({});
       }
@@ -154,5 +167,30 @@ describe('runEditGuard', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.block_reasons.join(' ')).toContain('exceed the latest preflight scope');
+  });
+
+  it('blocks bugfix edits when the git common repo root is not declared for the target project', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/wrong-repo\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '.git\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runEditGuard({
+      issue_id: '113',
+      task_type: 'bugfix',
+      repo_path: '/workspace/wrong-repo',
+      project_path: '/workspace/projects/agenticos/standards',
+      declared_target_files: [
+        'projects/agenticos/mcp-server/src/index.ts',
+      ],
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
   });
 });
