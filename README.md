@@ -22,7 +22,16 @@ Homebrew does **not**:
 - restart your AI tool
 - prove activation by itself
 
-After `brew install`, bootstrap one supported agent below, restart it, and verify `agenticos_list` explicitly.
+After `brew install`, either run:
+
+```bash
+agenticos-bootstrap --workspace "$(brew --prefix)/var/agenticos" --first-run
+```
+
+or bootstrap one supported agent below manually, restart it, and verify `agenticos_list` explicitly.
+On macOS, `--first-run` also enables `launchctl` persistence so GUI-launched tools can inherit `AGENTICOS_HOME`.
+Use `agenticos-bootstrap --verify` to audit the current bootstrap state without mutating configs.
+Successful apply/first-run runs also record bootstrap metadata under `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
 For implementation-affecting work, AgenticOS also ships a hook-friendly guard wrapper at `tools/check-edit-boundary.sh`.
 Use it from local automation or any client-side pre-edit hook layer to fail closed unless:
@@ -57,10 +66,10 @@ If transport works but project-create/switch behavior is weak, that is a routing
 
 | Agent | Canonical bootstrap | Canonical config location | Verify |
 |------|---------------------|---------------------------|--------|
-| Claude Code | `claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp` | Claude-managed user MCP config | `claude mcp list`, `/mcp`, then call `agenticos_list` |
-| Codex | `codex mcp add agenticos -- agenticos-mcp` | `~/.codex/config.toml` | `codex mcp list`, then call `agenticos_list` |
-| Cursor | Add `agenticos` to `~/.cursor/mcp.json` | `~/.cursor/mcp.json` | Restart Cursor, then open MCP settings or run `cursor-agent mcp list` |
-| Gemini CLI | `gemini mcp add -s user agenticos agenticos-mcp` | `~/.gemini/settings.json` | `gemini mcp list`, restart Gemini CLI, then call `agenticos_list` |
+| Claude Code | `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp` | Claude-managed user MCP config | `claude mcp list`, `/mcp`, then call `agenticos_list` |
+| Codex | `codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp` | `~/.codex/config.toml` | `codex mcp list`, then call `agenticos_list` |
+| Cursor | Add `agenticos` with explicit `env.AGENTICOS_HOME` to `~/.cursor/mcp.json` | `~/.cursor/mcp.json` | Restart Cursor, then open MCP settings or run `cursor-agent mcp list` |
+| Gemini CLI | `gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp` | `~/.gemini/settings.json` | `gemini mcp list`, restart Gemini CLI, then call `agenticos_list` |
 
 ### Cursor Global `mcp.json`
 
@@ -69,7 +78,10 @@ If transport works but project-create/switch behavior is weak, that is a routing
   "mcpServers": {
     "agenticos": {
       "command": "agenticos-mcp",
-      "args": []
+      "args": [],
+      "env": {
+        "AGENTICOS_HOME": "/absolute/path/to/your/AgenticOS-workspace"
+      }
     }
   }
 }
@@ -99,7 +111,7 @@ Claude Code repair:
 ```bash
 claude mcp get agenticos
 claude mcp remove agenticos -s user
-claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
 
 Then restart Claude Code, confirm `agenticos` appears in `claude mcp list` and `/mcp`, and call `agenticos_list`.
@@ -110,11 +122,12 @@ Codex repair:
 codex mcp list
 codex mcp get agenticos
 codex mcp remove agenticos
-codex mcp add agenticos -- agenticos-mcp
+codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
 
 If `codex mcp get agenticos` reports that no server exists, skip the remove step and add it directly.
 Then restart Codex, confirm `agenticos` appears in `codex mcp list`, and call `agenticos_list`.
+If `codex mcp get agenticos` shows `env: -`, treat that registration as incomplete and re-add it with explicit `AGENTICOS_HOME`.
 
 Bootstrap verification is intentionally manual and agent-local.
 `agenticos_health` stays repo/project scoped and does not inspect or mutate user MCP settings owned by Claude Code, Codex, Cursor, or Gemini CLI.

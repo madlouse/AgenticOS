@@ -32,7 +32,7 @@ async function setupBootstrapHome(): Promise<string> {
           transport: 'stdio',
           canonical_bootstrap_method: 'cli-command',
           canonical_config_location: 'managed',
-          bootstrap_command: 'claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp',
+          bootstrap_command: 'claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp',
           verification: ['claude mcp list'],
           transport_debug: ['transport'],
           routing_debug: ['routing'],
@@ -159,5 +159,15 @@ describe('bootstrap matrix', () => {
     expect(matrix.verification_contract.legacy_source_checkout_paths_unsupported).toBe(true);
     expect(matrix.verification_contract.automation_boundary).toBe('manual_agent_cli');
     expect(agent.repair).toContain('claude mcp get agenticos');
+  });
+
+  it('records explicit AGENTICOS_HOME injection for CLI bootstrap commands', async () => {
+    const home = await setupBootstrapHome();
+    process.env.AGENTICOS_HOME = home;
+
+    const matrix = await loadAgentBootstrapMatrix();
+    const agent = getBootstrapAgent(matrix, 'claude-code');
+
+    expect(agent.bootstrap_command).toContain('AGENTICOS_HOME=');
   });
 });
