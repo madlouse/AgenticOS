@@ -175,8 +175,11 @@ Create new project with standard structure.
 
 **Parameters**:
 - `name` (required) - Project name
+- `topology` (required) - `local_directory_only` or `github_versioned`
 - `description` (optional) - What this project is about
 - `path` (optional) - Custom location (otherwise uses $AGENTICOS_HOME/projects/{id})
+- `github_repo` (required when `topology=github_versioned`) - `OWNER/REPO`
+- `normalize_existing` (optional) - Normalize an existing project directory into the required contract instead of only creating a new one
 
 **Returns**: Project created confirmation with path and ID
 

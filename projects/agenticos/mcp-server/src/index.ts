@@ -62,8 +62,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           name: { type: 'string', description: 'Project name' },
           description: { type: 'string', description: 'Project description' },
           path: { type: 'string', description: 'Optional custom path (otherwise uses $AGENTICOS_HOME/projects/{id})' },
+          topology: { type: 'string', enum: ['local_directory_only', 'github_versioned'], description: 'Required source-control topology for the project.' },
+          github_repo: { type: 'string', description: 'Required when topology is github_versioned. Use OWNER/REPO.' },
+          normalize_existing: { type: 'boolean', description: 'When true, normalize an existing project directory/registry entry instead of failing closed.' },
         },
-        required: ['name'],
+        required: ['name', 'topology'],
       },
     },
     {

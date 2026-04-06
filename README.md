@@ -163,7 +163,7 @@ or in English:
 Create a new AgenticOS project called my-feature
 ```
 
-The agent will call `agenticos_init` and set up the project structure automatically.
+The agent will call `agenticos_init` and set up the project structure automatically, but new projects now require an explicit topology choice: `local_directory_only` or `github_versioned`.
 
 ---
 
@@ -171,7 +171,7 @@ The agent will call `agenticos_init` and set up the project structure automatica
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `agenticos_init` | Create a new project | `name` (required), `description`, `path` |
+| `agenticos_init` | Create or normalize a project | `name` (required), `topology` (required), `description`, `path`, `github_repo`, `normalize_existing` |
 | `agenticos_switch` | Switch active project | `project` (ID or name) |
 | `agenticos_list` | List all projects | — |
 | `agenticos_status` | Show active project status | — |
