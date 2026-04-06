@@ -332,6 +332,45 @@ describe('switchProject', () => {
     expect(result).toContain('💡 Suggested next step: Close issue #23');
   });
 
+  it('uses configured canonical context paths for self-hosting switch output', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: 'Self-hosting product' },
+        agent_context: {
+          quick_start: 'standards/.context/quick-start.md',
+          current_state: 'standards/.context/state.yaml',
+        },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        current_task: { title: 'Canonical state', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nCanonical quick start');
+
+    const result = await switchProject({ project: 'agenticos' });
+
+    expect(fsPromisesMock.readFile).toHaveBeenCalledWith('/workspace/projects/agenticos/standards/.context/state.yaml', 'utf-8');
+    expect(fsPromisesMock.readFile).toHaveBeenCalledWith('/workspace/projects/agenticos/standards/.context/quick-start.md', 'utf-8');
+    expect(result).toContain('/workspace/projects/agenticos/standards/.context/quick-start.md');
+    expect(result).toContain('/workspace/projects/agenticos/standards/.context/state.yaml');
+  });
+
   it('falls back to quick-start summary when project description is missing', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -566,6 +605,39 @@ describe('getStatus', () => {
     expect(result).toContain('in_progress');
     expect(result).toContain('task 1');
     expect(result).toContain('decision 1');
+  });
+
+  it('uses configured canonical state paths for self-hosting status output', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'agenticos',
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { id: 'agenticos', name: 'AgenticOS' },
+        agent_context: { current_state: 'standards/.context/state.yaml' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        current_task: { title: 'Canonical status', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+      }));
+
+    const result = await getStatus();
+
+    expect(fsPromisesMock.readFile).toHaveBeenCalledWith('/workspace/projects/agenticos/standards/.context/state.yaml', 'utf-8');
+    expect(result).toContain('Canonical status');
   });
 
   it('handles project with no state.yaml', async () => {

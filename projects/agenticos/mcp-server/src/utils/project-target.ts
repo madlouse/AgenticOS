@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, type Project, type Registry } from './registry.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
@@ -21,6 +21,13 @@ export interface ResolvedManagedProjectTarget {
 interface ResolveManagedProjectTargetArgs {
   project?: string;
   commandName: string;
+}
+
+export interface ManagedProjectContextPaths {
+  quickStartPath: string;
+  statePath: string;
+  conversationsDir: string;
+  markerPath: string;
 }
 
 function uniqueMatch<T>(matches: T[], notFound: string, ambiguous: string): T {
@@ -48,6 +55,29 @@ function assertRegistryUniqueness(registry: Registry, project: Project, requeste
   if (sameName.length > 1) {
     throw new Error(`Project identity is ambiguous because registry name "${project.name}" is duplicated.`);
   }
+}
+
+export function resolveManagedProjectContextPaths(projectPath: string, projectYaml: any): ManagedProjectContextPaths {
+  const agentContext = projectYaml?.agent_context || {};
+  const statePath = join(projectPath, typeof agentContext.current_state === 'string' && agentContext.current_state.trim().length > 0
+    ? agentContext.current_state.trim()
+    : '.context/state.yaml');
+  const quickStartPath = join(projectPath, typeof agentContext.quick_start === 'string' && agentContext.quick_start.trim().length > 0
+    ? agentContext.quick_start.trim()
+    : '.context/quick-start.md');
+  const conversationsDir = join(projectPath, typeof agentContext.conversations === 'string' && agentContext.conversations.trim().length > 0
+    ? agentContext.conversations.trim()
+    : '.context/conversations');
+  const markerPath = typeof agentContext.last_record_marker === 'string' && agentContext.last_record_marker.trim().length > 0
+    ? join(projectPath, agentContext.last_record_marker.trim())
+    : join(dirname(statePath), '.last_record');
+
+  return {
+    quickStartPath,
+    statePath,
+    conversationsDir,
+    markerPath,
+  };
 }
 
 export async function resolveManagedProjectTarget(args: ResolveManagedProjectTargetArgs): Promise<ResolvedManagedProjectTarget> {
@@ -119,6 +149,8 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     );
   }
 
+  const contextPaths = resolveManagedProjectContextPaths(project.path, projectYaml);
+
   return {
     registry,
     project,
@@ -127,9 +159,9 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     projectName: project.name,
     projectPath: project.path,
     projectYamlPath,
-    quickStartPath: join(project.path, '.context', 'quick-start.md'),
-    statePath: join(project.path, '.context', 'state.yaml'),
-    conversationsDir: join(project.path, '.context', 'conversations'),
-    markerPath: join(project.path, '.context', '.last_record'),
+    quickStartPath: contextPaths.quickStartPath,
+    statePath: contextPaths.statePath,
+    conversationsDir: contextPaths.conversationsDir,
+    markerPath: contextPaths.markerPath,
   };
 }

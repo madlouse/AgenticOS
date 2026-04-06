@@ -19,7 +19,7 @@ vi.mock('../registry.js', () => ({
 
 import { readFile } from 'fs/promises';
 import { loadRegistry } from '../registry.js';
-import { resolveManagedProjectTarget } from '../project-target.js';
+import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../project-target.js';
 
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
 const loadRegistryMock = loadRegistry as unknown as ReturnType<typeof vi.fn>;
@@ -79,6 +79,30 @@ describe('resolveManagedProjectTarget', () => {
     expect(result.projectId).toBe('alpha');
     expect(result.projectPath).toBe('/workspace/alpha');
     expect(result.projectYamlPath).toBe('/workspace/alpha/.project.yaml');
+  });
+
+  it('honors configured agent_context paths for self-hosting layouts', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: {
+        id: 'alpha',
+        name: 'Alpha Project',
+      },
+      agent_context: {
+        quick_start: 'standards/.context/quick-start.md',
+        current_state: 'standards/.context/state.yaml',
+        conversations: 'standards/.context/conversations/',
+        last_record_marker: 'standards/.context/.last_record',
+      },
+    }));
+
+    const result = await resolveManagedProjectTarget({
+      commandName: 'agenticos_record',
+    });
+
+    expect(result.quickStartPath).toBe('/workspace/alpha/standards/.context/quick-start.md');
+    expect(result.statePath).toBe('/workspace/alpha/standards/.context/state.yaml');
+    expect(result.conversationsDir).toBe('/workspace/alpha/standards/.context/conversations/');
+    expect(result.markerPath).toBe('/workspace/alpha/standards/.context/.last_record');
   });
 
   it('fails when there is no active project and no explicit project', async () => {
@@ -327,5 +351,16 @@ describe('resolveManagedProjectTarget', () => {
     })).rejects.toThrow(
       'Project "Alpha Project" is archived reference content, not an active managed project. Use "agenticos-standards" instead. agenticos_record only works with active managed projects.',
     );
+  });
+});
+
+describe('resolveManagedProjectContextPaths', () => {
+  it('falls back to root .context defaults when agent_context paths are not declared', () => {
+    expect(resolveManagedProjectContextPaths('/workspace/alpha', {})).toEqual({
+      quickStartPath: '/workspace/alpha/.context/quick-start.md',
+      statePath: '/workspace/alpha/.context/state.yaml',
+      conversationsDir: '/workspace/alpha/.context/conversations',
+      markerPath: '/workspace/alpha/.context/.last_record',
+    });
   });
 });

@@ -58,6 +58,16 @@ describe('persistGuardrailEvidence', () => {
   });
 
   it('persists latest preflight evidence into the matching managed project state', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'agenticos', name: 'AgenticOS' },
+          agent_context: { current_state: 'standards/.context/state.yaml' },
+        });
+      }
+      return JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } });
+    });
+
     const result = await persistGuardrailEvidence({
       command: 'agenticos_preflight',
       repo_path: '/workspace/projects/agenticos/mcp-server',
@@ -70,6 +80,7 @@ describe('persistGuardrailEvidence', () => {
     expect(result.persisted).toBe(true);
     expect(result.project_id).toBe('agenticos');
     expect(writeFileMock).toHaveBeenCalledTimes(1);
+    expect(writeFileMock.mock.calls[0]?.[0]).toBe('/workspace/projects/agenticos/standards/.context/state.yaml');
 
     const [, content] = writeFileMock.mock.calls[0];
     const writtenState = JSON.parse(content as string);
@@ -79,22 +90,30 @@ describe('persistGuardrailEvidence', () => {
   });
 
   it('overwrites the previous latest entry for the same command instead of appending', async () => {
-    readFileMock.mockResolvedValue(JSON.stringify({
-      guardrail_evidence: {
-        last_command: 'agenticos_preflight',
-        preflight: {
-          command: 'agenticos_preflight',
-          recorded_at: '2026-03-23T09:00:00.000Z',
-          issue_id: '36',
-          result: { status: 'BLOCK' },
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'agenticos', name: 'AgenticOS' },
+          agent_context: { current_state: 'standards/.context/state.yaml' },
+        });
+      }
+      return JSON.stringify({
+        guardrail_evidence: {
+          last_command: 'agenticos_preflight',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2026-03-23T09:00:00.000Z',
+            issue_id: '36',
+            result: { status: 'BLOCK' },
+          },
+          pr_scope_check: {
+            command: 'agenticos_pr_scope_check',
+            issue_id: '36',
+            result: { status: 'PASS' },
+          },
         },
-        pr_scope_check: {
-          command: 'agenticos_pr_scope_check',
-          issue_id: '36',
-          result: { status: 'PASS' },
-        },
-      },
-    }));
+      });
+    });
 
     await persistGuardrailEvidence({
       command: 'agenticos_preflight',
@@ -170,6 +189,29 @@ describe('persistGuardrailEvidence', () => {
 
     const [statePath] = writeFileMock.mock.calls[0];
     expect(statePath).toBe('/workspace/source/projects/agenticos/standards/.context/state.yaml');
+  });
+
+  it('uses registry project metadata to resolve canonical state paths for self-hosting roots', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'agenticos', name: 'AgenticOS' },
+          agent_context: { current_state: 'standards/.context/state.yaml' },
+        });
+      }
+      return JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } });
+    });
+
+    await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '167',
+        result: { status: 'CREATED', branch_name: 'fix/167-self-hosting-root-project-identity-resolution' },
+      },
+    });
+
+    expect(writeFileMock.mock.calls[0]?.[0]).toBe('/workspace/projects/agenticos/standards/.context/state.yaml');
   });
 
   it('does not write state when repo_path is outside managed projects', async () => {

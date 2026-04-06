@@ -152,6 +152,31 @@ async function resolveExplicitProjectTarget(projectPath: string): Promise<Resolv
   };
 }
 
+async function resolveRegistryProjectTarget(projectPath: string, fallbackId: string): Promise<ResolvedProjectTarget | null> {
+  const normalizedProjectPath = normalizePath(projectPath);
+  const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
+
+  let projectYaml: any = {};
+  if (await pathExists(projectYamlPath)) {
+    try {
+      projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+    } catch {
+      projectYaml = {};
+    }
+  }
+
+  const statePath = resolveProjectStatePath(normalizedProjectPath, projectYaml);
+  if (!(await pathExists(statePath))) {
+    return null;
+  }
+
+  return {
+    id: String(projectYaml?.meta?.id || fallbackId || basename(normalizedProjectPath)),
+    path: normalizedProjectPath,
+    statePath,
+  };
+}
+
 async function resolveProjectTarget(repoPath: string, projectPath?: string): Promise<ResolvedProjectTarget | null> {
   if (projectPath) {
     return resolveExplicitProjectTarget(projectPath);
@@ -166,11 +191,7 @@ async function resolveProjectTarget(repoPath: string, projectPath?: string): Pro
 
   const registryProject = matchingProjects[0];
   if (registryProject) {
-    return {
-      id: registryProject.id,
-      path: registryProject.path,
-      statePath: join(registryProject.path, '.context', 'state.yaml'),
-    };
+    return resolveRegistryProjectTarget(registryProject.path, registryProject.id);
   }
 
   return findProjectRootFromRepoPath(normalizedRepoPath);
