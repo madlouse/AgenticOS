@@ -35,7 +35,7 @@ export async function recordSession(args: any): Promise<string> {
     return `❌ ${error.message}`;
   }
 
-  const { registry, project, projectPath, statePath, quickStartPath, conversationsDir: convDir, markerPath } = resolved;
+  const { registry, project, projectPath, statePath, conversationsDir: convDir, markerPath } = resolved;
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const time = now.toISOString().substring(11, 16);
@@ -111,40 +111,10 @@ export async function recordSession(args: any): Promise<string> {
   const claudeMdPath = `${projectPath}/CLAUDE.md`;
   await updateClaudeMdState(claudeMdPath, state, project.name);
 
-  // 4. Auto-enrich quick-start.md if it still contains boilerplate
-  try {
-    const qsContent = await readFile(quickStartPath, 'utf-8');
-    if (qsContent.includes('1. Define project goals')) {
-      const outcomeLines = outcomes.length > 0
-        ? outcomes.map((o: string) => `- ${o}`).join('\n')
-        : '';
-      const pendingLines = pending.length > 0
-        ? pending.map((p: string, i: number) => `${i + 1}. ${p}`).join('\n')
-        : '1. Continue development';
-
-      const enriched = `# ${project.name} - Quick Start
-
-## Project Overview
-${summary}
-
-## Current Status
-- Started: ${today}
-- Status: Active
-${outcomeLines}
-
-## Next Steps
-${pendingLines}
-`;
-      await writeFile(quickStartPath, enriched, 'utf-8');
-    }
-  } catch {
-    // quick-start.md doesn't exist — skip enrichment
-  }
-
-  // 5. Touch marker file for hook-based reminder system
+  // 4. Touch marker file for hook-based reminder system
   await writeFile(markerPath, now.toISOString(), 'utf-8');
 
-  // 6. Update registry with last_recorded timestamp
+  // 5. Update registry with last_recorded timestamp
   registry.projects = registry.projects.map((p) =>
     p.id === project.id
       ? { ...p, last_recorded: now.toISOString() }

@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -304,6 +304,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['project_path', 'rubric_path'],
       },
     },
+    {
+      name: 'agenticos_archive_import_evaluate',
+      description: 'Classify candidate archived files into active-source, provenance-only, reject, or unclassified before import.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Absolute project path whose archive import policy should be used.' },
+          candidate_paths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Archive-relative candidate file paths to classify before import.',
+          },
+        },
+        required: ['project_path', 'candidate_paths'],
+      },
+    },
   ],
 }));
 
@@ -344,6 +360,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runStandardKitConformanceCheck(args ?? {}) }] };
     case 'agenticos_non_code_evaluate':
       return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
+    case 'agenticos_archive_import_evaluate':
+      return { content: [{ type: 'text', text: await runArchiveImportEvaluate(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

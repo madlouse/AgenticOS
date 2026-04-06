@@ -3,6 +3,7 @@ import { updateClaudeMdState } from '../utils/distill.js';
 import { readFile, writeFile } from 'fs/promises';
 import yaml from 'yaml';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
+import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
 
 async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
@@ -45,7 +46,7 @@ export async function saveState(args: any): Promise<string> {
     return `❌ ${error.message}`;
   }
 
-  const { project, projectPath, statePath } = resolved;
+  const { project, projectPath, projectYaml, statePath } = resolved;
 
   try {
     // Update state.yaml with backup timestamp
@@ -70,11 +71,17 @@ export async function saveState(args: any): Promise<string> {
       return `⚠️ State saved but no git repo found at ${projectPath}\n\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
     }
 
-    // Project-scoped git: only stage this project's files + registry
+    // Project-scoped git: stage only runtime-managed paths plus the CLAUDE state mirror.
     const gitCmd = `git -C "${gitRoot}"`;
+    const runtimePaths = resolveRuntimeReviewSurfacePaths(projectPath, projectYaml, {
+      include_claude_state_mirror: true,
+    }).tracked_review_excluded_paths;
+    const stageTargets = runtimePaths
+      .map((trackedPath) => `"${toProjectAbsoluteRuntimePath(projectPath, trackedPath)}"`)
+      .join(' ');
 
     // Phase 1: git add
-    await execCommand(`${gitCmd} add "${projectPath}/"`);
+    await execCommand(`${gitCmd} add -A -- ${stageTargets}`);
 
     // Phase 2: git commit
     let committed = false;
