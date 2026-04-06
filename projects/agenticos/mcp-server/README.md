@@ -183,6 +183,16 @@ Create new project with standard structure.
 
 **Returns**: Project created confirmation with path and ID
 
+**Topology rubric**:
+- choose `local_directory_only` for ongoing local work, knowledge evolution, weekly writing, and private operating material
+- choose `github_versioned` for reusable capabilities that should evolve through issue/PR/release flow
+- if the boundary is unclear, require explicit confirmation instead of guessing
+
+**Upgrade path**:
+- a project may start as `local_directory_only`
+- later, re-run `agenticos_init` with `normalize_existing=true`, `topology=github_versioned`, and `github_repo=OWNER/REPO`
+- only do that when the project has clearly become a reusable capability surface
+
 ### agenticos_switch
 Switch to existing project and load context.
 

@@ -165,6 +165,15 @@ Create a new AgenticOS project called my-feature
 
 The agent will call `agenticos_init` and set up the project structure automatically, but new projects now require an explicit topology choice: `local_directory_only` or `github_versioned`.
 
+### Topology Choice
+
+- Use `local_directory_only` for private/local work such as ongoing writing, weekly planning, research notes, and project-specific knowledge evolution.
+- Use `github_versioned` for reusable capabilities such as tools, automation, standards, plugins, libraries, and other assets that should evolve through issue/PR/release flow.
+- If the boundary is ambiguous, stop and confirm instead of guessing.
+
+Projects may later upgrade from `local_directory_only` to `github_versioned`, but that upgrade must be explicit.
+Do not silently move a local project into GitHub Flow just because it starts containing code.
+
 ---
 
 ## MCP Tools
@@ -184,6 +193,10 @@ The agent will call `agenticos_init` and set up the project structure automatica
 | `agenticos_non_code_evaluate` | Validate a completed non-code rubric and persist latest structured evidence into project state | `project_path`, `rubric_path` |
 | `agenticos_record` | Record session progress | `summary`, `decisions`, `outcomes`, `pending`, `current_task` |
 | `agenticos_save` | Save state + git backup | `message` (commit message) |
+
+For the formal decision rubric, see:
+
+- `projects/agenticos/standards/knowledge/project-topology-decision-rubric-2026-04-07.md`
 
 ### Implementation Guardrail Flow
 
