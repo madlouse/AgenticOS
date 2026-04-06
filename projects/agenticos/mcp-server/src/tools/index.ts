@@ -3,6 +3,7 @@ export { switchProject, listProjects, getStatus } from './project.js';
 export { saveState } from './save.js';
 export { recordSession } from './record.js';
 export { runPreflight } from './preflight.js';
+export { runIssueBootstrap } from './issue-bootstrap.js';
 export { runBranchBootstrap } from './branch-bootstrap.js';
 export { runPrScopeCheck } from './pr-scope-check.js';
 export { runHealth } from './health.js';

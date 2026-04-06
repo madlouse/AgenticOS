@@ -1,7 +1,9 @@
 import { exec } from 'child_process';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
-import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
+import { readFile } from 'fs/promises';
+import yaml from 'yaml';
+import { extractLatestIssueBootstrap, persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import {
   isImplementationAffectingTask,
   resolveGuardrailProjectTarget,
@@ -54,6 +56,12 @@ interface PreflightResult {
     branch_fork_point: string;
     workspace_type: WorkspaceType;
     commit_subjects_since_base: string[];
+    issue_bootstrap: {
+      recorded_at: string | null;
+      issue_id: string | null;
+      repo_path: string | null;
+      current_branch: string | null;
+    } | null;
   };
   persistence?: GuardrailPersistenceResult;
 }
@@ -134,6 +142,7 @@ function makeBaseResult(remoteBaseBranch: string): PreflightResult {
       branch_fork_point: '',
       workspace_type: 'main',
       commit_subjects_since_base: [],
+      issue_bootstrap: null,
     },
   };
 }
@@ -289,6 +298,56 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     }
 
     result.scope_ok = declared_target_files.length > 0;
+
+    if (projectResolution.targetProject && result.worktree_ok) {
+      try {
+        const state = yaml.parse(await readFile(projectResolution.targetProject.statePath, 'utf-8')) || {};
+        const latestBootstrap = extractLatestIssueBootstrap(state);
+        result.evidence.issue_bootstrap = latestBootstrap
+          ? {
+              recorded_at: latestBootstrap.recorded_at || null,
+              issue_id: latestBootstrap.issue_id || null,
+              repo_path: latestBootstrap.repo_path || null,
+              current_branch: latestBootstrap.current_branch || null,
+            }
+          : null;
+
+        if (!latestBootstrap) {
+          result.block_reasons.push('no issue bootstrap evidence is recorded for the target project');
+        } else {
+          if (issue_id && latestBootstrap.issue_id !== issue_id) {
+            result.block_reasons.push(
+              `latest issue bootstrap issue "${latestBootstrap.issue_id || 'unknown'}" does not match requested issue "${issue_id}"`,
+            );
+          }
+
+          if (repo_path && resolve(latestBootstrap.repo_path || '') !== resolve(repo_path)) {
+            result.block_reasons.push('latest issue bootstrap was recorded for a different repo_path');
+          }
+
+          if (latestBootstrap.current_branch && latestBootstrap.current_branch !== result.evidence.current_branch) {
+            result.block_reasons.push(
+              `latest issue bootstrap branch "${latestBootstrap.current_branch}" does not match current branch "${result.evidence.current_branch}"`,
+            );
+          }
+
+          if (!latestBootstrap.stages?.context_reset_performed) {
+            result.block_reasons.push('latest issue bootstrap does not prove a clear-equivalent context reset');
+          }
+          if (!latestBootstrap.stages?.project_hot_load_performed) {
+            result.block_reasons.push('latest issue bootstrap does not prove project hot-load occurred');
+          }
+          if (!latestBootstrap.stages?.issue_payload_attached) {
+            result.block_reasons.push('latest issue bootstrap does not prove issue payload attachment');
+          }
+          if (!Array.isArray(latestBootstrap.startup_context_paths) || latestBootstrap.startup_context_paths.length === 0) {
+            result.block_reasons.push('latest issue bootstrap is missing startup context evidence');
+          }
+        }
+      } catch {
+        result.block_reasons.push(`managed project state is missing or unreadable: ${projectResolution.targetProject.statePath}`);
+      }
+    }
   } else {
     result.branch_based_on_intended_remote = true;
     result.scope_ok = true;

@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -178,6 +178,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['repo_path', 'task_type', 'declared_target_files'],
+      },
+    },
+    {
+      name: 'agenticos_issue_bootstrap',
+      description: 'Record explicit issue-start bootstrap evidence for the current issue after a clear-equivalent reset and normal project hot-load.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task.' },
+          issue_title: { type: 'string', description: 'Current issue title.' },
+          issue_body: { type: 'string', description: 'Current issue body or synthesized summary.' },
+          labels: { type: 'array', items: { type: 'string' }, description: 'Optional issue labels.' },
+          linked_artifacts: { type: 'array', items: { type: 'string' }, description: 'Optional linked docs or artifacts required at issue start.' },
+          additional_context: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                path: { type: 'string' },
+                reason: { type: 'string' },
+              },
+              required: ['path', 'reason'],
+            },
+            description: 'Optional additional documents loaded after startup surfaces, with explicit reasons.',
+          },
+          context_reset_performed: { type: 'boolean', description: 'Whether the current agent session performed a clear-equivalent reset.' },
+          project_hot_load_performed: { type: 'boolean', description: 'Whether the project then performed its normal startup context load.' },
+          issue_payload_attached: { type: 'boolean', description: 'Whether the current issue payload became the active issue-scoped packet.' },
+          repo_path: { type: 'string', description: 'Absolute repository or worktree path where this issue is being executed.' },
+          project_path: { type: 'string', description: 'Optional explicit managed project root when repo_path is a larger checkout or worktree.' },
+        },
+        required: ['issue_id', 'issue_title', 'context_reset_performed', 'project_hot_load_performed', 'issue_payload_attached', 'repo_path'],
       },
     },
     {
@@ -342,6 +374,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await getStatus() }] };
     case 'agenticos_preflight':
       return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
+    case 'agenticos_issue_bootstrap':
+      return { content: [{ type: 'text', text: await runIssueBootstrap(args ?? {}) }] };
     case 'agenticos_edit_guard':
       return { content: [{ type: 'text', text: await runEditGuard(args ?? {}) }] };
     case 'agenticos_branch_bootstrap':

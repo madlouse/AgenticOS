@@ -8,6 +8,36 @@ type GuardrailCommand =
   | 'agenticos_branch_bootstrap'
   | 'agenticos_pr_scope_check';
 
+export interface IssueBootstrapAdditionalContextEntry {
+  path: string;
+  reason: string;
+}
+
+export interface IssueBootstrapRecord {
+  recorded_at?: string;
+  issue_id?: string | null;
+  issue_title?: string | null;
+  issue_body?: string | null;
+  labels?: string[];
+  linked_artifacts?: string[];
+  startup_context_paths?: string[];
+  additional_context?: IssueBootstrapAdditionalContextEntry[];
+  repo_path?: string | null;
+  project_path?: string | null;
+  current_branch?: string | null;
+  workspace_type?: 'main' | 'isolated_worktree' | null;
+  stages?: {
+    context_reset_performed?: boolean;
+    project_hot_load_performed?: boolean;
+    issue_payload_attached?: boolean;
+  };
+}
+
+export interface IssueBootstrapState {
+  updated_at?: string;
+  latest?: IssueBootstrapRecord | null;
+}
+
 interface GuardrailEvidenceState {
   updated_at?: string;
   last_command?: GuardrailCommand;
@@ -20,6 +50,7 @@ type GuardrailEvidenceSlot = 'preflight' | 'branch_bootstrap' | 'pr_scope_check'
 
 interface StateYaml {
   guardrail_evidence?: GuardrailEvidenceState;
+  issue_bootstrap?: IssueBootstrapState;
   [key: string]: unknown;
 }
 
@@ -36,6 +67,12 @@ interface PersistGuardrailEvidenceArgs {
   repo_path?: string;
   project_path?: string;
   payload: Record<string, unknown>;
+}
+
+interface PersistIssueBootstrapEvidenceArgs {
+  repo_path?: string;
+  project_path?: string;
+  payload: IssueBootstrapRecord;
 }
 
 interface ResolvedProjectTarget {
@@ -245,6 +282,68 @@ export async function persistGuardrailEvidence(
     recorded_at: recordedAt,
     repo_path,
     ...payload,
+  };
+
+  await writeFile(statePath, yaml.stringify(state), 'utf-8');
+
+  return {
+    attempted: true,
+    persisted: true,
+    project_id: project.id,
+    state_path: statePath,
+  };
+}
+
+export function extractLatestIssueBootstrap(state: StateYaml | null | undefined): IssueBootstrapRecord | null {
+  if (!state?.issue_bootstrap?.latest || typeof state.issue_bootstrap.latest !== 'object') {
+    return null;
+  }
+  return state.issue_bootstrap.latest;
+}
+
+export async function persistIssueBootstrapEvidence(
+  args: PersistIssueBootstrapEvidenceArgs,
+): Promise<GuardrailPersistenceResult> {
+  const { repo_path, project_path, payload } = args;
+
+  if (!repo_path) {
+    return {
+      attempted: false,
+      persisted: false,
+      reason: 'repo_path is required for issue bootstrap persistence',
+    };
+  }
+
+  const project = await resolveProjectTarget(repo_path, project_path);
+  if (!project) {
+    return {
+      attempted: true,
+      persisted: false,
+      reason: project_path
+        ? `project_path is not a resolvable AgenticOS project: ${project_path}`
+        : `repo_path is not within a resolvable AgenticOS project: ${repo_path}`,
+    };
+  }
+
+  const statePath = project.statePath;
+  let state: StateYaml = {};
+
+  try {
+    const content = await readFile(statePath, 'utf-8');
+    state = (yaml.parse(content) || {}) as StateYaml;
+  } catch {
+    state = {};
+  }
+
+  const recordedAt = payload.recorded_at || new Date().toISOString();
+  state.issue_bootstrap = {
+    updated_at: recordedAt,
+    latest: {
+      ...payload,
+      recorded_at: recordedAt,
+      project_path: payload.project_path || project.path,
+      repo_path: payload.repo_path || repo_path,
+    },
   };
 
   await writeFile(statePath, yaml.stringify(state), 'utf-8');
