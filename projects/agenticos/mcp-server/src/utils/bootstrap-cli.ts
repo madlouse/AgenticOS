@@ -520,14 +520,14 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
   switch (agentId) {
     case 'claude-code': {
       const result = deps.runCommand('claude', ['mcp', 'get', 'agenticos'], true);
-      return result.ok && result.detail.includes('AGENTICOS_HOME')
-        ? { ok: true, detail: 'registration verified via `claude mcp get agenticos` (env present)' }
+      return result.ok && hasExpectedWorkspaceEnv(result.detail, workspace)
+        ? { ok: true, detail: 'registration verified via `claude mcp get agenticos` (workspace env matches)' }
         : { ok: false, detail: result.detail };
     }
     case 'codex': {
       const result = deps.runCommand('codex', ['mcp', 'get', 'agenticos'], true);
-      return result.ok && result.detail.includes('AGENTICOS_HOME')
-        ? { ok: true, detail: 'registration verified via `codex mcp get agenticos` (env present)' }
+      return result.ok && hasExpectedWorkspaceEnv(result.detail, workspace)
+        ? { ok: true, detail: 'registration verified via `codex mcp get agenticos` (workspace env matches)' }
         : { ok: false, detail: result.detail };
     }
     case 'gemini-cli': {
@@ -547,4 +547,14 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
         : { ok: false, detail: `expected agenticos MCP entry in ${configPath}` };
     }
   }
+}
+
+function hasExpectedWorkspaceEnv(detail: string, workspace: string): boolean {
+  if (!detail.includes('AGENTICOS_HOME')) {
+    return false;
+  }
+
+  return detail.includes(`AGENTICOS_HOME=${workspace}`)
+    || detail.includes(`AGENTICOS_HOME: ${workspace}`)
+    || detail.includes(`AGENTICOS_HOME="${workspace}"`);
 }

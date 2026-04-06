@@ -184,6 +184,26 @@ describe('bootstrap cli', () => {
     expect(harness.files.has('/tmp/workspace/.agent-workspace/bootstrap-state.yaml')).toBe(false);
   });
 
+  it('fails verification when codex points at a different workspace', () => {
+    const harness = createDeps();
+    harness.deps.runCommand = (command: string, args: string[], failOnError: boolean) => {
+      harness.commands.push({ command, args, failOnError });
+      const joined = [command, ...args].join(' ');
+      if (joined === 'codex mcp get agenticos') {
+        return { ok: true, detail: 'env: AGENTICOS_HOME=/tmp/other-workspace' };
+      }
+      return { ok: true, detail: 'ok' };
+    };
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL codex: env: AGENTICOS_HOME=/tmp/other-workspace'))).toBe(true);
+  });
+
   it('fails verification when the expected shell profile export is missing', () => {
     const harness = createDeps();
 
