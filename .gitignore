@@ -28,6 +28,8 @@ build/
 # Runtime-only workspace state
 .runtime/
 .claude/worktrees/
+.private/
+worktrees/
 
 # Local-only or standalone downstream project roots managed outside the AgenticOS
 # canonical repository lifecycle.
