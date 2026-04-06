@@ -5,6 +5,11 @@ meta:
   created: "YYYY-MM-DD"
   description: "Project description"
 
+source_control:
+  topology: "local_directory_only"  # local_directory_only/github_versioned
+  # github_repo: "OWNER/REPO"       # Required when topology is github_versioned
+  # branch_strategy: "github_flow"  # Required when topology is github_versioned
+
 agent_context:
   quick_start: ".context/quick-start.md"
   current_state: ".context/state.yaml"
@@ -29,7 +34,7 @@ status:
 
 execution:
   source_repo_roots:
-    - "."  # Relative to the managed project root. Use ../.. when the canonical Git repo root is higher.
+    - "."  # Required for github_versioned projects. Relative to the managed project root.
 
 archive_import_policy:
   active_source_allowlist: []

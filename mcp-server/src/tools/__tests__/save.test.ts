@@ -88,6 +88,9 @@ function mockProjectFiles(options?: {
       id: 'test-project',
       name: 'Test Project',
     },
+    source_control: {
+      topology: 'local_directory_only',
+    },
   };
   const state = options?.state || { session: {}, working_memory: { pending: [], decisions: [], facts: [] } };
 
@@ -266,6 +269,9 @@ describe('saveState', () => {
           meta: {
             id: 'test-project',
             name: 'Test Project',
+          },
+          source_control: {
+            topology: 'local_directory_only',
           },
         });
       }
@@ -494,6 +500,9 @@ describe('saveState', () => {
         meta: {
           id: 'wrong-project',
           name: 'Test Project',
+        },
+        source_control: {
+          topology: 'local_directory_only',
         },
       },
     });

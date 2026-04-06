@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, type Project, type Registry } from './registry.js';
-import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from './project-contract.js';
 
 export interface ResolvedManagedProjectTarget {
   registry: Registry;
@@ -147,6 +147,11 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     throw new Error(
       `${buildArchivedReferenceMessage(project.name, projectYaml?.archive_contract?.replacement_project)} ${args.commandName} only works with active managed projects.`
     );
+  }
+
+  const topologyValidation = validateManagedProjectTopology(project.name, projectYaml);
+  if (!topologyValidation.ok) {
+    throw new Error(`${topologyValidation.message} ${args.commandName} only works with normalized managed projects.`);
   }
 
   const contextPaths = resolveManagedProjectContextPaths(project.path, projectYaml);

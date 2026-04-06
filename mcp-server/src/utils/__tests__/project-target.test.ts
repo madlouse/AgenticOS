@@ -61,6 +61,9 @@ describe('resolveManagedProjectTarget', () => {
             id: 'alpha',
             name: 'Alpha Project',
           },
+          source_control: {
+            topology: 'local_directory_only',
+          },
         });
       }
       throw new Error(`unexpected path: ${path}`);
@@ -86,6 +89,9 @@ describe('resolveManagedProjectTarget', () => {
       meta: {
         id: 'alpha',
         name: 'Alpha Project',
+      },
+      source_control: {
+        topology: 'local_directory_only',
       },
       agent_context: {
         quick_start: 'standards/.context/quick-start.md',
@@ -351,6 +357,19 @@ describe('resolveManagedProjectTarget', () => {
     })).rejects.toThrow(
       'Project "Alpha Project" is archived reference content, not an active managed project. Use "agenticos-standards" instead. agenticos_record only works with active managed projects.',
     );
+  });
+
+  it('fails when the resolved project has not completed topology initialization', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: {
+        id: 'alpha',
+        name: 'Alpha Project',
+      },
+    }));
+
+    await expect(resolveManagedProjectTarget({
+      commandName: 'agenticos_record',
+    })).rejects.toThrow('Project "Alpha Project" has not completed source-control topology initialization.');
   });
 });
 
