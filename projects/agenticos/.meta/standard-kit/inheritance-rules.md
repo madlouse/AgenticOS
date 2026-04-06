@@ -34,6 +34,7 @@ Implication:
 - downstream projects should not treat them as free-form scratch files
 - local project-specific content may exist, but upgrades must preserve the canonical guardrail protocol and template marker
 - generated adapter surfaces must preserve one canonical cross-agent execution contract even when runtime-specific guidance differs
+- generated adapter surfaces should carry only a compact operator-intent intake rule, not the full internal standards rationale
 
 ### Copied templates
 
@@ -50,6 +51,7 @@ Implication:
 - downstream projects are expected to customize them
 - later upgrades should be explicit and reviewable, not silently overwritten
 - the copied templates still carry the canonical memory-layer contract and should not be repurposed arbitrarily
+- intake-oriented templates may carry explicit fields for operator signals, inferred goals, and contradictions because those help agents collapse fragmented user input into a cleaner execution objective
 
 ## Rule 2: Repository-Root Infrastructure Is Not Part Of The Project Kit
 
@@ -101,3 +103,4 @@ They may vary in runtime-specific bootstrap and operator guidance, but they must
 - guardrail protocol meaning
 - recording protocol requirements
 - what counts as compliant implementation flow
+- the compact task-intake rule for operator-intent resolution

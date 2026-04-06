@@ -8,7 +8,9 @@
 ## Objective Synthesis
 - User-stated request:
 - Inferred end goal:
+- Operator signals / partial methods:
 - Constraints:
+- Contradictions or weak assumptions to resolve:
 - Non-goals:
 
 ## Project Context

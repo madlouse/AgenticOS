@@ -9,6 +9,8 @@ import {
   CURRENT_TEMPLATE_VERSION,
   SHARED_POLICY_BULLETS,
   SHARED_POLICY_TITLE,
+  TASK_INTAKE_RULE_BULLETS,
+  TASK_INTAKE_RULE_TITLE,
   generateAgentsMd,
   generateClaudeMd,
 } from '../distill.js';
@@ -17,8 +19,8 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template marker, adapter role, and guardrail flow', () => {
     const content = generateAgentsMd('Demo Project', 'Guardrail test');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(4);
-    expect(content).toContain('<!-- agenticos-template: v4 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(7);
+    expect(content).toContain('<!-- agenticos-template: v7 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -28,6 +30,10 @@ describe('distill templates', () => {
     }
     expect(content).toContain(`## ${AGENTS_RUNTIME_GUIDANCE_TITLE}`);
     for (const bullet of AGENTS_RUNTIME_GUIDANCE_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain(`## ${TASK_INTAKE_RULE_TITLE}`);
+    for (const bullet of TASK_INTAKE_RULE_BULLETS) {
       expect(content).toContain(bullet);
     }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
@@ -51,6 +57,10 @@ describe('distill templates', () => {
     }
     expect(content).toContain(`## ${CLAUDE_RUNTIME_GUIDANCE_TITLE}`);
     for (const bullet of CLAUDE_RUNTIME_GUIDANCE_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain(`## ${TASK_INTAKE_RULE_TITLE}`);
+    for (const bullet of TASK_INTAKE_RULE_BULLETS) {
       expect(content).toContain(bullet);
     }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');

@@ -1,10 +1,12 @@
+require "language/node"
+
 class Agenticos < Formula
   desc "AI-native project management MCP server for Claude Code, Codex, Cursor, and Gemini CLI"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://github.com/madlouse/AgenticOS/releases/download/v0.3.0/agenticos-mcp.tgz"
-  sha256 "54c755ec2150ea4e5217eec2dcba6cd96c2e8ed2352a4eb6439ec458e182f64b"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.0/agenticos-mcp.tgz"
+  sha256 "13f45f9b81790968136254994a352d70d3d8b3aea51551f5da83466c1a1bdb8a"
   license "MIT"
-  version "0.3.0"
+  version "0.4.0"
 
   depends_on "node"
 
@@ -41,23 +43,26 @@ class Agenticos < Formula
       2. Bootstrap one officially supported agent:
 
          Claude Code
-           claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+           claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 
          Codex
-           codex mcp add agenticos -- agenticos-mcp
+           codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 
          Cursor (~/.cursor/mcp.json)
            {
              "mcpServers": {
                "agenticos": {
                  "command": "agenticos-mcp",
-                 "args": []
+                 "args": [],
+                 "env": {
+                   "AGENTICOS_HOME": "#{var}/agenticos"
+                 }
                }
              }
            }
 
          Gemini CLI
-           gemini mcp add -s user agenticos agenticos-mcp
+           gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
 
       3. Restart the AI tool.
 
@@ -70,13 +75,13 @@ class Agenticos < Formula
          Claude Code
            claude mcp get agenticos
            claude mcp remove agenticos -s user
-           claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+           claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 
          Codex
            codex mcp list
            codex mcp get agenticos
            codex mcp remove agenticos
-           codex mcp add agenticos -- agenticos-mcp
+           codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 
       6. Product policy: Homebrew is reminder-only today.
          It does not mutate user agent configs by default.

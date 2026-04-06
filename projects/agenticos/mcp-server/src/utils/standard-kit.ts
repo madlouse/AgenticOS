@@ -441,12 +441,38 @@ export async function checkStandardKitConformance(args: { project_path?: string;
   const stateYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.context/state.yaml')) || '{}') as any;
   const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
   const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');
+  const designBrief = await readProjectFile(upgrade.project_path, 'tasks/templates/issue-design-brief.md');
   const officialAdapters = getOfficialAgentAdapters(await loadAgentAdapterMatrix());
 
   const behaviorChecks: ConformanceBehaviorStatus[] = [];
 
   for (const behavior of manifest.adoption?.required_behavior || []) {
     switch (behavior) {
+      case 'operator_intent_resolution': {
+        const adaptersPass = fileContainsAll(agentsMd, [
+          '## Task Intake Rule',
+          'recover operator intent',
+          'workflow fragments',
+        ]) && fileContainsAll(claudeMd, [
+          '## Task Intake Rule',
+          'recover operator intent',
+          'workflow fragments',
+        ]);
+        const templatePass = fileContainsAll(designBrief, [
+          'Operator signals / partial methods:',
+          'Contradictions or weak assumptions to resolve:',
+        ]);
+        const pass = adaptersPass && templatePass;
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Adapter surfaces and the design-brief template preserve the compact operator-intent intake rule.'
+            : 'Operator-intent intake guidance is missing from generated adapters or the issue-design-brief template.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md', 'tasks/templates/issue-design-brief.md'],
+        });
+        break;
+      }
       case 'memory_layer_contracts': {
         const pass = !!projectYaml?.memory_contract?.version
           && !!projectYaml?.agent_context?.quick_start

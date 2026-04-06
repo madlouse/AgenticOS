@@ -14,7 +14,7 @@ supported_agents:
     transport: stdio
     canonical_bootstrap_method: cli-command
     canonical_config_location: claude-managed user MCP config via `claude mcp add --scope user`
-    bootstrap_command: claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp
+    bootstrap_command: claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
     verification:
       - run `claude mcp list`
       - run `/mcp` inside Claude Code
@@ -22,14 +22,17 @@ supported_agents:
     transport_debug:
       - if `agenticos` is missing from `claude mcp list`, MCP registration failed
       - if the server is listed but unavailable, confirm `agenticos-mcp --version` works and restart Claude Code
+      - if a local source checkout was rebuilt but Claude still shows old MCP behavior, remember that rebuilding the repo does not replace the installed `agenticos-mcp` binary; reinstall or upgrade the binary, then restart Claude Code
       - if `claude mcp get agenticos` shows `Command: node` with a legacy source-checkout build path, remove and re-add the server with `agenticos-mcp`
+      - if `claude mcp get agenticos` does not show `AGENTICOS_HOME`, treat the registration as incomplete and re-add it with explicit env injection
     routing_debug:
       - if tools are available but project-intent prompts do not trigger routing, load the project `CLAUDE.md` and `AGENTS.md`
       - call the relevant `agenticos_*` tool explicitly before treating the problem as transport failure
     repair:
       - run `claude mcp get agenticos`
       - if the command is not `agenticos-mcp`, run `claude mcp remove agenticos -s user`
-      - re-register with `claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp`
+      - if the stored environment does not include `AGENTICOS_HOME`, run `claude mcp remove agenticos -s user`
+      - re-register with `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
       - restart Claude Code and verify with `claude mcp list`, `/mcp`, and `agenticos_list`
   - id: codex
     label: Codex
@@ -37,7 +40,7 @@ supported_agents:
     transport: stdio
     canonical_bootstrap_method: cli-command
     canonical_config_location: ~/.codex/config.toml managed via `codex mcp add`
-    bootstrap_command: codex mcp add agenticos -- agenticos-mcp
+    bootstrap_command: codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
     verification:
       - run `codex mcp list`
       - confirm `agenticos` appears in the configured server list
@@ -45,15 +48,18 @@ supported_agents:
     transport_debug:
       - if `agenticos` is missing from `codex mcp list`, registration did not land in the active config
       - if `agenticos` exists but fails to start, confirm `agenticos-mcp --version` works and restart Codex
+      - if a local source checkout was rebuilt but Codex still shows old MCP behavior, remember that rebuilding the repo does not replace the installed `agenticos-mcp` binary; reinstall or upgrade the binary, then restart Codex
       - if `codex mcp get agenticos` shows a non-canonical command or a legacy source-checkout path, remove and re-add the server with `agenticos-mcp`
+      - if `codex mcp get agenticos` shows `env: -`, treat the registration as incomplete and re-add it with explicit `AGENTICOS_HOME`
     routing_debug:
       - Codex transport success does not guarantee natural-language project-intent routing
       - if routing is weak, use explicit `agenticos_*` tool calls and ensure project instructions are loaded
     repair:
       - run `codex mcp list`
-      - if `agenticos` is missing, register it with `codex mcp add agenticos -- agenticos-mcp`
+      - if `agenticos` is missing, register it with `codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
       - if `codex mcp get agenticos` shows a command other than `agenticos-mcp`, run `codex mcp remove agenticos`
-      - re-register with `codex mcp add agenticos -- agenticos-mcp`, restart Codex, and verify with `codex mcp list` plus `agenticos_list`
+      - if `codex mcp get agenticos` shows `env: -`, run `codex mcp remove agenticos`
+      - re-register with `codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`, restart Codex, and verify with `codex mcp list` plus `agenticos_list`
   - id: cursor
     label: Cursor
     support_tier: official
@@ -65,7 +71,10 @@ supported_agents:
         "mcpServers": {
           "agenticos": {
             "command": "agenticos-mcp",
-            "args": []
+            "args": [],
+            "env": {
+              "AGENTICOS_HOME": "/absolute/path/to/your/AgenticOS-workspace"
+            }
           }
         }
       }
@@ -75,6 +84,7 @@ supported_agents:
       - confirm `agenticos` appears and can call `agenticos_list`
     transport_debug:
       - if `agenticos` is absent after restart, validate JSON syntax and confirm `agenticos-mcp --version`
+      - if a local source checkout was rebuilt but Cursor still shows old MCP behavior, remember that rebuilding the repo does not replace the installed `agenticos-mcp` binary; reinstall or upgrade the binary, then restart Cursor
       - if using `cursor-agent`, compare `cursor-agent mcp list` with the editor view to rule out config-scope confusion
     routing_debug:
       - project-specific `.cursor/mcp.json` exists, but AgenticOS bootstrap should stay user-global by default
@@ -85,7 +95,7 @@ supported_agents:
     transport: stdio
     canonical_bootstrap_method: cli-command
     canonical_config_location: ~/.gemini/settings.json managed via `gemini mcp add -s user`
-    bootstrap_command: gemini mcp add -s user agenticos agenticos-mcp
+    bootstrap_command: gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
     verification:
       - run `gemini mcp list`
       - restart Gemini CLI after registration
@@ -93,6 +103,8 @@ supported_agents:
     transport_debug:
       - if `agenticos` is missing from `gemini mcp list`, the user-scope registration did not land
       - if `agenticos` is listed but unusable, confirm `agenticos-mcp --version` works and restart Gemini CLI
+      - if a local source checkout was rebuilt but Gemini CLI still shows old MCP behavior, remember that rebuilding the repo does not replace the installed `agenticos-mcp` binary; reinstall or upgrade the binary, then restart Gemini CLI
+      - if the stored server environment does not include `AGENTICOS_HOME`, treat the registration as incomplete and re-add it with explicit env injection
     routing_debug:
       - transport registration only proves MCP availability, not project-intent recognition
       - if intent routing does not trigger, use explicit `agenticos_*` calls and ensure the project instructions are loaded
