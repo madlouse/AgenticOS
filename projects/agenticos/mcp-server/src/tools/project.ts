@@ -6,6 +6,7 @@ import { loadRegistry, saveRegistry } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from '../utils/project-contract.js';
+import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -204,11 +205,12 @@ export async function switchProject(args: any): Promise<string> {
   let state: any = undefined;
   let quickStart = '';
   description = projectYaml?.meta?.description || '';
+  const contextPaths = resolveManagedProjectContextPaths(found.path, projectYaml);
   try {
-    state = yaml.parse(await readFile(join(found.path, '.context', 'state.yaml'), 'utf-8'));
+    state = yaml.parse(await readFile(contextPaths.statePath, 'utf-8'));
   } catch {}
   try {
-    quickStart = await readFile(join(found.path, '.context', 'quick-start.md'), 'utf-8');
+    quickStart = await readFile(contextPaths.quickStartPath, 'utf-8');
   } catch {}
 
   // CLAUDE.md: create if missing, upgrade if stale template version
@@ -246,7 +248,7 @@ export async function switchProject(args: any): Promise<string> {
     lastRecorded: found.last_recorded,
   });
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${found.path}/.context/quick-start.md\n- ${found.path}/.context/state.yaml\n\n${guardrailSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
@@ -294,8 +296,8 @@ export async function getStatus(): Promise<string> {
     return `❌ ${buildArchivedReferenceMessage(project.name, projectYaml?.archive_contract?.replacement_project)}`;
   }
 
-  // Read state.yaml
-  const statePath = join(project.path, '.context', 'state.yaml');
+  const contextPaths = resolveManagedProjectContextPaths(project.path, projectYaml);
+  const statePath = contextPaths.statePath;
   let state: any = {};
   try {
     const content = await readFile(statePath, 'utf-8');
