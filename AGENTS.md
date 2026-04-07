@@ -46,7 +46,7 @@ Repository boundary rule:
 6. **Release**: Tag `v*` → triggers Release workflow → update Homebrew sha256
 7. **Runtime separation**: Treat `.runtime/` and `.claude/worktrees/` as runtime-only, never as product source
 8. **Git transport fallback**: If HTTPS push breaks because of local proxy or credential plumbing, use the documented command-scoped no-proxy + `GIT_ASKPASS` fallback in `CONTRIBUTING.md`; if needed, add command-scoped `-c http.version=HTTP/1.1`; do not embed tokens in remote URLs
-9. **Canonical sync**: Before treating `/Users/jeking/dev/AgenticOS` as a trusted starting point, resync it to `origin/main` with the canonical sync contract in `projects/agenticos/standards/knowledge/canonical-sync-contract-2026-03-25.md`; do not infer live project state from a behind or dirty canonical checkout
+9. **Canonical sync**: Before treating the current AgenticOS source checkout as a trusted starting point, resync it to `origin/main` with the canonical sync contract in `projects/agenticos/standards/knowledge/canonical-sync-contract-2026-03-25.md`; do not infer live project state from a behind or dirty canonical checkout
 
 ## Guardrail Flow
 

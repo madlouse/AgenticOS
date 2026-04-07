@@ -70,13 +70,14 @@ Full Git Flow (with `develop` + `release/*`) is designed for large teams with in
 
 ### Canonical Local Sync
 
-Before you treat `/Users/jeking/dev/AgenticOS` as a trusted local starting point, resync it:
+Before you treat the current AgenticOS source checkout as a trusted local starting point, set `AGENTICOS_SOURCE_ROOT` and resync it:
 
 ```bash
-git -C /Users/jeking/dev/AgenticOS fetch origin --prune
-git -C /Users/jeking/dev/AgenticOS checkout main
-git -C /Users/jeking/dev/AgenticOS pull --ff-only origin main
-git -C /Users/jeking/dev/AgenticOS status --short --branch
+export AGENTICOS_SOURCE_ROOT="/absolute/path/to/current-agenticos-source-root"
+git -C "$AGENTICOS_SOURCE_ROOT" fetch origin --prune
+git -C "$AGENTICOS_SOURCE_ROOT" checkout main
+git -C "$AGENTICOS_SOURCE_ROOT" pull --ff-only origin main
+git -C "$AGENTICOS_SOURCE_ROOT" status --short --branch
 ```
 
 Trusted output is a clean:
@@ -85,7 +86,7 @@ Trusted output is a clean:
 ## main...origin/main
 ```
 
-If the checkout is dirty, ahead, or behind, do not use it as your trusted local reasoning base. Resync first, then open or use an isolated worktree for real implementation work.
+If the checkout is dirty, ahead, or behind, do not use it as your trusted local reasoning base. Resync first, then open or use an isolated worktree for real implementation work. This section describes the current source-root contract during the root-Git migration; it is not a requirement that the workspace home itself remain the source root.
 
 ## Commit Types
 
