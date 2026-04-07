@@ -3,6 +3,13 @@
 > AI-native project management that persists context across sessions for
 > MCP-capable AI tools.
 
+## Integration Direction
+
+- `MCP-native` remains the canonical primary mode
+- `MCP + Skills Assist` remains the supported fallback
+- `CLI Wrapper` remains limited to diagnostics and temporary recovery
+- `Skills-only Guidance` remains experimental
+
 ## v0.4.x — Current Release Line
 
 **Theme**: workspace and product-source separation

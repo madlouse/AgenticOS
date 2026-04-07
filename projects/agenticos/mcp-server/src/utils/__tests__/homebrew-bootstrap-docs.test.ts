@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import {
@@ -7,7 +8,15 @@ import {
 } from '../bootstrap-matrix.js';
 
 function repoRoot(): string {
-  return resolve(process.cwd(), '..', '..', '..');
+  const standalone = resolve(process.cwd(), '..');
+  return existsSync(resolve(standalone, '.project.yaml'))
+    ? standalone
+    : resolve(process.cwd(), '..', '..', '..');
+}
+
+function productRoot(root: string): string {
+  const nested = resolve(root, 'projects', 'agenticos');
+  return existsSync(resolve(nested, '.project.yaml')) ? nested : root;
 }
 
 function normalizeDoc(text: string): string {
@@ -21,15 +30,16 @@ describe('homebrew bootstrap docs', () => {
 
   it('keeps the Homebrew-facing docs aligned with the official supported agents and manual bootstrap contract', async () => {
     const root = repoRoot();
+    const product = productRoot(root);
     process.env.AGENTICOS_HOME = root;
 
     const matrix = await loadAgentBootstrapMatrix();
     const agents = getOfficialBootstrapAgents(matrix).map((agent) => agent.label);
 
     const rootReadme = await readFile(resolve(root, 'README.md'), 'utf-8');
-    const tapReadme = await readFile(resolve(root, 'projects', 'agenticos', 'homebrew-tap', 'README.md'), 'utf-8');
-    const formula = await readFile(resolve(root, 'projects', 'agenticos', 'homebrew-tap', 'Formula', 'agenticos.rb'), 'utf-8');
-    const mcpReadme = await readFile(resolve(root, 'projects', 'agenticos', 'mcp-server', 'README.md'), 'utf-8');
+    const tapReadme = await readFile(resolve(product, 'homebrew-tap', 'README.md'), 'utf-8');
+    const formula = await readFile(resolve(product, 'homebrew-tap', 'Formula', 'agenticos.rb'), 'utf-8');
+    const mcpReadme = await readFile(resolve(product, 'mcp-server', 'README.md'), 'utf-8');
 
     for (const agent of agents) {
       expect(rootReadme).toContain(agent);
