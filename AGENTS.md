@@ -2,6 +2,8 @@
 
 AI-native project management system. MCP server that persists context across sessions for Claude Code, Cursor, Codex, and any MCP-compatible tool.
 
+> Compatibility entrypoint: the canonical operator guide now lives in [projects/agenticos/AGENTS.md](projects/agenticos/AGENTS.md). Use the workspace-root copy only as a transitional pointer while root Git responsibilities are being retired.
+
 ## Quick Start
 
 ```bash
