@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Dependencies
+node_modules/
+mcp-server/node_modules/
+
+# Build output
+build/
+mcp-server/build/
+
+# Environment
+.env
+.env.*
+
+# Temporary files
+*.tmp
+*.log
+
+# Packages
+*.tgz
+
+# IDE
+.vscode/
+.idea/
+
+# Agent-specific temporary files
+.context/sessions/
+
+# Runtime-only state
+.runtime/
+.claude/worktrees/

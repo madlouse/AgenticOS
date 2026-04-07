@@ -15,6 +15,17 @@ If you are changing AgenticOS itself, start here instead of treating the workspa
 
 The enclosing workspace root may still expose compatibility entrypoints while the root-Git split is in progress, but those root files are not the long-term authority path.
 
+This project now also carries the future repository shell needed for root-Git
+exit:
+
+- `.github/`
+- `.gitignore`
+- `CLAUDE.md`
+- `CHANGELOG.md`
+- `ROADMAP.md`
+- `LICENSE`
+- `scripts/`
+
 ## Quick Start
 
 ```bash
@@ -34,6 +45,8 @@ npm test
   [CONTRIBUTING.md](CONTRIBUTING.md)
 - standards and design knowledge:
   [standards/knowledge/](standards/knowledge/)
+- product-root shell readiness:
+  [standards/knowledge/product-root-shell-readiness-2026-04-07.md](standards/knowledge/product-root-shell-readiness-2026-04-07.md)
 
 ## Current Boundary Rule
 
