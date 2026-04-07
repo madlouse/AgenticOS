@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, isAbsolute, relative } from 'path';
 import yaml from 'yaml';
+import { detectCanonicalMainWriteProtection } from './canonical-main-guard.js';
 
 export const MISSING_AGENTICOS_HOME_MESSAGE =
   'AGENTICOS_HOME is not set. AgenticOS requires an explicit workspace root. Set AGENTICOS_HOME before starting agenticos-mcp.';
@@ -73,6 +74,11 @@ export async function loadRegistry(): Promise<Registry> {
 }
 
 export async function saveRegistry(registry: Registry): Promise<void> {
+  const writeProtection = await detectCanonicalMainWriteProtection(getAgenticOSHome());
+  if (writeProtection.blocked) {
+    throw new Error(writeProtection.reason);
+  }
+
   registry.last_updated = new Date().toISOString();
   // Convert absolute paths to relative before storing
   const toStore: Registry = {
