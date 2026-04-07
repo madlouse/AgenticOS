@@ -91,19 +91,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-07T02:30:38.935Z
+**Last Updated**: 2026-04-07T02:49:30.544Z
 
-**Current Task**: Issue #6: fail fast on brew bundle install errors (status: completed)
+**Current Task**: Issue #9: configure and verify cmux socket automation mode (status: completed)
 
 **Active Items**:
-- Proceed to issue #9 next: configure and verify cmux socket automation mode.
+- Next highest-priority issue is homebrew-ghostty #3 or ghostty-optimization #16, depending on whether you want packaged verify UX or clean-machine acceptance first.
 
 **Recent Decisions**:
-- Add a simple machine-readable summary block to bootstrap output so agents and humans can reliably detect failed stage and final status.
-- Close issue #6 only after the verified code change was pushed to origin/main.
 - Keep the broader core-vs-optional package split out of this issue and leave it to issue #7.
+- Use file-managed cmux settings.json as the reproducible automation configuration source because current official docs describe automation settings there.
+- Do not depend on a cmux reload-config CLI because the local cmux 0.62.2 binary does not expose that command; use live socket smoke instead.
 
-**Next Action**: Proceed to issue #9 next: configure and verify cmux socket automation mode.
+**Next Action**: Next highest-priority issue is homebrew-ghostty #3 or ghostty-optimization #16, depending on whether you want packaged verify UX or clean-machine acceptance first.
 <!-- AGENT_CONTEXT_END -->
 
 ---
