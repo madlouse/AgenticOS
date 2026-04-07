@@ -21,10 +21,12 @@
 
 1. back up the current agent config files and workspace registry
 2. copy the portable workspace data into the new workspace root
+   - preserve nested child `.git/` directories for standalone child repos
 3. update agent configs with `agenticos-bootstrap`
 4. apply manual fallback edits if a supported agent cannot be auto-updated
 5. run the verification script
-6. clean stale workspace-generated dirtiness from the source checkout only after the new workspace passes verification
+6. run a topology audit over `projects/*` in the new workspace
+7. clean stale workspace-generated dirtiness from the source checkout only after the new workspace passes verification
 
 ## 3. Current Machine Outcome
 
@@ -33,6 +35,8 @@
 - Codex config migrated
 - Cursor config migrated
 - Claude settings required a manual env-path fallback because `claude` CLI was not present on PATH
+- nested child repo metadata had to be restored for `projects/agent-cli-api/.git`
+- the installed local `agenticos_init` path did not fully backfill `source_control.topology` during one normalization step, so topology audit remained necessary after migration
 - shell profile updated
 - `launchctl` session env updated
 - product source checkout was cleaned after the new workspace verification passed
