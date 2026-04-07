@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
-import { getAgenticOSHome } from './registry.js';
+import { resolveAgenticOSProductRoot } from './product-source-root.js';
 
 export interface IntegrationModeEntry {
   id: string;
@@ -21,9 +21,7 @@ export interface IntegrationModeMatrix {
 
 export async function loadIntegrationModeMatrix(): Promise<IntegrationModeMatrix> {
   const matrixPath = join(
-    getAgenticOSHome(),
-    'projects',
-    'agenticos',
+    resolveAgenticOSProductRoot(),
     '.meta',
     'bootstrap',
     'integration-mode-matrix.yaml',

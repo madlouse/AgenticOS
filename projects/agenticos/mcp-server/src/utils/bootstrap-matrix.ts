@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
-import { getAgenticOSHome } from './registry.js';
+import { resolveAgenticOSProductRoot } from './product-source-root.js';
 
 export interface AgentBootstrapEntry {
   id: string;
@@ -35,9 +35,7 @@ export interface AgentBootstrapMatrix {
 
 export async function loadAgentBootstrapMatrix(): Promise<AgentBootstrapMatrix> {
   const matrixPath = join(
-    getAgenticOSHome(),
-    'projects',
-    'agenticos',
+    resolveAgenticOSProductRoot(),
     '.meta',
     'bootstrap',
     'agent-bootstrap-matrix.yaml',

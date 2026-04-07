@@ -6,6 +6,7 @@ import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapter-matrix.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
+import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
 
 interface StandardKitEntry {
   path: string;
@@ -107,13 +108,15 @@ export interface StandardKitConformanceResult {
 }
 
 export async function loadStandardKitManifest(): Promise<StandardKitManifest> {
-  const manifestPath = join(getAgenticOSHome(), 'projects', 'agenticos', '.meta', 'standard-kit', 'manifest.yaml');
+  const manifestPath = resolveAgenticOSProductPath('.meta', 'standard-kit', 'manifest.yaml');
   const content = await readFile(manifestPath, 'utf-8');
   return yaml.parse(content) as StandardKitManifest;
 }
 
 export function resolveCanonicalSourcePath(relativeSourcePath: string): string {
-  return join(getAgenticOSHome(), relativeSourcePath);
+  const productRoot = resolveAgenticOSProductRoot();
+  const productRelative = toCanonicalProductRelativePath(relativeSourcePath);
+  return join(productRoot, productRelative);
 }
 
 function slugifyProjectName(name: string): string {
@@ -546,7 +549,7 @@ export async function checkStandardKitConformance(args: { project_path?: string;
         break;
       }
       case 'edit_boundary_enforcement': {
-        const indexSource = readFileSync(join(getAgenticOSHome(), 'projects', 'agenticos', 'mcp-server', 'src', 'index.ts'), 'utf-8');
+        const indexSource = readFileSync(resolveAgenticOSProductPath('mcp-server', 'src', 'index.ts'), 'utf-8');
         const pass = indexSource.includes("name: 'agenticos_edit_guard'");
         behaviorChecks.push({
           behavior,
@@ -554,7 +557,7 @@ export async function checkStandardKitConformance(args: { project_path?: string;
           summary: pass
             ? 'Canonical MCP surface exposes executable edit-boundary enforcement.'
             : 'Canonical MCP surface is missing executable edit-boundary enforcement.',
-          evidence_paths: ['projects/agenticos/mcp-server/src/index.ts'],
+          evidence_paths: [join(toCanonicalProductRelativePath('projects/agenticos/mcp-server/src/index.ts'))],
         });
         break;
       }
