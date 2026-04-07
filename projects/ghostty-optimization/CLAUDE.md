@@ -1,56 +1,126 @@
-# Ghostty Optimization - Claude Code Configuration
+<!-- agenticos-template: v7 -->
+# CLAUDE.md — Ghostty Optimization
 
-## AIOS Integration
+## Adapter Role
 
-This project is part of AIOS (Agentic OS). Core context is in:
-- `.project.yaml` - Project metadata
-- `.context/quick-start.md` - 30-second context
-- `.context/state.yaml` - Current state
+`CLAUDE.md` is the Claude Code adapter surface for this project.
+It must expose the same canonical policy as other agent adapters while allowing Claude-specific operator guidance.
 
-## Project Context
+## Canonical Policy (Shared Across Agents)
 
-**Goal**: Optimize Ghostty terminal performance and configuration
-**Current Phase**: Performance benchmarking
-**Next Action**: Install hyperfine and run benchmarks
+- This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.
+- Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.
+- PR creation or merge must not happen before executable scope validation passes.
+- Recording and save flow remain canonical project requirements rather than runtime-specific preferences.
+## Claude Runtime Notes
 
-## Collaboration Rules
+- Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.
+- Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.
+## Task Intake Rule
 
-### State Management
-- **On session start**: Read `.context/state.yaml` to restore context
-- **During work**: Update `state.yaml` with progress
-- **On session end**: Append key events to `.context/memory.jsonl`
+- At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.
+- Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.
+- Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
+## Guardrail Protocol (MANDATORY)
 
-### Task Workflow
-- Tasks are in `tasks/in-progress.yaml` (structured YAML)
-- Update task status as you progress
-- Create new tasks as needed
+For implementation-affecting work:
 
-### File Organization
-- Code artifacts: `artifacts/code/`
-- Test results: `artifacts/benchmarks/`
-- Knowledge: `knowledge/`
+1. call `agenticos_preflight` before editing
+2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+3. before PR creation or merge, call `agenticos_pr_scope_check`
 
-## Current Status
+If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
 
-Ghostty version: 1.3.1
-Next step: Performance benchmarking against iTerm2 and Alacritty
+## MANDATORY: Recording Protocol
 
-## Agent Behavior
+> This is an AgenticOS project. All session activity MUST be recorded.
+> Recording is not optional — it is the core function of this system.
 
-### Automatic Recording (CRITICAL)
-- **Record all conversations**: Append to `.context/conversations/YYYY-MM-DD.md`
-- **Record user insights**: Update `knowledge/user-insights.md` with user preferences, ideas, constraints
-- **Record learnings**: Update `knowledge/learnings.md` with technical discoveries
-- **Record events**: Append to `.context/memory.jsonl` (structured event stream)
-- **Update changelog**: Append to `.context/changelog.md` (timeline view)
+### During Session
 
-### State Management
-- Automatically maintain `.context/state.yaml`
-- Update task status in `tasks/`
-- Keep `quick-start.md` current (under 200 lines)
+After completing any meaningful unit of work (feature, fix, design decision, analysis), call `agenticos_record`:
 
-### Recording Format
+```
+agenticos_record({
+  summary: "what happened",
+  decisions: ["decision 1", ...],
+  outcomes: ["outcome 1", ...],
+  pending: ["next step 1", ...],
+  current_task: { title: "task name", status: "in_progress" }
+})
+```
 
-**Conversations**: Natural dialogue format with timestamps
-**Memory Stream**: `{"timestamp": "ISO8601", "type": "action|decision|insight", "agent": "name", "content": "...", "result": "..."}`
-**Changelog**: Timeline format with date headers
+### Before Session Ends
+
+When the user signals session end (says goodbye, thanks, done, or stops responding), you MUST:
+
+1. Call `agenticos_record` with a complete session summary
+2. Call `agenticos_save` to commit to Git
+
+**If you skip this step, all context from this session is permanently lost.**
+
+---
+
+## Session Start Protocol
+
+When you open this project in a new session, **immediately do the following**:
+
+1. Read the "Current State" section below
+2. Greet the user with a brief status report:
+
+```
+📍 项目：Ghostty Optimization
+📌 上次进展：[current_task title + status]
+🎯 当前待办：[top pending items]
+💡 建议下一步：[recommended next action]
+
+继续上次的工作，还是有新的方向？
+```
+
+3. Wait for the user's direction before proceeding
+
+---
+
+## Project DNA
+
+**一句话定位**: (待补充)
+
+**核心设计原则**: (待补充 — 在项目推进中逐步完善)
+
+**技术栈**: (待补充)
+## Current State
+
+<!-- AGENT_CONTEXT_START -->
+**Last Updated**: 2026-04-07T02:29:52.893Z
+
+**Current Task**: Issue #6: fail fast on brew bundle install errors (status: completed)
+
+**Active Items**:
+- Push commit 3039b61 when ready.
+- Proceed to issue #9 after #6 lands.
+
+**Recent Decisions**:
+- 创建 AIOS 作为 AI 协作框架
+- Treat any current Brewfile install failure as fatal instead of trying to continue, because the repo does not yet distinguish core vs optional packages.
+- Add a simple machine-readable summary block to bootstrap output so agents and humans can reliably detect failed stage and final status.
+
+**Next Action**: Push commit 3039b61 when ready.
+<!-- AGENT_CONTEXT_END -->
+
+---
+
+## Navigation
+
+| 目录/文件 | 用途 |
+|-----------|------|
+| `.project.yaml` | 项目元信息 |
+| `.context/quick-start.md` | 快速项目概览 |
+| `.context/state.yaml` | 当前会话状态及工作记忆 |
+| `.context/conversations/` | 会话记录（自动生成） |
+| `knowledge/` | 持久化知识文档 |
+| `tasks/` | 任务追踪 |
+| `tasks/templates/agent-preflight-checklist.yaml` | preflight 模板 |
+| `tasks/templates/issue-design-brief.md` | 设计循环模板 |
+| `tasks/templates/non-code-evaluation-rubric.yaml` | 非代码评估模板 |
+| `tasks/templates/submission-evidence.md` | 提交证据模板 |
+| `artifacts/` | 产出物 |
