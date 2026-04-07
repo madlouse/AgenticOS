@@ -5,7 +5,9 @@
   "type": "module",
   "bin": {
     "agenticos-mcp": "./build/index.js",
-    "agenticos-bootstrap": "./build/bootstrap.js"
+    "agenticos-bootstrap": "./build/bootstrap.js",
+    "agenticos-edit-guard": "./build/edit-guard.js",
+    "agenticos-record-reminder": "./build/record-reminder.js"
   },
   "scripts": {
     "build": "tsc",
