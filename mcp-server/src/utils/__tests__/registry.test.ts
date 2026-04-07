@@ -45,6 +45,10 @@ vi.mock('yaml', () => ({
   default: yamlMock,
 }));
 
+vi.mock('../canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(async () => ({ blocked: false })),
+}));
+
 // Must import after mocks are set up
 import {
   loadRegistry,
@@ -52,6 +56,7 @@ import {
   getAgenticOSHome,
   MISSING_AGENTICOS_HOME_MESSAGE,
 } from '../registry.js';
+import { detectCanonicalMainWriteProtection } from '../canonical-main-guard.js';
 import * as fsPromises from 'fs/promises';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
@@ -60,11 +65,13 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
   mkdir: ReturnType<typeof vi.fn>;
   access: ReturnType<typeof vi.fn>;
 };
+const detectCanonicalMainWriteProtectionMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
 describe('registry utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.AGENTICOS_HOME = '/home/testuser/AgenticOS';
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({ blocked: false });
   });
 
   afterEach(() => {
@@ -209,6 +216,23 @@ describe('registry utilities', () => {
       const writeCall = fsPromisesMock.writeFile.mock.calls[0];
       const writtenContent = writeCall[1] as string;
       expect(writtenContent).toContain('/external/path');
+    });
+
+    it('blocks writes when AGENTICOS_HOME is the canonical main checkout', async () => {
+      detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+        blocked: true,
+        reason: 'canonical main checkout is write-protected for runtime persistence: /home/testuser/AgenticOS',
+      });
+
+      const registry = {
+        version: '1.0.0',
+        last_updated: '2025-01-01T00:00:00.000Z',
+        active_project: 'my-project',
+        projects: [],
+      };
+
+      await expect(saveRegistry(registry)).rejects.toThrow('write-protected');
+      expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
     });
   });
 });
