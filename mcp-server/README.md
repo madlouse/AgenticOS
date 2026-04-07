@@ -26,7 +26,10 @@ Use `agenticos-bootstrap --verify` to audit the selected agents and optional per
 After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
 MCP registration can be correct while the live client session is still holding an older server process.
 
-When the client supports a pre-edit hook or local command wrapper, point that layer at `tools/check-edit-boundary.sh` so implementation edits fail closed unless project alignment and matching PASS preflight evidence already exist.
+When the client supports a pre-edit hook or local command wrapper, point that layer at `agenticos-edit-guard` so implementation edits fail closed unless project alignment and matching PASS preflight evidence already exist.
+
+For stop-event reminders, prefer `agenticos-record-reminder`.
+The old root `tools/check-edit-boundary.sh` and `tools/record-reminder.sh` paths should now be treated as legacy compatibility shims.
 
 ### Homebrew Post-Install Contract
 
