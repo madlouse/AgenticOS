@@ -8,7 +8,10 @@ import {
 } from '../integration-matrix.js';
 
 function repoRoot(): string {
-  return resolve(process.cwd(), '..', '..', '..');
+  const standalone = resolve(process.cwd(), '..');
+  return existsSync(resolve(standalone, '.project.yaml'))
+    ? standalone
+    : resolve(process.cwd(), '..', '..', '..');
 }
 
 function productRoot(root: string): string {
