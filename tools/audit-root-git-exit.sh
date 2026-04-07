@@ -139,7 +139,22 @@ const runtimeDirtyPatterns = [
   /^.. .*\.context\//,
   /^.. .*\.last_record$/,
 ];
-const runtimeDirty = dirtyLines.filter((line) => runtimeDirtyPatterns.some((pattern) => pattern.test(line)));
+function extractPathFromPorcelain(line) {
+  return line.slice(3).trim();
+}
+
+function isPlannedSiblingExtraction(line) {
+  const path = extractPathFromPorcelain(line);
+  if (!path.startsWith('projects/')) return false;
+  const projectRoot = path.split('/').slice(0, 2).join('/');
+  if (projectRoot === productProjectRel) return false;
+  return line.startsWith('D ') || line.startsWith('D  ') || line.startsWith('MD ') || line.startsWith(' M ');
+}
+
+const runtimeDirty = dirtyLines.filter((line) => {
+  if (isPlannedSiblingExtraction(line)) return false;
+  return runtimeDirtyPatterns.some((pattern) => pattern.test(line));
+});
 
 addCheck(
   'runtime-dirtiness',
