@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing to AgenticOS!
 
+> Compatibility entrypoint: the canonical contribution guide now lives in [projects/agenticos/CONTRIBUTING.md](projects/agenticos/CONTRIBUTING.md). Use the workspace-root copy only as a transitional pointer while root Git responsibilities are being retired.
+
 ## Prerequisites
 
 - Node.js 20+

@@ -2,6 +2,8 @@
 
 AI-native project management system for Claude Code, Codex, Cursor, Gemini CLI, and other MCP-capable tools. Persists context and state across sessions so your AI agent always knows where it left off.
 
+> Compatibility entrypoint: the canonical AgenticOS product-source docs now live in [projects/agenticos/README.md](projects/agenticos/README.md). Treat the workspace root as a transitional entry surface while root Git responsibilities are being removed.
+
 ## Install
 
 ### Option A — Homebrew (recommended for macOS)
