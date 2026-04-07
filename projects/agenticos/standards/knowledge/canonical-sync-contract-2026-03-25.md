@@ -2,7 +2,12 @@
 
 ## Purpose
 
-This contract defines when `/Users/jeking/dev/AgenticOS` may be trusted as the canonical local AgenticOS checkout and when the live standards entry surfaces may be treated as fresh resume context.
+This contract defines when the current local AgenticOS source checkout may be trusted as the canonical local base and when the live standards entry surfaces may be treated as fresh resume context.
+
+For the current layout, use:
+
+- `AGENTICOS_SOURCE_ROOT` = the current local AgenticOS source checkout root
+- `AGENTICOS_PRODUCT_SOURCE` = `$AGENTICOS_SOURCE_ROOT/projects/agenticos`
 
 The goal is to prevent a familiar failure mode:
 
@@ -17,20 +22,21 @@ When these differ, trust order is:
 
 1. `origin/main`
 2. an isolated issue worktree branched from the current `origin/main`
-3. the local canonical checkout `/Users/jeking/dev/AgenticOS`
+3. the local canonical source checkout at `AGENTICOS_SOURCE_ROOT`
 4. archived snapshots and retired project history
 
 The local canonical checkout is only trustworthy when it has been explicitly resynced to `origin/main`.
 
 ## Canonical Sync Procedure
 
-Run from the local canonical checkout:
+Run from the local AgenticOS source checkout:
 
 ```bash
-git -C /Users/jeking/dev/AgenticOS fetch origin --prune
-git -C /Users/jeking/dev/AgenticOS checkout main
-git -C /Users/jeking/dev/AgenticOS pull --ff-only origin main
-git -C /Users/jeking/dev/AgenticOS status --short --branch
+export AGENTICOS_SOURCE_ROOT="/absolute/path/to/current-agenticos-source-root"
+git -C "$AGENTICOS_SOURCE_ROOT" fetch origin --prune
+git -C "$AGENTICOS_SOURCE_ROOT" checkout main
+git -C "$AGENTICOS_SOURCE_ROOT" pull --ff-only origin main
+git -C "$AGENTICOS_SOURCE_ROOT" status --short --branch
 ```
 
 Expected result:
@@ -79,8 +85,10 @@ After a merged issue lands, use this rule:
 After sync, verify:
 
 ```bash
-ruby -e 'require "yaml"; YAML.load_file("/Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/state.yaml"); puts "state-ok"'
-rg -n "#98|canonical sync|higher-order backlog|#99|#97|#96|#95|#94" /Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/quick-start.md /Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/state.yaml
+export AGENTICOS_SOURCE_ROOT="/absolute/path/to/current-agenticos-source-root"
+export AGENTICOS_PRODUCT_SOURCE="$AGENTICOS_SOURCE_ROOT/projects/agenticos"
+ruby -e 'require "yaml"; YAML.load_file(ENV.fetch("AGENTICOS_PRODUCT_SOURCE") + "/standards/.context/state.yaml"); puts "state-ok"'
+rg -n "#98|canonical sync|higher-order backlog|#99|#97|#96|#95|#94" "$AGENTICOS_PRODUCT_SOURCE/standards/.context/quick-start.md" "$AGENTICOS_PRODUCT_SOURCE/standards/.context/state.yaml"
 ```
 
 Verification intent:
@@ -99,6 +107,6 @@ This contract does not:
 
 ## Outcome
 
-The local canonical checkout is a trusted base checkout only after explicit fast-forward sync.
+The local AgenticOS source checkout is a trusted base checkout only after explicit fast-forward sync.
 
 The live standards entry surfaces are fresh only when they reflect the current post-merge resume reality for the next Agent, not just the last time someone edited those files.

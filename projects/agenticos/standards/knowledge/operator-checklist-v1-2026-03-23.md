@@ -5,9 +5,9 @@
 
 ## 1. Frozen Baseline Inputs
 
-At planning time, the current baseline values are:
+At planning time, the baseline values were:
 
-- source repo path: `/Users/jeking/dev/AgenticOS`
+- source repo path: `AGENTICOS_SOURCE_ROOT`
 - current branch: `main`
 - upstream branch: `origin/main`
 - current HEAD: `fc401332bea49fdecdc2f4e489e30545d5061043`
@@ -30,7 +30,7 @@ It only prepares a safe execution baseline by:
 Run:
 
 ```bash
-cd /Users/jeking/dev/AgenticOS
+cd "$AGENTICOS_SOURCE_ROOT"
 git status --short --branch
 git rev-parse HEAD
 git rev-parse --abbrev-ref --symbolic-full-name @{upstream}
@@ -49,7 +49,7 @@ Run:
 
 ```bash
 mkdir -p /Users/jeking/worktrees/agenticos-migration-backups
-cd /Users/jeking/dev/AgenticOS
+cd "$AGENTICOS_SOURCE_ROOT"
 git diff > /Users/jeking/worktrees/agenticos-migration-backups/root-working.patch
 git diff --cached > /Users/jeking/worktrees/agenticos-migration-backups/root-staged.patch
 git status --short --branch > /Users/jeking/worktrees/agenticos-migration-backups/root-status.txt
@@ -84,7 +84,7 @@ Pass condition:
 Run:
 
 ```bash
-cd /Users/jeking/dev/AgenticOS
+cd "$AGENTICOS_SOURCE_ROOT"
 git worktree add /Users/jeking/worktrees/agenticos-self-hosting -b feat/self-hosting-migration fc401332bea49fdecdc2f4e489e30545d5061043
 ```
 
@@ -151,8 +151,8 @@ At this point:
 If isolation setup itself must be abandoned:
 
 ```bash
-git -C /Users/jeking/dev/AgenticOS worktree remove /Users/jeking/worktrees/agenticos-self-hosting
-git -C /Users/jeking/dev/AgenticOS branch -D feat/self-hosting-migration
+git -C "$AGENTICOS_SOURCE_ROOT" worktree remove /Users/jeking/worktrees/agenticos-self-hosting
+git -C "$AGENTICOS_SOURCE_ROOT" branch -D feat/self-hosting-migration
 ```
 
 Only do this if:
@@ -161,7 +161,7 @@ Only do this if:
 
 ## 5. Operator Notes
 
-- Do not run structural move commands in `/Users/jeking/dev/AgenticOS`
+- Do not run structural move commands in the current AgenticOS source checkout
 - Do not use `.claude/worktrees/` as the migration worktree path
 - Do not destroy the original dirty state while preparing isolation
 

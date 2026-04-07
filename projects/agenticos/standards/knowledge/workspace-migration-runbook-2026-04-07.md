@@ -2,7 +2,7 @@
 
 > Date: 2026-04-07
 > Issue: #195
-> Purpose: move the live AgenticOS workspace off the product source checkout and verify that workspace operations no longer pollute product source
+> Purpose: move the live AgenticOS workspace off the current source checkout and verify that workspace operations no longer pollute product source
 
 ## 1. Rules
 
@@ -28,10 +28,10 @@
 6. run a topology audit over `projects/*` in the new workspace
 7. clean stale workspace-generated dirtiness from the source checkout only after the new workspace passes verification
 
-## 3. Current Machine Outcome
+## 3. Recorded Migration Outcome
 
-- workspace root: `/Users/jeking/AgenticOS-workspace`
-- source checkout: `/Users/jeking/dev/AgenticOS`
+- workspace root: `AGENTICOS_WORKSPACE_HOME`
+- source checkout: `AGENTICOS_SOURCE_ROOT`
 - Codex config migrated
 - Cursor config migrated
 - Claude settings required a manual env-path fallback because `claude` CLI was not present on PATH
@@ -46,9 +46,11 @@
 Use:
 
 ```bash
-/Users/jeking/dev/AgenticOS/projects/agenticos/tools/verify-workspace-separation.sh \
-  /Users/jeking/dev/AgenticOS \
-  /Users/jeking/AgenticOS-workspace \
+export AGENTICOS_SOURCE_ROOT="/absolute/path/to/current-agenticos-source-root"
+export AGENTICOS_WORKSPACE_HOME="/absolute/path/to/current-workspace-home"
+"$AGENTICOS_SOURCE_ROOT/projects/agenticos/tools/verify-workspace-separation.sh" \
+  "$AGENTICOS_SOURCE_ROOT" \
+  "$AGENTICOS_WORKSPACE_HOME" \
   agent-cli-api
 ```
 
@@ -68,3 +70,5 @@ If `agenticos-bootstrap` cannot update a supported local agent automatically:
 - re-run the verification script
 
 Do not treat the migration as complete until the verification script passes.
+
+This runbook documents a transitional separation step. The final target model is still `workspace home` plus `project source`, not a permanent requirement that users keep an external workspace path.
