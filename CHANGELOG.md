@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.1] — 2026-04-07
+
+### Fixed
+- canonical `main` checkout now refuses runtime guardrail/state writes in the
+  merged source implementation, which unblocks recovery toward a clean standard
+  install/runtime model
+- runtime recovery now has an executable audit surface for detecting temporary
+  workspace bindings, install-time drift, and Homebrew formula ambiguity before
+  any cutover attempt
+
 ## [0.3.1] — 2026-04-01
 
 ### Added
