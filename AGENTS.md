@@ -33,7 +33,8 @@ npm run build
 Repository boundary rule:
 - `projects/agenticos/` is the only canonical AgenticOS product-source project under `projects/`
 - preserved sibling `projects/*` directories are still part of the operator-visible workspace layout and must not be removed just because AgenticOS itself was reorganized
-- top-level `tools/record-reminder.sh` must remain available as a legacy-compatible hook path until hook callers are migrated
+- installed-runtime hook commands are preferred: `agenticos-edit-guard` and `agenticos-record-reminder`
+- top-level `tools/record-reminder.sh` remains only as a legacy-compatible hook path until hook callers are migrated
 - orphaned gitlink residues `okr-management` and `t5t` are not verified full projects and must be handled only with explicit recovery evidence, not assumed deletion safety
 
 ## Development Rules

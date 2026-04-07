@@ -35,12 +35,14 @@ On macOS, `--first-run` also enables `launchctl` persistence so GUI-launched too
 Use `agenticos-bootstrap --verify` to audit the current bootstrap state without mutating configs.
 Successful apply/first-run runs also record bootstrap metadata under `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
-For implementation-affecting work, AgenticOS also ships a hook-friendly guard wrapper at `tools/check-edit-boundary.sh`.
+For implementation-affecting work, AgenticOS now ships an installed-runtime hook command: `agenticos-edit-guard`.
 Use it from local automation or any client-side pre-edit hook layer to fail closed unless:
 
 - the active project matches the intended managed project
 - the intended issue is explicit
 - the latest persisted `agenticos_preflight` for that issue and repo is `PASS`
+
+The root-level `tools/check-edit-boundary.sh` path is now legacy compatibility only.
 
 ### Option B — Manual install (from GitHub Releases)
 
@@ -246,7 +248,8 @@ For downstream project inheritance, the executable workflow standard kit lives i
 
 Within this repository, only `projects/agenticos/` should be treated as the canonical **AgenticOS product-source** project.
 Sibling entries under `projects/` may still exist as preserved managed-project content and should not be rewritten or removed just because AgenticOS itself adopted a self-hosting layout.
-The source checkout also keeps a legacy-compatible top-level `tools/record-reminder.sh` path because existing Claude Code hooks still call that location directly.
+The installed-runtime command `agenticos-record-reminder` is now the preferred reminder hook entrypoint.
+The source checkout keeps a legacy-compatible top-level `tools/record-reminder.sh` path only for older hook callers that have not been migrated yet.
 The orphaned gitlink residues `okr-management` and `t5t` were not recoverable as full tracked projects and therefore should not be treated as canonical managed-project content without a separate verified source.
 
 ---
