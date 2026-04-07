@@ -91,19 +91,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-07T02:49:30.544Z
+**Last Updated**: 2026-04-07T02:53:34.432Z
 
-**Current Task**: Issue #9: configure and verify cmux socket automation mode (status: completed)
+**Current Task**: Tap issue #3: packaged verify entrypoint for Brew users (status: completed)
 
 **Active Items**:
-- Next highest-priority issue is homebrew-ghostty #3 or ghostty-optimization #16, depending on whether you want packaged verify UX or clean-machine acceptance first.
+- Next remaining product-level issues are #16 clean-machine acceptance, #7 Brewfile layering, and #17 stale AgenticOS context drift.
 
 **Recent Decisions**:
-- Keep the broader core-vs-optional package split out of this issue and leave it to issue #7.
-- Use file-managed cmux settings.json as the reproducible automation configuration source because current official docs describe automation settings there.
 - Do not depend on a cmux reload-config CLI because the local cmux 0.62.2 binary does not expose that command; use live socket smoke instead.
+- Implement a dedicated ghostty-cmux-verify wrapper instead of only changing docs, so Brew users get a real post-install command.
+- Make the verify wrapper prefer the synced managed source and fall back to the packaged payload so it works both before and after sync.
 
-**Next Action**: Next highest-priority issue is homebrew-ghostty #3 or ghostty-optimization #16, depending on whether you want packaged verify UX or clean-machine acceptance first.
+**Next Action**: Next remaining product-level issues are #16 clean-machine acceptance, #7 Brewfile layering, and #17 stale AgenticOS context drift.
 <!-- AGENT_CONTEXT_END -->
 
 ---
