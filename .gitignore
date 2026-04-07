@@ -33,5 +33,13 @@ worktrees/
 
 # Local-only or standalone downstream project roots managed outside the AgenticOS
 # canonical repository lifecycle.
+projects/2026okr/
+projects/360teams/
+projects/agentic-devops/
+projects/agentic-os-development/
 projects/agent-cli-api/
+projects/ghostty-optimization/
+projects/okr-management/
 projects/agenticresearch/
+projects/t5t/
+projects/test-project/

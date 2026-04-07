@@ -1,7 +1,0 @@
-{
-    "provider": "openai",
-    "base_url": "http://127.0.0.1:8045/v1",
-    "api_key": "sk-9b20725436e744f3b9ebeaf8a2b690f1",
-    "model": "gemini-3-pro-image",
-    "image_size": "1792x1024"
-}
