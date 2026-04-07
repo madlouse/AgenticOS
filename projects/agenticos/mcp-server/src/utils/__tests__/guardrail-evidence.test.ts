@@ -19,7 +19,12 @@ vi.mock('../registry.js', () => ({
   loadRegistry: vi.fn(),
 }));
 
+vi.mock('../canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(async () => ({ blocked: false })),
+}));
+
 import { access, readFile, writeFile } from 'fs/promises';
+import { detectCanonicalMainWriteProtection } from '../canonical-main-guard.js';
 import { loadRegistry } from '../registry.js';
 import { persistGuardrailEvidence } from '../guardrail-evidence.js';
 
@@ -27,6 +32,7 @@ const accessMock = access as unknown as ReturnType<typeof vi.fn>;
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
 const writeFileMock = writeFile as unknown as ReturnType<typeof vi.fn>;
 const loadRegistryMock = loadRegistry as unknown as ReturnType<typeof vi.fn>;
+const detectCanonicalMainWriteProtectionMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
 describe('persistGuardrailEvidence', () => {
   beforeEach(() => {
@@ -55,6 +61,7 @@ describe('persistGuardrailEvidence', () => {
     accessMock.mockResolvedValue(undefined);
     readFileMock.mockResolvedValue(JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } }));
     writeFileMock.mockResolvedValue(undefined);
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({ blocked: false });
   });
 
   it('persists latest preflight evidence into the matching managed project state', async () => {
@@ -233,6 +240,35 @@ describe('persistGuardrailEvidence', () => {
 
     expect(result.persisted).toBe(false);
     expect(result.reason).toContain('not within a resolvable AgenticOS project');
+    expect(writeFileMock).not.toHaveBeenCalled();
+  });
+
+  it('does not persist guardrail evidence into canonical main checkouts', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'agenticos', name: 'AgenticOS' },
+          agent_context: { current_state: 'standards/.context/state.yaml' },
+        });
+      }
+      return JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } });
+    });
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: true,
+      reason: 'canonical main checkout is write-protected for runtime persistence: /workspace/root',
+    });
+
+    const result = await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/root/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '212',
+        result: { status: 'REDIRECT' },
+      },
+    });
+
+    expect(result.persisted).toBe(false);
+    expect(result.reason).toContain('write-protected');
     expect(writeFileMock).not.toHaveBeenCalled();
   });
 });

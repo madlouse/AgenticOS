@@ -2,6 +2,7 @@ import { access, readFile, writeFile } from 'fs/promises';
 import { basename, dirname, join, resolve, sep } from 'path';
 import yaml from 'yaml';
 import { loadRegistry } from './registry.js';
+import { detectCanonicalMainWriteProtection } from './canonical-main-guard.js';
 
 type GuardrailCommand =
   | 'agenticos_preflight'
@@ -255,6 +256,17 @@ export async function persistGuardrailEvidence(
       reason: project_path
         ? `project_path is not a resolvable AgenticOS project: ${project_path}`
         : `repo_path is not within a resolvable AgenticOS project: ${repo_path}`,
+    };
+  }
+
+  const writeProtection = await detectCanonicalMainWriteProtection(repo_path);
+  if (writeProtection.blocked) {
+    return {
+      attempted: true,
+      persisted: false,
+      project_id: project.id,
+      state_path: project.statePath,
+      reason: writeProtection.reason,
     };
   }
 
