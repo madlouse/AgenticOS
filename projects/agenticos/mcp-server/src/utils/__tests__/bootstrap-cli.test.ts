@@ -14,7 +14,7 @@ function createDeps() {
     stdout,
     stderr,
     deps: {
-      env: {},
+      env: {} as Record<string, string | undefined>,
       homeDir: '/Users/tester',
       platform: 'darwin',
       nowIso() {
@@ -124,6 +124,33 @@ describe('bootstrap cli', () => {
     expect(harness.commands).toHaveLength(0);
     expect(harness.files.size).toBe(0);
     expect(harness.stdout.some((line) => line.includes('shell-profile'))).toBe(true);
+  });
+
+  it('fails closed when no explicit or preconfirmed workspace exists', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--agent', 'codex'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stderr.some((line) => line.includes('Workspace is required.'))).toBe(true);
+    expect(harness.stderr.some((line) => line.includes('/opt/homebrew/var/agenticos'))).toBe(true);
+    expect(harness.commands).toHaveLength(0);
+  });
+
+  it('uses preconfirmed AGENTICOS_HOME when present', () => {
+    const harness = createDeps();
+    harness.deps.env.AGENTICOS_HOME = '/confirmed/workspace';
+
+    const exitCode = runBootstrapCli(
+      ['--agent', 'codex'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('Workspace: /confirmed/workspace (env)'))).toBe(true);
   });
 
   it('applies launchctl persistence on macOS when requested', () => {

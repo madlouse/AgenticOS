@@ -1,5 +1,5 @@
 import yaml from 'yaml';
-import { detectDefaultShellProfile, detectDefaultWorkspace, detectSupportedAgents, formatCommand, mergeCursorMcpConfig, parseAgentSelection, renderBootstrapCommand, renderCursorConfigSnippet, renderRepairRemoveCommand, upsertAgenticOSEnvExport, type DetectedAgent, type SupportedAgentId } from './bootstrap-helper.js';
+import { detectDefaultShellProfile, detectDefaultWorkspace, detectSupportedAgents, detectWorkspaceCandidates, formatCommand, mergeCursorMcpConfig, parseAgentSelection, renderBootstrapCommand, renderCursorConfigSnippet, renderRepairRemoveCommand, upsertAgenticOSEnvExport, type DetectedAgent, type SupportedAgentId } from './bootstrap-helper.js';
 
 export interface CliOptions {
   apply: boolean;
@@ -117,6 +117,13 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
     const workspaceSelection = options.workspace
       ? { workspace: options.workspace, source: 'arg' as const }
       : detectDefaultWorkspace(deps.env.AGENTICOS_HOME, undefined, deps.homeDir);
+    const workspaceCandidates = detectWorkspaceCandidates(undefined, deps.homeDir);
+
+    if (!workspaceSelection) {
+      deps.stderr('Workspace is required. Pass `--workspace <path>` or confirm AGENTICOS_HOME before bootstrap.');
+      for (const line of buildWorkspaceConfirmationLines(workspaceCandidates)) deps.stderr(line);
+      return 1;
+    }
     const detectedAgents = detectSupportedAgents(
       deps.commandExists,
       undefined,
@@ -216,9 +223,21 @@ export function buildHelpLines(): string[] {
     '  `--first-run` is a convenience mode: it implies `--apply`, enables shell persistence, and on macOS also enables launchctl persistence.',
     '  `--persist-shell-env` also writes export AGENTICOS_HOME=... to the detected shell profile.',
     '  `--persist-launchctl-env` also runs `launchctl setenv` on macOS for GUI/session inheritance.',
+    '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli',
   ];
+}
+
+function buildWorkspaceConfirmationLines(candidates: string[]): string[] {
+  const lines = [
+    'User-confirmed workspace is required before bootstrap.',
+    'Candidate paths for confirmation:',
+  ];
+  for (const candidate of candidates) {
+    lines.push(`- ${candidate}`);
+  }
+  return lines;
 }
 
 export function normalizeCliOptions(options: CliOptions, platform: string): CliOptions {

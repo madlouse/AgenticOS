@@ -57,7 +57,7 @@ export function detectDefaultWorkspace(
   envHome: string | undefined,
   fileExists: (path: string) => boolean = existsSync,
   userHome: string = homedir(),
-): { workspace: string; source: 'env' | 'homebrew' | 'home-default' } {
+): { workspace: string; source: 'env' } | null {
   const trimmedEnv = envHome?.trim();
   if (trimmedEnv) {
     return {
@@ -66,19 +66,21 @@ export function detectDefaultWorkspace(
     };
   }
 
+  return null;
+}
+
+export function detectWorkspaceCandidates(
+  fileExists: (path: string) => boolean = existsSync,
+  userHome: string = homedir(),
+): string[] {
+  const candidates: string[] = [];
   for (const candidate of ['/opt/homebrew/var/agenticos', '/usr/local/var/agenticos']) {
     if (fileExists(candidate)) {
-      return {
-        workspace: candidate,
-        source: 'homebrew',
-      };
+      candidates.push(candidate);
     }
   }
-
-  return {
-    workspace: join(userHome, 'AgenticOS-workspace'),
-    source: 'home-default',
-  };
+  candidates.push(join(userHome, 'AgenticOS-workspace'));
+  return candidates;
 }
 
 export function detectSupportedAgents(
