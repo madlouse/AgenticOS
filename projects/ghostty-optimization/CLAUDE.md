@@ -91,20 +91,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-07T02:29:52.893Z
+**Last Updated**: 2026-04-07T02:30:38.935Z
 
 **Current Task**: Issue #6: fail fast on brew bundle install errors (status: completed)
 
 **Active Items**:
-- Push commit 3039b61 when ready.
-- Proceed to issue #9 after #6 lands.
+- Proceed to issue #9 next: configure and verify cmux socket automation mode.
 
 **Recent Decisions**:
-- 创建 AIOS 作为 AI 协作框架
-- Treat any current Brewfile install failure as fatal instead of trying to continue, because the repo does not yet distinguish core vs optional packages.
 - Add a simple machine-readable summary block to bootstrap output so agents and humans can reliably detect failed stage and final status.
+- Close issue #6 only after the verified code change was pushed to origin/main.
+- Keep the broader core-vs-optional package split out of this issue and leave it to issue #7.
 
-**Next Action**: Push commit 3039b61 when ready.
+**Next Action**: Proceed to issue #9 next: configure and verify cmux socket automation mode.
 <!-- AGENT_CONTEXT_END -->
 
 ---

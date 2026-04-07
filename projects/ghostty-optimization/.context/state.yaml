@@ -2,13 +2,13 @@ session:
   id: session-2026-03-16-001
   started: 2026-03-16T04:15:45Z
   agent: claude-sonnet-4.6
-  last_backup: 2026-04-07T02:29:52.893Z
+  last_backup: 2026-04-07T02:30:38.935Z
 current_task:
   id: task-001
   title: "Issue #6: fail fast on brew bundle install errors"
   status: completed
   next_step: 编写性能测试脚本
-  updated: 2026-04-07T02:29:52.886Z
+  updated: 2026-04-07T02:30:38.930Z
 working_memory:
   facts:
     - Ghostty 已升级到 1.3.1
@@ -20,6 +20,10 @@ working_memory:
       failure semantics, and summary output.
     - "Committed the changes locally as 3039b61 fix(#6): fail fast on brew
       bundle errors."
+    - Pushed commit 3039b61 to ghostty-optimization/main.
+    - "Commented on and closed GitHub issue #6."
+    - Confirmed the source repo is clean and aligned with origin/main after
+      landing.
   decisions:
     - 使用 hyperfine 进行性能测试
     - 创建 AIOS 作为 AI 协作框架
@@ -28,9 +32,13 @@ working_memory:
       packages.
     - Add a simple machine-readable summary block to bootstrap output so agents
       and humans can reliably detect failed stage and final status.
+    - "Close issue #6 only after the verified code change was pushed to
+      origin/main."
+    - "Keep the broader core-vs-optional package split out of this issue and
+      leave it to issue #7."
   pending:
-    - Push commit 3039b61 when ready.
-    - "Proceed to issue #9 after #6 lands."
+    - "Proceed to issue #9 next: configure and verify cmux socket automation
+      mode."
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
