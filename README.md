@@ -1,8 +1,11 @@
-# AgenticOS Product Source
+# AgenticOS
 
-This directory is the canonical product-source project for AgenticOS.
+AI-native project management that persists context across sessions for
+MCP-capable AI tools.
 
-If you are changing AgenticOS itself, start here instead of treating the workspace root as the authoritative product repository.
+This directory is the canonical product-source project for AgenticOS. If you
+are changing AgenticOS itself, start here instead of treating the enclosing
+workspace root as the authoritative product repository.
 
 ## Scope
 
@@ -29,10 +32,74 @@ exit:
 ## Quick Start
 
 ```bash
-cd projects/agenticos/mcp-server
+cd mcp-server
 npm install
 npm run build
 npm test
+```
+
+## Supported Integration Modes
+
+AgenticOS does not treat every fallback as equal:
+
+- `MCP-native` is the canonical primary mode
+- `MCP + Skills Assist` is the supported fallback when transport works but
+  routing or operator ergonomics need help
+- `CLI Wrapper` is limited to diagnostics and temporary bootstrap recovery
+- `Skills-only Guidance` is experimental and does not provide the canonical
+  AgenticOS runtime surface
+
+## Official Supported Agents
+
+The official bootstrap surface currently covers:
+
+- Claude Code
+- Codex
+- Cursor
+- Gemini CLI
+
+Bootstrap is complete only when:
+
+1. the MCP server is registered for the target agent
+2. the agent has been restarted if required
+3. `agenticos_list` succeeds
+
+## Homebrew Bootstrap Contract
+
+Homebrew installs the `agenticos-mcp` binary only. It does **not** create or
+select a workspace, does **not** edit Claude Code, Codex, Cursor, or Gemini
+CLI configuration, does **not** restart the AI tool, and does **not** prove
+activation by itself.
+
+After installation, set `AGENTICOS_HOME` explicitly, bootstrap one supported
+agent manually or with `agenticos-bootstrap`, restart the current client, and
+explicitly verify `agenticos_list` before assuming project-intent routing is
+working.
+
+```bash
+export AGENTICOS_HOME=/absolute/path/to/your/workspace
+
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+
+claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
+```
+
+For Cursor, add `agenticos` with explicit `env.AGENTICOS_HOME` to
+`~/.cursor/mcp.json`, then restart Cursor and verify `agenticos_list`.
+
+If a previous registration still points at a source checkout instead of
+`agenticos-mcp`, repair it manually:
+
+```bash
+claude mcp get agenticos
+claude mcp remove agenticos -s user
+claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+
+codex mcp get agenticos
+codex mcp remove agenticos
+codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
 
 ## Canonical Documents
