@@ -4,6 +4,8 @@
 # Dependencies
 node_modules/
 mcp-server/node_modules/
+__pycache__/
+*.pyc
 
 # Build output
 build/
