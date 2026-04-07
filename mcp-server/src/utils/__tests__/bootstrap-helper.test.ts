@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   detectDefaultShellProfile,
   detectDefaultWorkspace,
+  detectWorkspaceCandidates,
   detectSupportedAgents,
   formatCommand,
   mergeCursorMcpConfig,
@@ -24,16 +25,26 @@ describe('bootstrap helper', () => {
     });
   });
 
-  it('falls back to homebrew workspace when present', () => {
+  it('fails closed when no confirmed workspace exists', () => {
     const selection = detectDefaultWorkspace(
       undefined,
       (path) => path === '/opt/homebrew/var/agenticos',
       '/Users/tester',
     );
-    expect(selection).toEqual({
-      workspace: '/opt/homebrew/var/agenticos',
-      source: 'homebrew',
-    });
+    expect(selection).toBeNull();
+  });
+
+  it('reports candidate workspace paths without auto-selecting them', () => {
+    const candidates = detectWorkspaceCandidates(
+      (path) => path === '/opt/homebrew/var/agenticos',
+      '/Users/tester',
+      '/Users/tester/dev/AgenticOS',
+    );
+    expect(candidates).toEqual([
+      '/Users/tester/dev/AgenticOS',
+      '/opt/homebrew/var/agenticos',
+      '/Users/tester/AgenticOS-workspace',
+    ]);
   });
 
   it('renders explicit AGENTICOS_HOME bootstrap commands', () => {
