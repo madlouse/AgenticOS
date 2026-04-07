@@ -128,6 +128,7 @@ describe('bootstrap cli', () => {
 
   it('fails closed when no explicit or preconfirmed workspace exists', () => {
     const harness = createDeps();
+    harness.deps.env.AGENTICOS_SOURCE_ROOT = '/Users/tester/dev/AgenticOS';
 
     const exitCode = runBootstrapCli(
       ['--agent', 'codex'],
@@ -136,7 +137,8 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(1);
     expect(harness.stderr.some((line) => line.includes('Workspace is required.'))).toBe(true);
-    expect(harness.stderr.some((line) => line.includes('/opt/homebrew/var/agenticos'))).toBe(true);
+    expect(harness.stderr.some((line) => line.includes('default: /Users/tester/dev/AgenticOS'))).toBe(true);
+    expect(harness.stderr.some((line) => line.includes('Confirm one explicitly with: agenticos-bootstrap --workspace "/Users/tester/dev/AgenticOS" ...'))).toBe(true);
     expect(harness.commands).toHaveLength(0);
   });
 

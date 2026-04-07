@@ -117,7 +117,11 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
     const workspaceSelection = options.workspace
       ? { workspace: options.workspace, source: 'arg' as const }
       : detectDefaultWorkspace(deps.env.AGENTICOS_HOME, undefined, deps.homeDir);
-    const workspaceCandidates = detectWorkspaceCandidates(undefined, deps.homeDir);
+    const workspaceCandidates = detectWorkspaceCandidates(
+      undefined,
+      deps.homeDir,
+      deps.env.AGENTICOS_SOURCE_ROOT,
+    );
 
     if (!workspaceSelection) {
       deps.stderr('Workspace is required. Pass `--workspace <path>` or confirm AGENTICOS_HOME before bootstrap.');
@@ -232,10 +236,14 @@ export function buildHelpLines(): string[] {
 function buildWorkspaceConfirmationLines(candidates: string[]): string[] {
   const lines = [
     'User-confirmed workspace is required before bootstrap.',
-    'Candidate paths for confirmation:',
+    'Suggested workspace candidates for confirmation:',
   ];
-  for (const candidate of candidates) {
-    lines.push(`- ${candidate}`);
+  candidates.forEach((candidate, index) => {
+    const prefix = index === 0 ? '- default: ' : '- alternate: ';
+    lines.push(`${prefix}${candidate}`);
+  });
+  if (candidates.length > 0) {
+    lines.push(`Confirm one explicitly with: agenticos-bootstrap --workspace "${candidates[0]}" ...`);
   }
   return lines;
 }

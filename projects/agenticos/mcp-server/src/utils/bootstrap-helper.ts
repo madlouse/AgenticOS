@@ -72,14 +72,26 @@ export function detectDefaultWorkspace(
 export function detectWorkspaceCandidates(
   fileExists: (path: string) => boolean = existsSync,
   userHome: string = homedir(),
+  preferredLocalRoot?: string,
 ): string[] {
   const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  const pushCandidate = (value: string | undefined) => {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    candidates.push(trimmed);
+  };
+
+  pushCandidate(preferredLocalRoot);
+
   for (const candidate of ['/opt/homebrew/var/agenticos', '/usr/local/var/agenticos']) {
     if (fileExists(candidate)) {
-      candidates.push(candidate);
+      pushCandidate(candidate);
     }
   }
-  candidates.push(join(userHome, 'AgenticOS-workspace'));
+  pushCandidate(join(userHome, 'AgenticOS-workspace'));
   return candidates;
 }
 

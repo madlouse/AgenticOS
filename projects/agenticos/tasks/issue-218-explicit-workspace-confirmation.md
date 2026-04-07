@@ -17,6 +17,8 @@ path is always explicitly confirmed by the user.
 - bootstrap now accepts workspace from exactly two places:
   - `--workspace <path>`
   - preconfirmed `AGENTICOS_HOME`
+- when no confirmed workspace exists, bootstrap prints machine-local suggested
+  candidates and an explicit confirmation command, but does not auto-select
 - Homebrew and home-directory paths are now suggestions only, not implicit
   selections
 

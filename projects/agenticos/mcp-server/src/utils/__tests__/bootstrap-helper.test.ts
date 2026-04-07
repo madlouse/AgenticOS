@@ -38,8 +38,10 @@ describe('bootstrap helper', () => {
     const candidates = detectWorkspaceCandidates(
       (path) => path === '/opt/homebrew/var/agenticos',
       '/Users/tester',
+      '/Users/tester/dev/AgenticOS',
     );
     expect(candidates).toEqual([
+      '/Users/tester/dev/AgenticOS',
       '/opt/homebrew/var/agenticos',
       '/Users/tester/AgenticOS-workspace',
     ]);
