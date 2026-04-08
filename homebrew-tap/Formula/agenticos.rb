@@ -3,10 +3,10 @@ require "language/node"
 class Agenticos < Formula
   desc "AI-native project management MCP server for Claude Code, Codex, Cursor, and Gemini CLI"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.0/agenticos-mcp.tgz"
-  sha256 "5f049ba880f2de6d930d9ada07ae1ee549dba165e9bf2b30f6e6fe5a168096f7"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.1/agenticos-mcp.tgz"
+  sha256 "8e60590011f384e7442c79ee448040c9a8dc630b5b0f7b875b205ec7b19312a6"
   license "MIT"
-  version "0.4.0"
+  version "0.4.1"
 
   depends_on "node"
 
