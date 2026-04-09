@@ -1,4 +1,4 @@
-<!-- agenticos-template: v7 -->
+<!-- agenticos-template: v8 -->
 # AGENTS.md — AgenticOS
 
 ## Adapter Role
@@ -56,9 +56,9 @@ After recording, call `agenticos_save` to commit to Git.
 
 On session start, read these files for context:
 1. `.project.yaml` — Project metadata
-2. `.context/quick-start.md` — human-readable project summary
-3. `.context/state.yaml` — Current state and working memory
-4. `.context/conversations/` — Previous session records
+2. `standards/.context/quick-start.md` — human-readable project summary
+3. `standards/.context/state.yaml` — Current state and working memory
+4. `standards/.context/conversations/` — Previous session records
 
 Then greet the user with: project name, last progress, current pending items, suggested next step.
 
@@ -72,9 +72,9 @@ Then greet the user with: project name, last progress, current pending items, su
 | Path | Purpose |
 |------|---------|
 | `.project.yaml` | Project metadata |
-| `.context/quick-start.md` | Quick project summary |
-| `.context/state.yaml` | Session state and working memory |
-| `.context/conversations/` | Session records (auto-generated) |
+| `standards/.context/quick-start.md` | Quick project summary |
+| `standards/.context/state.yaml` | Session state and working memory |
+| `standards/.context/conversations/` | Session records (auto-generated) |
 | `knowledge/` | Persistent knowledge documents |
 | `tasks/` | Task tracking |
 | `tasks/templates/agent-preflight-checklist.yaml` | Preflight checklist template |

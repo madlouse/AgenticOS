@@ -171,6 +171,47 @@ describe('entry surface refresh', () => {
     ]);
   });
 
+  it('writes to configured canonical context paths when project agent_context overrides root defaults', async () => {
+    const projectRoot = await setupProjectRoot();
+    await mkdir(join(projectRoot, 'standards', '.context'), { recursive: true });
+    await writeFile(
+      join(projectRoot, '.project.yaml'),
+      yaml.stringify({
+        meta: {
+          name: 'AgenticOS',
+          description: 'Self-hosting AgenticOS product project.',
+        },
+        agent_context: {
+          quick_start: 'standards/.context/quick-start.md',
+          current_state: 'standards/.context/state.yaml',
+          conversations: 'standards/.context/conversations/',
+          knowledge: 'knowledge/',
+          tasks: 'tasks/',
+          artifacts: 'artifacts/',
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(join(projectRoot, 'standards', '.context', 'state.yaml'), yaml.stringify({}), 'utf-8');
+
+    const result = await refreshEntrySurfaces({
+      project_path: projectRoot,
+      summary: 'Aligned self-hosting canonical context paths.',
+      status: 'aligned',
+      current_focus: 'Use standards/.context as canonical state',
+    });
+
+    expect(result.quick_start_path).toContain('standards/.context/quick-start.md');
+    expect(result.state_path).toContain('standards/.context/state.yaml');
+
+    const quickStart = await readFile(join(projectRoot, 'standards', '.context', 'quick-start.md'), 'utf-8');
+    expect(quickStart).toContain('`standards/.context/state.yaml`');
+    expect(quickStart).toContain('`standards/.context/conversations/`');
+
+    const state = yaml.parse(await readFile(join(projectRoot, 'standards', '.context', 'state.yaml'), 'utf-8')) as any;
+    expect(state.loaded_context).toEqual(['.project.yaml', 'standards/.context/quick-start.md']);
+  });
+
   it('falls back to basename inside the readable project-yaml path when metadata fields are empty', async () => {
     const projectRoot = await setupProjectRoot();
     await writeFile(join(projectRoot, '.project.yaml'), yaml.stringify({ meta: {} }), 'utf-8');

@@ -287,7 +287,7 @@ Evaluate whether a canonical checkout and project context are fresh enough to tr
 **Returns**: JSON with overall `PASS`, `WARN`, or `BLOCK`
 
 ### agenticos_refresh_entry_surfaces
-Deterministically refresh `.context/quick-start.md` and `.context/state.yaml` from structured merged-work inputs.
+Deterministically refresh the configured quick-start and state paths from structured merged-work inputs, honoring `.project.yaml.agent_context` when present and defaulting to root `.context/*` otherwise.
 
 **Parameters**:
 - `project_path` (required)

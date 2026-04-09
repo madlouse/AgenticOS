@@ -1,6 +1,10 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { basename, dirname, join } from 'path';
 import yaml from 'yaml';
+import {
+  resolveManagedProjectContextDisplayPaths,
+  resolveManagedProjectContextPaths,
+} from './agent-context-paths.js';
 
 export interface EntrySurfaceRefreshArgs {
   project_path: string;
@@ -35,6 +39,7 @@ export interface EntrySurfaceRefreshResult {
 interface ResolvedProjectIdentity {
   projectName: string;
   projectDescription: string;
+  projectYaml: any;
 }
 
 function normalizeList(value: unknown): string[] {
@@ -64,11 +69,13 @@ async function readProjectIdentity(projectPath: string, args: EntrySurfaceRefres
     return {
       projectName: args.project_name || parsed?.meta?.name || basename(projectPath),
       projectDescription: args.project_description || parsed?.meta?.description || '',
+      projectYaml: parsed || {},
     };
   } catch {
     return {
       projectName: args.project_name || basename(projectPath),
       projectDescription: args.project_description || '',
+      projectYaml: {},
     };
   }
 }
@@ -81,7 +88,12 @@ async function readState(statePath: string): Promise<any> {
   }
 }
 
-function buildQuickStart(args: EntrySurfaceRefreshArgs, identity: ResolvedProjectIdentity, refreshedAt: string): string {
+function buildQuickStart(
+  args: EntrySurfaceRefreshArgs,
+  identity: ResolvedProjectIdentity,
+  refreshedAt: string,
+  contextPaths: ReturnType<typeof resolveManagedProjectContextDisplayPaths>,
+): string {
   const pending = normalizeList(args.pending);
   const facts = normalizeList(args.facts);
   const reportPaths = normalizeList(args.report_paths);
@@ -135,11 +147,11 @@ function buildQuickStart(args: EntrySurfaceRefreshArgs, identity: ResolvedProjec
   lines.push(
     '',
     '## Canonical Layers',
-    '- Operational state: `.context/state.yaml`',
-    '- Session history: `.context/conversations/`',
-    '- Durable knowledge: `knowledge/`',
-    '- Execution plans: `tasks/`',
-    '- Deliverables: `artifacts/`',
+    `- Operational state: \`${contextPaths.statePath}\``,
+    `- Session history: \`${contextPaths.conversationsDir}\``,
+    `- Durable knowledge: \`${contextPaths.knowledgeDir}\``,
+    `- Execution plans: \`${contextPaths.tasksDir}\``,
+    `- Deliverables: \`${contextPaths.artifactsDir}\``,
   );
 
   return `${lines.join('\n')}\n`;
@@ -149,6 +161,7 @@ function buildState(
   args: EntrySurfaceRefreshArgs,
   existingState: any,
   refreshedAt: string,
+  contextPaths: ReturnType<typeof resolveManagedProjectContextDisplayPaths>,
 ): any {
   const facts = normalizeList(args.facts);
   const decisions = normalizeList(args.decisions);
@@ -185,7 +198,7 @@ function buildState(
 
   state.loaded_context = uniqueOrdered([
     '.project.yaml',
-    '.context/quick-start.md',
+    contextPaths.quickStartPath,
     ...reportPaths,
     ...recommendedDocs,
   ]);
@@ -219,15 +232,18 @@ export async function refreshEntrySurfaces(args: EntrySurfaceRefreshArgs): Promi
 
   const refreshedAt = new Date().toISOString();
   const projectPath = args.project_path;
-  const quickStartPath = join(projectPath, '.context', 'quick-start.md');
-  const statePath = join(projectPath, '.context', 'state.yaml');
+  const identity = await readProjectIdentity(projectPath, args);
+  const configuredPaths = resolveManagedProjectContextPaths(projectPath, identity.projectYaml);
+  const displayPaths = resolveManagedProjectContextDisplayPaths(identity.projectYaml);
+  const quickStartPath = configuredPaths.quickStartPath;
+  const statePath = configuredPaths.statePath;
 
   await mkdir(dirname(quickStartPath), { recursive: true });
+  await mkdir(dirname(statePath), { recursive: true });
 
-  const identity = await readProjectIdentity(projectPath, args);
   const existingState = await readState(statePath);
-  const nextState = buildState(args, existingState, refreshedAt);
-  const nextQuickStart = buildQuickStart(args, identity, refreshedAt);
+  const nextState = buildState(args, existingState, refreshedAt, displayPaths);
+  const nextQuickStart = buildQuickStart(args, identity, refreshedAt, displayPaths);
 
   await writeFile(quickStartPath, nextQuickStart, 'utf-8');
   await writeFile(statePath, yaml.stringify(nextState), 'utf-8');

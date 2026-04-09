@@ -7,6 +7,7 @@ import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapte
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
 import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
+import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
 
 interface StandardKitEntry {
   path: string;
@@ -35,6 +36,8 @@ export interface ResolvedProjectTarget {
   projectName: string;
   projectDescription: string;
   projectId: string;
+  projectYaml: any;
+  agentContextPaths: ManagedProjectContextDisplayPaths;
 }
 
 export interface AdoptResult {
@@ -183,6 +186,8 @@ async function resolveProjectIdentity(projectPath: string, projectName?: string,
     projectName: resolvedName,
     projectDescription: resolvedDescription,
     projectId: resolvedId,
+    projectYaml: projectYaml || {},
+    agentContextPaths: resolveManagedProjectContextDisplayPaths(projectYaml || {}),
   };
 }
 
@@ -190,11 +195,12 @@ async function ensureParentDir(path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
 }
 
-async function ensureStandardDirectories(projectPath: string): Promise<void> {
-  await mkdir(join(projectPath, '.context', 'conversations'), { recursive: true });
-  await mkdir(join(projectPath, 'knowledge'), { recursive: true });
-  await mkdir(join(projectPath, 'tasks', 'templates'), { recursive: true });
-  await mkdir(join(projectPath, 'artifacts'), { recursive: true });
+async function ensureStandardDirectories(project: ResolvedProjectTarget): Promise<void> {
+  const contextPaths = resolveManagedProjectContextPaths(project.projectPath, project.projectYaml);
+  await mkdir(contextPaths.conversationsDir, { recursive: true });
+  await mkdir(contextPaths.knowledgeDir, { recursive: true });
+  await mkdir(join(contextPaths.tasksDir, 'templates'), { recursive: true });
+  await mkdir(contextPaths.artifactsDir, { recursive: true });
 }
 
 function renderProjectYamlTemplate(templateContent: string, project: ResolvedProjectTarget): string {
@@ -278,7 +284,7 @@ export async function adoptStandardKit(args: { project_path?: string; project_na
   const projectPath = await resolveProjectPath(args.project_path);
   const project = await resolveProjectIdentity(projectPath, args.project_name, args.project_description);
 
-  await ensureStandardDirectories(project.projectPath);
+  await ensureStandardDirectories(project);
 
   const createdFiles: string[] = [];
   const upgradedGeneratedFiles: string[] = [];
@@ -301,11 +307,11 @@ export async function adoptStandardKit(args: { project_path?: string; project_na
   }
 
   for (const entry of getGeneratedEntries(manifest)) {
-    const destination = join(project.projectPath, entry.path);
-    if (!existsSync(destination)) {
+      const destination = join(project.projectPath, entry.path);
+      if (!existsSync(destination)) {
       const content = entry.path === 'AGENTS.md'
-        ? generateAgentsMd(project.projectName, project.projectDescription)
-        : generateClaudeMd(project.projectName, project.projectDescription);
+        ? generateAgentsMd(project.projectName, project.projectDescription, project.agentContextPaths)
+        : generateClaudeMd(project.projectName, project.projectDescription, undefined, project.agentContextPaths);
       await writeFile(destination, content, 'utf-8');
       createdFiles.push(entry.path);
       continue;
@@ -319,8 +325,8 @@ export async function adoptStandardKit(args: { project_path?: string; project_na
     }
 
     const upgraded = entry.path === 'AGENTS.md'
-      ? generateAgentsMd(project.projectName, project.projectDescription)
-      : upgradeClaudeMd(destination, project.projectName, project.projectDescription);
+      ? generateAgentsMd(project.projectName, project.projectDescription, project.agentContextPaths)
+      : upgradeClaudeMd(destination, project.projectName, project.projectDescription, undefined, project.agentContextPaths);
     await writeFile(destination, upgraded, 'utf-8');
     upgradedGeneratedFiles.push(entry.path);
   }

@@ -19,8 +19,8 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template marker, adapter role, and guardrail flow', () => {
     const content = generateAgentsMd('Demo Project', 'Guardrail test');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(7);
-    expect(content).toContain('<!-- agenticos-template: v7 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(8);
+    expect(content).toContain('<!-- agenticos-template: v8 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -70,5 +70,21 @@ describe('distill templates', () => {
     expect(content).toContain('.context/quick-start.md');
     expect(content).toContain('tasks/templates/submission-evidence.md');
     expect(content).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
+  });
+
+  it('renders configured canonical context paths when a project overrides agent_context', () => {
+    const content = generateAgentsMd('AgenticOS', 'Self-hosting project', {
+      quickStartPath: 'standards/.context/quick-start.md',
+      statePath: 'standards/.context/state.yaml',
+      conversationsDir: 'standards/.context/conversations/',
+      knowledgeDir: 'knowledge/',
+      tasksDir: 'tasks/',
+      artifactsDir: 'artifacts/',
+    });
+
+    expect(content).toContain('standards/.context/quick-start.md');
+    expect(content).toContain('standards/.context/state.yaml');
+    expect(content).toContain('standards/.context/conversations/');
+    expect(content).not.toContain('| `.context/quick-start.md` | Quick project summary |');
   });
 });
