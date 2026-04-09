@@ -91,21 +91,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T03:17:46Z
+**Last Updated**: 2026-04-09T07:05:32.453Z
 
-**Current Task**: Workspace registry and topology truth repair (#235) (status: in_progress)
+**Current Task**: Workspace registry and topology truth repair (#235) (status: completed)
 
 **Active Items**:
-- Normalize `projects/agenticos` metadata so the product project is truthfully marked `github_versioned`.
-- Align audit and verification scripts with the `workspace home` vs `project source` model.
-- Refresh compatibility memory surfaces so `/Users/jeking/dev/AgenticOS` is treated as the valid workspace home on this machine.
+- Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
 
 **Recent Decisions**:
-- `AGENTICOS_HOME` identifies the workspace home; source ownership is a project-level property under `projects/<id>`.
-- `/opt/homebrew/var/agenticos` is a Homebrew default example workspace path, not the normative target for this machine.
-- Historical migration docs should distinguish temporary external-workspace mitigation from the final self-hosting model.
+- Treat AGENTICOS_HOME as workspace home, not product source root.
+- Create all future projects under AGENTICOS_HOME/projects/<id> and declare github-managed versus local-only topology inside each project.
+- Keep /opt/homebrew/var/agenticos only as a Homebrew example/default workspace path unless a machine is explicitly configured to use it.
 
-**Next Action**: Finish the coordinated script, metadata, and state-surface corrections for issue `#235`, then rerun the focused audits.
+**Next Action**: Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
 <!-- AGENT_CONTEXT_END -->
 
 ---
