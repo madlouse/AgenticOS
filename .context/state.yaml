@@ -24,7 +24,7 @@ memory_contract:
   tasks_role: execution_artifacts
   artifacts_role: deliverables
 session:
-  last_backup: 2026-04-09T07:21:40.719Z
+  last_backup: 2026-04-09T08:53:11.381Z
   id: entry-refresh-2026-04-09
   started: 2026-04-09T07:04:48.483Z
   agent: agenticos-entry-refresh
@@ -36,27 +36,62 @@ current_task:
   next_step: "Use the workspace-home/project-source model from #235 as the default
     assumption for future project creation, audits, and runtime recovery work."
 guardrail_evidence:
-  updated_at: 2026-04-09T02:40:06.705Z
-  last_command: agenticos_branch_bootstrap
-  branch_bootstrap:
-    command: agenticos_branch_bootstrap
-    recorded_at: 2026-04-09T02:40:06.705Z
-    repo_path: /Users/jeking/dev/AgenticOS/projects/agenticos
-    issue_id: "236"
-    branch_type: fix
-    slug: runtime-release-parity-sha-fix
-    remote_base_branch: origin/main
-    requested_worktree_root: /Users/jeking/dev/AgenticOS/worktrees
+  updated_at: 2026-04-09T07:15:38.346Z
+  last_command: agenticos_preflight
+  preflight:
+    command: agenticos_preflight
+    recorded_at: 2026-04-09T07:15:38.346Z
+    repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-248-standard-kit-conformance-drift
+    issue_id: "248"
+    project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
+    task_type: implementation
+    declared_target_files:
+      - .context/state.yaml
+      - tasks/templates/agent-preflight-checklist.yaml
+      - tasks/templates/issue-design-brief.md
+      - tasks/templates/non-code-evaluation-rubric.yaml
+      - tasks/templates/sub-agent-handoff.md
+      - tasks/templates/global-review-log.md
+      - tasks/templates/submission-evidence.md
+    structural_move: false
+    worktree_required: true
+    root_scoped_exceptions:
+      - .github/
+    clean_reproducibility_gate: []
     result:
-      status: CREATED
-      branch_name: fix/236-runtime-release-parity-sha-fix
-      base_commit: 468f7eba69ca6bab36c92e81e63928d13326190a
-      worktree_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-236-runtime-release-parity-sha-fix
-      notes:
-        - created branch fix/236-runtime-release-parity-sha-fix from origin/main
-        - created isolated worktree at
-          /Users/jeking/dev/AgenticOS/worktrees/agenticos-236-runtime-release-parity-sha-fix
+      status: PASS
+      summary: preflight passed
+      repo_identity_confirmed: true
+      branch_ancestry_verified: true
+      branch_based_on_intended_remote: true
+      worktree_ok: true
+      scope_ok: true
+      reproducibility_gate_defined: true
       block_reasons: []
+      redirect_actions: []
+      evidence:
+        current_branch: fix/248-standard-kit-conformance-drift
+        active_project: agenticos
+        target_project_id: agenticos
+        target_project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
+        target_project_yaml_path: /Users/jeking/dev/AgenticOS/projects/agenticos/.project.yaml
+        declared_source_repo_roots:
+          - /Users/jeking/dev/AgenticOS/projects/agenticos
+        git_worktree_root: /Users/jeking/dev/AgenticOS/worktrees/agenticos-248-standard-kit-conformance-drift
+        git_common_dir: /Users/jeking/dev/AgenticOS/projects/agenticos/.git
+        git_common_repo_root: /Users/jeking/dev/AgenticOS/projects/agenticos
+        git_remote_origin: https://github.com/madlouse/AgenticOS.git
+        current_head: 8ccd00f5dbbd326ed3d240ecd87524eb36f23cbf
+        remote_base_branch: origin/main
+        remote_base_head: 8ccd00f5dbbd326ed3d240ecd87524eb36f23cbf
+        branch_fork_point: 8ccd00f5dbbd326ed3d240ecd87524eb36f23cbf
+        workspace_type: isolated_worktree
+        commit_subjects_since_base: []
+        issue_bootstrap:
+          recorded_at: 2026-04-09T07:15:20.304Z
+          issue_id: "248"
+          repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-248-standard-kit-conformance-drift
+          current_branch: fix/248-standard-kit-conformance-drift
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
