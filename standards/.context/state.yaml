@@ -2,11 +2,11 @@ session:
   id: standards-main-2026-03-23-001
   started: 2026-03-23T09:30:00.000Z
   agent: codex
-  last_backup: 2026-03-23T10:35:00.000Z
+  last_backup: 2026-04-09T03:17:46Z
 current_task:
-  title: restore projects/okr-management as an external-source wrapper project
-  status: completed
-  updated: 2026-03-25T20:10:00.000Z
+  title: normalize workspace-home and project-source truth surfaces
+  status: in_progress
+  updated: 2026-04-09T03:17:46Z
 working_memory:
   facts:
     - projects/agenticos/standards is now the only canonical location for
@@ -60,7 +60,7 @@ working_memory:
       /Users/jeking/worktrees/agenticos-working-copy-78-backup/2026-03-24/
     - the previous local-only main commits for
     - retired standalone standards residue and runtime-project leftovers were
-      removed from the source checkout after backup
+      removed from the product-source project after backup
     - issue
     - agenticos_record now accepts JSON-stringified arrays for decisions,
       outcomes, and pending in addition to native arrays
@@ -123,9 +123,9 @@ working_memory:
     - issue
     - targeted coverage for the
     - issue
-    - the canonical source checkout at /Users/jeking/dev/AgenticOS now again
+    - the canonical workspace home at /Users/jeking/dev/AgenticOS now again
       contains preserved sibling projects 2026okr, 360teams, agentic-devops,
-      agentic-os-development, and ghostty-optimization
+      agentic-os-development, and ghostty-optimization under projects/
     - the legacy top-level compatibility hook path tools/record-reminder.sh has
       been restored because existing Claude Code hooks still call it directly
     - preserved history only contains orphaned gitlinks for projects/t5t and
@@ -146,12 +146,12 @@ working_memory:
       corpus under /Users/jeking/work/02.目标绩效/00.OKR管理/, not a preserved
       project-local AgenticOS directory
     - issue
-    - projects/t5t is now present again in the canonical source checkout under
+    - projects/t5t is now present again in the canonical workspace home under
       /Users/jeking/dev/AgenticOS/projects/t5t
     - issue
-    - projects/okr-management is now present again in the canonical source
-      checkout with project metadata, entry surfaces, provenance docs, and
-      verified 2026 OKR snapshots
+    - projects/okr-management is now present again in the canonical workspace
+      home with project metadata, entry surfaces, provenance docs, and verified
+      2026 OKR snapshots
     - the canonical external content source for okr-management currently points
       to /Users/jeking/work/02.目标绩效/00.OKR管理/
   decisions:
@@ -215,9 +215,15 @@ working_memory:
     - when the strongest verified content source is external to the repo, prefer
       an external-source wrapper project over a false claim of full in-repo
       restoration
+    - `AGENTICOS_HOME` should be described as the workspace home, while
+      `projects/<id>` remains the project-source boundary for source-managed
+      projects
+    - `/opt/homebrew/var/agenticos` is a valid Homebrew example workspace path,
+      not the normative target when a self-hosting machine already uses
+      /Users/jeking/dev/AgenticOS as its workspace home
   pending:
-    - execute issue
-    - revisit issue
+    - land the issue #235 terminology and audit-surface corrections
+    - verify that projects/agenticos now carries truthful topology metadata
 loaded_context:
   - .project.yaml
   - .context/quick-start.md

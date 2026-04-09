@@ -5,6 +5,11 @@ meta:
   created: 2026-03-23
   version: 1.0.0
 
+source_control:
+  topology: github_versioned
+  github_repo: madlouse/AgenticOS
+  branch_strategy: github_flow
+
 agent_context:
   quick_start: standards/.context/quick-start.md
   current_state: standards/.context/state.yaml
@@ -30,4 +35,4 @@ status:
 
 execution:
   source_repo_roots:
-    - ../..
+    - .
