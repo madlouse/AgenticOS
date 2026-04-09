@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.2] — 2026-04-09
+
+### Fixed
+- Homebrew-installed runtime now includes the canonical context alignment
+  changes, so self-hosting AgenticOS surfaces honor configured
+  `agent_context` paths instead of rendering root `.context/*` as the primary
+  operational entry
+- generated `AGENTS.md` and `CLAUDE.md` adapter surfaces now ship with truthful
+  `standards/.context/*` navigation for the self-hosting product project
+
 ## [0.4.1] — 2026-04-07
 
 ### Fixed
