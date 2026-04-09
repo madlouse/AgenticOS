@@ -91,17 +91,17 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T07:05:32.453Z
+**Last Updated**: 2026-04-09T07:21:40.719Z
 
-**Current Task**: Workspace registry and topology truth repair (#235) (status: completed)
+**Current Task**: Repair AgenticOS standard-kit conformance drift (#248) (status: completed)
 
 **Active Items**:
 - Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
 
 **Recent Decisions**:
-- Treat AGENTICOS_HOME as workspace home, not product source root.
-- Create all future projects under AGENTICOS_HOME/projects/<id> and declare github-managed versus local-only topology inside each project.
-- Keep /opt/homebrew/var/agenticos only as a Homebrew example/default workspace path unless a machine is explicitly configured to use it.
+- Preserve the #235 workspace-home versus project-source model while repairing downstream standard-kit drift.
+- Restore missing task templates from the canonical standard-kit source rather than inventing project-local variants.
+- Keep the root compatibility state truthful by carrying the memory-layer contract alongside the canonical standards state surfaces.
 
 **Next Action**: Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
 <!-- AGENT_CONTEXT_END -->

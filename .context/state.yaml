@@ -1,17 +1,16 @@
 working_memory:
   facts:
-    - "PR #243 merged to origin/main at commit
-      e3343973199c1c911a291339a346d073d93756f7."
-    - "Issue #235 is closed."
-    - Focused verification on the main checkout passes; the remaining audit
-      warning is only that launchctl does not expose AGENTICOS_HOME in this
-      local shell environment.
+    - "PR #243 merged at commit e3343973199c1c911a291339a346d073d93756f7."
+    - "PR #249 merged at commit ffa98bdcb5b55dc0fa1ab22308fb75d82cff6e43."
+    - "Issue #235 and issue #248 are both closed."
+    - agenticos_standard_kit_conformance_check now passes on the main checkout.
   decisions:
-    - Treat AGENTICOS_HOME as workspace home, not product source root.
-    - Create all future projects under AGENTICOS_HOME/projects/<id> and declare
-      github-managed versus local-only topology inside each project.
-    - Keep /opt/homebrew/var/agenticos only as a Homebrew example/default
-      workspace path unless a machine is explicitly configured to use it.
+    - "Preserve the #235 workspace-home versus project-source model while
+      repairing downstream standard-kit drift."
+    - Restore missing task templates from the canonical standard-kit source
+      rather than inventing project-local variants.
+    - Keep the root compatibility state truthful by carrying the memory-layer
+      contract alongside the canonical standards state surfaces.
   pending:
     - "Use the workspace-home/project-source model from #235 as the default
       assumption for future project creation, audits, and runtime recovery
@@ -25,15 +24,15 @@ memory_contract:
   tasks_role: execution_artifacts
   artifacts_role: deliverables
 session:
-  last_backup: 2026-04-09T07:05:32.453Z
+  last_backup: 2026-04-09T07:21:40.719Z
   id: entry-refresh-2026-04-09
   started: 2026-04-09T07:04:48.483Z
   agent: agenticos-entry-refresh
-  last_entry_surface_refresh: 2026-04-09T07:04:48.483Z
+  last_entry_surface_refresh: 2026-04-09T07:21:27.101Z
 current_task:
-  title: Workspace registry and topology truth repair (#235)
+  title: Repair AgenticOS standard-kit conformance drift (#248)
   status: completed
-  updated: 2026-04-09T07:04:48.483Z
+  updated: 2026-04-09T07:21:27.101Z
   next_step: "Use the workspace-home/project-source model from #235 as the default
     assumption for future project creation, audits, and runtime recovery work."
 guardrail_evidence:
@@ -65,16 +64,14 @@ loaded_context:
   - standards/knowledge/workspace-migration-runbook-2026-04-07.md
   - standards/knowledge/runtime-project-extraction-plan-2026-03-23.md
 entry_surface_refresh:
-  refreshed_at: 2026-04-09T07:04:48.483Z
-  issue_id: "235"
-  summary: "Workspace-home versus project-source truth surfaces are normalized on
-    main after PR #243, with AGENTICOS_HOME validated as
-    /Users/jeking/dev/AgenticOS and projects/agenticos retained as the AgenticOS
-    source project."
+  refreshed_at: 2026-04-09T07:21:27.101Z
+  issue_id: "248"
+  summary: "Workspace topology truth and downstream standard-kit conformance are
+    both normalized on main after PRs #243 and #249."
   status: aligned
-  current_focus: "Post-#235 topology truth is the active baseline: AGENTICOS_HOME
-    is the runtime workspace home, projects/<id> is the project root, and source
-    control topology is declared per project."
+  current_focus: AgenticOS now treats AGENTICOS_HOME as workspace home,
+    projects/<id> as the project root, and downstream standard-kit conformance
+    as restored for the self-hosting product project.
   report_paths:
     - standards/knowledge/workspace-home-vs-project-source-model-2026-04-07.md
     - standards/knowledge/workspace-migration-runbook-2026-04-07.md
