@@ -2,38 +2,38 @@
 set -euo pipefail
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "usage: $0 <source_root> <workspace_root> [project_id]" >&2
+  echo "usage: $0 <product_source_root> <workspace_home> [project_id]" >&2
   exit 2
 fi
 
-SOURCE_ROOT="$(cd "$1" && pwd)"
-WORKSPACE_ROOT="$(cd "$2" && pwd)"
+PRODUCT_SOURCE_ROOT="$(cd "$1" && pwd)"
+WORKSPACE_HOME="$(cd "$2" && pwd)"
 PROJECT_ID="${3:-agent-cli-api}"
 
-if [[ "$WORKSPACE_ROOT" == "$SOURCE_ROOT" || "$WORKSPACE_ROOT" == "$SOURCE_ROOT"/* ]]; then
-  echo "FAIL workspace root is inside source checkout" >&2
+if [[ "$WORKSPACE_HOME" == "$PRODUCT_SOURCE_ROOT" || "$WORKSPACE_HOME" == "$PRODUCT_SOURCE_ROOT"/* ]]; then
+  echo "FAIL workspace home is inside the product source root" >&2
   exit 1
 fi
 
-if [[ ! -f "$WORKSPACE_ROOT/.agent-workspace/registry.yaml" ]]; then
-  echo "FAIL missing workspace registry at $WORKSPACE_ROOT/.agent-workspace/registry.yaml" >&2
+if [[ ! -f "$WORKSPACE_HOME/.agent-workspace/registry.yaml" ]]; then
+  echo "FAIL missing workspace registry at $WORKSPACE_HOME/.agent-workspace/registry.yaml" >&2
   exit 1
 fi
 
-if [[ ! -d "$WORKSPACE_ROOT/projects" ]]; then
-  echo "FAIL missing workspace projects directory at $WORKSPACE_ROOT/projects" >&2
+if [[ ! -d "$WORKSPACE_HOME/projects" ]]; then
+  echo "FAIL missing workspace projects directory at $WORKSPACE_HOME/projects" >&2
   exit 1
 fi
 
 check_config_path() {
   local file="$1"
   if [[ -f "$file" ]]; then
-    if grep -Eq "AGENTICOS_HOME[\"[:space:]=:]*${SOURCE_ROOT//\//\\/}" "$file"; then
-      echo "FAIL AGENTICOS_HOME still points at source checkout: $file" >&2
+    if grep -Eq "AGENTICOS_HOME[\"[:space:]=:]*${PRODUCT_SOURCE_ROOT//\//\\/}" "$file"; then
+      echo "FAIL AGENTICOS_HOME still points at the product source root: $file" >&2
       exit 1
     fi
-    if ! grep -Eq "AGENTICOS_HOME[\"[:space:]=:]*${WORKSPACE_ROOT//\//\\/}" "$file"; then
-      echo "FAIL AGENTICOS_HOME does not point at workspace root: $file" >&2
+    if ! grep -Eq "AGENTICOS_HOME[\"[:space:]=:]*${WORKSPACE_HOME//\//\\/}" "$file"; then
+      echo "FAIL AGENTICOS_HOME does not point at the workspace home: $file" >&2
       exit 1
     fi
   fi
@@ -43,21 +43,21 @@ check_config_path "$HOME/.codex/config.toml"
 check_config_path "$HOME/.cursor/mcp.json"
 check_config_path "$HOME/.claude/settings.json"
 
-STATUS_BEFORE="$(git -C "$SOURCE_ROOT" status --short)"
+STATUS_BEFORE="$(git -C "$PRODUCT_SOURCE_ROOT" status --short)"
 
-WORKSPACE_ROOT="$WORKSPACE_ROOT" PROJECT_ID="$PROJECT_ID" node --input-type=module <<'NODE'
+WORKSPACE_HOME="$WORKSPACE_HOME" PROJECT_ID="$PROJECT_ID" node --input-type=module <<'NODE'
 import { spawn } from 'child_process';
 
-const workspaceRoot = process.env.WORKSPACE_ROOT;
+const workspaceHome = process.env.WORKSPACE_HOME;
 const projectId = process.env.PROJECT_ID;
 
-if (!workspaceRoot || !projectId) {
-  console.error('missing WORKSPACE_ROOT or PROJECT_ID');
+if (!workspaceHome || !projectId) {
+  console.error('missing WORKSPACE_HOME or PROJECT_ID');
   process.exit(1);
 }
 
 const server = spawn('agenticos-mcp', [], {
-  env: { ...process.env, AGENTICOS_HOME: workspaceRoot },
+  env: { ...process.env, AGENTICOS_HOME: workspaceHome },
   stdio: ['pipe', 'pipe', 'pipe'],
 });
 
@@ -110,6 +110,9 @@ server.stdout.on('data', (chunk) => {
     if (msg.id === 3) {
       const text = msg?.result?.content?.[0]?.text ?? '';
       if (!text.includes('Switched to project')) {
+        if (text.includes('source-control topology initialization')) {
+          fail(`FAIL project metadata incomplete for ${projectId}: ${text}`);
+        }
         fail(`agenticos_switch failed: ${text}`);
       }
       sendTool(4, 'agenticos_status');
@@ -148,10 +151,10 @@ server.stdin.write(JSON.stringify({
 setTimeout(() => fail('timed out waiting for agenticos-mcp responses'), 15000);
 NODE
 
-STATUS_AFTER="$(git -C "$SOURCE_ROOT" status --short)"
+STATUS_AFTER="$(git -C "$PRODUCT_SOURCE_ROOT" status --short)"
 
 if [[ "$STATUS_BEFORE" != "$STATUS_AFTER" ]]; then
-  echo "FAIL source checkout dirtiness changed during workspace verification" >&2
+  echo "FAIL product source dirtiness changed during workspace verification" >&2
   echo "--- before" >&2
   printf '%s\n' "$STATUS_BEFORE" >&2
   echo "--- after" >&2
@@ -159,4 +162,4 @@ if [[ "$STATUS_BEFORE" != "$STATUS_AFTER" ]]; then
   exit 1
 fi
 
-echo "OK workspace separation verified"
+echo "OK workspace home and project source separation verified"

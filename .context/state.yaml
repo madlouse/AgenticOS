@@ -134,19 +134,22 @@ working_memory:
     - The Homebrew tap repository had to be updated in addition to the product
       repository because brew installs resolve from madlouse/homebrew-agenticos,
       not directly from AgenticOS/homebrew-tap.
-    - The remaining runtime recovery block under --expected-home
-      /opt/homebrew/var/agenticos is a local configuration choice pointing tools
-      at the source checkout, not an installed-runtime freshness failure.
+    - A runtime recovery block against /opt/homebrew/var/agenticos reflects a
+      mismatch against that specific example workspace path, not proof that
+      /Users/jeking/dev/AgenticOS is an invalid AGENTICOS_HOME on this machine.
   pending:
-    - Optionally repoint local AGENTICOS_HOME config surfaces to
-      /opt/homebrew/var/agenticos when you want this machine to use the Homebrew
-      workspace instead of the source checkout.
+    - Normalize workspace-home versus project-source terminology under issue
+      #235.
+    - Mark projects/agenticos as a github_versioned child project with truthful
+      source bindings.
+    - Re-run the focused audit and verification scripts against the corrected
+      model.
 session:
-  last_backup: 2026-04-09T02:48:03.586Z
+  last_backup: 2026-04-09T03:17:46Z
 current_task:
-  title: Runtime release parity for installed AgenticOS (#236)
-  status: completed
-  updated: 2026-04-09T02:47:56.955Z
+  title: Workspace registry and topology truth repair (#235)
+  status: in_progress
+  updated: 2026-04-09T03:17:46Z
 guardrail_evidence:
   updated_at: 2026-04-09T02:40:06.705Z
   last_command: agenticos_branch_bootstrap

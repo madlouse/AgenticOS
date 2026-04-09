@@ -25,7 +25,7 @@ Homebrew does **not**:
 After installation, set `AGENTICOS_HOME` explicitly, bootstrap one officially supported agent, restart it, and verify `agenticos_list`:
 
 ```bash
-# Example workspace path
+# Example default workspace path for a Homebrew-only install
 mkdir -p "$(brew --prefix)/var/agenticos"
 export AGENTICOS_HOME="$(brew --prefix)/var/agenticos"
 
@@ -62,6 +62,10 @@ Then restart the AI tool and confirm `agenticos_list` works.
 If you prefer not to edit your shell profile, omit `--first-run` and use the explicit MCP commands below instead.
 On macOS, `--first-run` also enables `launchctl` persistence so GUI/session processes inherit `AGENTICOS_HOME`.
 Use `agenticos-bootstrap --verify` with the same flags to audit the current machine state without mutating it.
+
+`AGENTICOS_HOME` may also be a long-term self-hosting workspace home. The
+Homebrew example path above is a default example, not the only valid workspace
+layout.
 
 If you are developing AgenticOS from a source checkout, remember that `npm run build` in the repo does **not** replace the Homebrew-installed `agenticos-mcp` binary on your PATH.
 If your MCP client is registered to `agenticos-mcp`, it will keep launching the installed binary until you explicitly reinstall or upgrade that binary and restart the AI tool.

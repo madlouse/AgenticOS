@@ -35,8 +35,8 @@ Its job is to define and evolve:
 - `knowledge/switch-guardrail-evidence-implementation-report-2026-03-24.md` records the switch-surface implementation and verification
 - issue `#79` now reconciles the historical open backlog against landed self-hosting, standards, and guardrail changes
 - `knowledge/backlog-reconciliation-matrix-2026-03-24.md` records which old issues were closed, which remain open, and which required scope rewrite
-- issue `#78` now restores `/Users/jeking/dev/AgenticOS` as a clean canonical working copy aligned with `origin/main`
-- `knowledge/canonical-working-copy-cleanup-report-2026-03-24.md` records what was preserved, what was removed from the source checkout, and how the local main checkout was verified
+- issue `#78` now restores `/Users/jeking/dev/AgenticOS` as a clean canonical workspace home aligned with `origin/main`
+- `knowledge/canonical-working-copy-cleanup-report-2026-03-24.md` records what was preserved, what was removed from the product-source project, and how the local main workspace was verified
 - issue `#24` now fixes `agenticos_record` so JSON-stringified array arguments are normalized into real persisted list items instead of degrading into malformed state updates
 - `knowledge/record-array-parsing-fix-report-2026-03-24.md` records the fix, regression coverage, and verification for the restored `#24` work
 - issue `#23` now upgrades `agenticos_switch` so it returns inline actionable project context instead of only file paths
@@ -74,7 +74,7 @@ Its job is to define and evolve:
 - issue `#96` now adds one bounded first-class non-code evaluation command that validates completed rubric files and persists the latest structured evidence into project state
 - `knowledge/non-code-evaluation-command-design-2026-03-25.md` records why this issue should validate and persist rubric results rather than inventing a second scoring system
 - `knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md` records the landed command, persistence contract, and full targeted coverage result
-- issue `#104` now corrects the overreaching migration interpretation and restores the preserved visible project layout in the source checkout
+- issue `#104` now corrects the overreaching migration interpretation and restores the preserved visible project layout in the workspace home
 - `knowledge/project-layout-restoration-report-2026-03-25.md` records the root cause, verified restored paths, and the corrected repository boundary rule
 - issue `#106` now audits whether `t5t` and `okr-management` can be honestly restored from verified local evidence
 - `knowledge/missing-project-source-audit-2026-03-25.md` records that `t5t` is reconstructable from verified local sources, while `okr-management` currently only supports an external-source or archive recovery model

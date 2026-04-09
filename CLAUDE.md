@@ -91,19 +91,21 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T02:48:03.586Z
+**Last Updated**: 2026-04-09T03:17:46Z
 
-**Current Task**: Runtime release parity for installed AgenticOS (#236) (status: completed)
+**Current Task**: Workspace registry and topology truth repair (#235) (status: in_progress)
 
 **Active Items**:
-- Optionally repoint local AGENTICOS_HOME config surfaces to /opt/homebrew/var/agenticos when you want this machine to use the Homebrew workspace instead of the source checkout.
+- Normalize `projects/agenticos` metadata so the product project is truthfully marked `github_versioned`.
+- Align audit and verification scripts with the `workspace home` vs `project source` model.
+- Refresh compatibility memory surfaces so `/Users/jeking/dev/AgenticOS` is treated as the valid workspace home on this machine.
 
 **Recent Decisions**:
-- When the published GitHub Release asset digest differed from the locally packed tarball used in PR #240, the correct recovery path was to reopen #236 and land a follow-up checksum fix instead of leaving the source formula incorrect.
-- The Homebrew tap repository had to be updated in addition to the product repository because brew installs resolve from madlouse/homebrew-agenticos, not directly from AgenticOS/homebrew-tap.
-- The remaining runtime recovery block under --expected-home /opt/homebrew/var/agenticos is a local configuration choice pointing tools at the source checkout, not an installed-runtime freshness failure.
+- `AGENTICOS_HOME` identifies the workspace home; source ownership is a project-level property under `projects/<id>`.
+- `/opt/homebrew/var/agenticos` is a Homebrew default example workspace path, not the normative target for this machine.
+- Historical migration docs should distinguish temporary external-workspace mitigation from the final self-hosting model.
 
-**Next Action**: Optionally repoint local AGENTICOS_HOME config surfaces to /opt/homebrew/var/agenticos when you want this machine to use the Homebrew workspace instead of the source checkout.
+**Next Action**: Finish the coordinated script, metadata, and state-surface corrections for issue `#235`, then rerun the focused audits.
 <!-- AGENT_CONTEXT_END -->
 
 ---

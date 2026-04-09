@@ -39,7 +39,7 @@ The AgenticOS product source repository should no longer need to carry real runt
 
 Goal state:
 - source repo keeps `projects/agenticos`
-- runtime projects live in the separate live workspace rooted at `AGENTICOS_HOME`
+- runtime projects live in the workspace home rooted at `AGENTICOS_HOME`
 - fixture content is either regenerated on demand or kept as explicit fixture content with that role documented
 
 ## Extraction Sequence
@@ -53,8 +53,13 @@ Done by this plan:
 
 ### Phase 2: Prepare destination workspace
 
-Create or confirm a clean live workspace outside the product source checkout, for example:
+As a migration step, create or confirm a clean workspace home outside the
+product source project root, for example:
 - `~/AgenticOS-workspace`
+
+This external workspace example is phase-specific migration guidance, not the
+final storage model. The final target remains one workspace home with child
+projects under `projects/*`.
 
 The destination should contain:
 - `.agent-workspace/`
@@ -109,7 +114,7 @@ Recommended sequence:
 After extraction:
 - root README should describe `projects/agenticos` as the only product-source project under `projects/`
 - root AGENTS/CLAUDE guidance should stop treating remaining `projects/*` entries as part of the source tree
-- bootstrap docs should point live projects to `AGENTICOS_HOME`, not to the source checkout
+- bootstrap docs should point live projects to `AGENTICOS_HOME`, not to the product source project root
 
 ## Acceptance Judgment
 
@@ -120,4 +125,5 @@ This plan satisfies the current planning milestone for issue `#38` because it no
 - a de-tracking strategy
 - a clear target boundary between source repo and live workspace
 
-Actual filesystem extraction remains an execution step and should follow this plan rather than improvising on the live source checkout.
+Actual filesystem extraction remains an execution step and should follow this
+plan rather than improvising on the live product source project root.

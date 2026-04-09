@@ -4,11 +4,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  audit-runtime-recovery.sh --source-root /abs/path [--expected-home /abs/path]
+  audit-runtime-recovery.sh --product-source-root /abs/path [--workspace-home /abs/path]
 
 Options:
-  --source-root    AgenticOS source checkout or intended workspace root.
-  --expected-home  Optional path that local configs are expected to target.
+  --product-source-root  Product source root to audit, for example `projects/agenticos`.
+  --workspace-home       Optional workspace home that local configs are expected to target.
+  --source-root          Deprecated alias for --product-source-root.
+  --expected-home        Deprecated alias for --workspace-home.
 
 Behavior:
   - read-only audit
@@ -18,17 +20,17 @@ Behavior:
 EOF
 }
 
-SOURCE_ROOT=""
-EXPECTED_HOME=""
+PRODUCT_SOURCE_ROOT=""
+WORKSPACE_HOME=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --source-root)
-      SOURCE_ROOT="${2:-}"
+    --product-source-root|--source-root)
+      PRODUCT_SOURCE_ROOT="${2:-}"
       shift 2
       ;;
-    --expected-home)
-      EXPECTED_HOME="${2:-}"
+    --workspace-home|--expected-home)
+      WORKSPACE_HOME="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -43,23 +45,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$SOURCE_ROOT" ]]; then
+if [[ -z "$PRODUCT_SOURCE_ROOT" ]]; then
   usage >&2
   exit 64
 fi
 
-SOURCE_ROOT="$(cd "$SOURCE_ROOT" && pwd)"
-if [[ -n "$EXPECTED_HOME" ]]; then
-  EXPECTED_HOME="$(cd "$EXPECTED_HOME" && pwd)"
+PRODUCT_SOURCE_ROOT="$(cd "$PRODUCT_SOURCE_ROOT" && pwd)"
+if [[ -n "$WORKSPACE_HOME" ]]; then
+  WORKSPACE_HOME="$(cd "$WORKSPACE_HOME" && pwd)"
 fi
 
-SOURCE_ROOT="$SOURCE_ROOT" EXPECTED_HOME="$EXPECTED_HOME" node --input-type=module <<'NODE'
+PRODUCT_SOURCE_ROOT="$PRODUCT_SOURCE_ROOT" WORKSPACE_HOME="$WORKSPACE_HOME" node --input-type=module <<'NODE'
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
-const sourceRoot = resolve(process.env.SOURCE_ROOT);
-const expectedHome = process.env.EXPECTED_HOME ? resolve(process.env.EXPECTED_HOME) : null;
+const productSourceRoot = resolve(process.env.PRODUCT_SOURCE_ROOT);
+const workspaceHome = process.env.WORKSPACE_HOME ? resolve(process.env.WORKSPACE_HOME) : null;
 
 const checks = [];
 
@@ -142,14 +144,14 @@ if (configuredHomes.size === 0) {
   );
 } else {
   const configuredHome = Array.from(configuredHomes)[0];
-  const status = expectedHome && configuredHome !== expectedHome ? 'BLOCK' : 'PASS';
+  const status = workspaceHome && configuredHome !== workspaceHome ? 'BLOCK' : 'PASS';
   addCheck(
     'config-agenticos-home',
     status,
     status === 'PASS'
       ? 'all audited local config surfaces agree on one AGENTICOS_HOME value'
-      : 'audited local config surfaces point at a different AGENTICOS_HOME than the expected target',
-    { files: configResults, configured_home: configuredHome, expected_home: expectedHome },
+      : 'audited local config surfaces point at a different AGENTICOS_HOME than the expected workspace home',
+    { files: configResults, configured_home: configuredHome, workspace_home: workspaceHome },
   );
 }
 
@@ -160,47 +162,58 @@ if (!launchctl.ok || !launchctl.stdout) {
   });
 } else {
   const launchctlHome = resolve(launchctl.stdout);
-  const status = expectedHome && launchctlHome !== expectedHome ? 'BLOCK' : 'PASS';
+  const status = workspaceHome && launchctlHome !== workspaceHome ? 'BLOCK' : 'PASS';
   addCheck(
     'launchctl-agenticos-home',
     status,
     status === 'PASS'
-      ? 'launchctl AGENTICOS_HOME matches the expected target'
-      : 'launchctl AGENTICOS_HOME does not match the expected target',
-    { launchctl_home: launchctlHome, expected_home: expectedHome },
+      ? 'launchctl AGENTICOS_HOME matches the workspace home'
+      : 'launchctl AGENTICOS_HOME does not match the workspace home',
+    { launchctl_home: launchctlHome, workspace_home: workspaceHome },
   );
 }
 
-const gitRoot = run('git', ['-C', sourceRoot, 'rev-parse', '--show-toplevel']);
-if (gitRoot.ok && gitRoot.stdout === sourceRoot) {
-  if (expectedHome && expectedHome === sourceRoot) {
+const workspaceHomeCollidesWithProductSource = workspaceHome
+  ? workspaceHome === productSourceRoot || workspaceHome.startsWith(`${productSourceRoot}/`)
+  : false;
+
+const gitRoot = run('git', ['-C', productSourceRoot, 'rev-parse', '--show-toplevel']);
+if (workspaceHomeCollidesWithProductSource) {
+  addCheck(
+    'product-source-git-role',
+    'BLOCK',
+    'the workspace home is the same path as, or nested inside, the product source root',
+    { product_source_root: productSourceRoot, workspace_home: workspaceHome, git_root: gitRoot.ok ? gitRoot.stdout : null },
+  );
+} else if (gitRoot.ok && gitRoot.stdout === productSourceRoot) {
+  if (workspaceHome) {
     addCheck(
-      'source-root-git-role',
-      'BLOCK',
-      'the expected workspace home is the same path as a Git repository root, so it is not yet a safe final workspace home',
-      { source_root: sourceRoot, expected_home: expectedHome },
+      'product-source-git-role',
+      'PASS',
+      'the product source root is a Git repository root and the workspace home is separate, so project source and workspace home are distinguishable',
+      { product_source_root: productSourceRoot, workspace_home: workspaceHome },
     );
   } else {
     addCheck(
-      'source-root-git-role',
+      'product-source-git-role',
       'PASS',
-      'the source root is a Git repository root, but the expected workspace home is separate so source pollution is avoidable',
-      { source_root: sourceRoot, expected_home: expectedHome },
+      'the product source root is a Git repository root',
+      { product_source_root: productSourceRoot },
     );
   }
 } else if (gitRoot.ok) {
   addCheck(
-    'source-root-git-role',
+    'product-source-git-role',
     'WARN',
-    'the target path is inside a Git repository but is not itself the repository root',
-    { source_root: sourceRoot, git_root: gitRoot.stdout },
+    'the product source root is inside a Git repository but is not itself the repository root',
+    { product_source_root: productSourceRoot, git_root: gitRoot.stdout, workspace_home: workspaceHome },
   );
 } else {
   addCheck(
-    'source-root-git-role',
+    'product-source-git-role',
     'PASS',
-    'the target path is not currently acting as a Git repository root',
-    { source_root: sourceRoot },
+    'the product source root is not currently acting as a Git repository root',
+    { product_source_root: productSourceRoot, workspace_home: workspaceHome },
   );
 }
 
@@ -257,8 +270,10 @@ const overall = checks.some((check) => check.status === 'BLOCK')
 
 const result = {
   overall,
-  source_root: sourceRoot,
-  expected_home: expectedHome,
+  product_source_root: productSourceRoot,
+  workspace_home: workspaceHome,
+  source_root: productSourceRoot,
+  expected_home: workspaceHome,
   checks,
 };
 

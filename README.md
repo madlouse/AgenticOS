@@ -76,6 +76,10 @@ agent manually or with `agenticos-bootstrap`, restart the current client, and
 explicitly verify `agenticos_list` before assuming project-intent routing is
 working.
 
+`AGENTICOS_HOME` may be any valid workspace home, including a long-term
+self-hosting AgenticOS workspace, as long as it is not the repo root of a
+project such as `projects/agenticos`.
+
 ```bash
 export AGENTICOS_HOME=/absolute/path/to/your/workspace
 
@@ -118,5 +122,5 @@ codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ## Current Boundary Rule
 
 - `projects/agenticos/` is the only canonical AgenticOS product-source project under `projects/`
-- the workspace root is evolving toward `workspace home`, not permanent product-source Git root
+- the enclosing `AgenticOS/` path is the workspace home; product source lives under `projects/agenticos/`
 - root-level `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` currently remain as compatibility entrypoints during that migration
