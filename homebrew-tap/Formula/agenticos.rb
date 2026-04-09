@@ -1,17 +1,17 @@
 require "language/node"
 
 class Agenticos < Formula
-  desc "AI-native project management MCP server for Claude Code, Codex, Cursor, and Gemini CLI"
+  desc "AI-native project management MCP server for coding agents"
   homepage "https://github.com/madlouse/AgenticOS"
   url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.2/agenticos-mcp.tgz"
+  version "0.4.2"
   sha256 "9ccc0051cbf11ec4731d57c3765cb548e092a344520bc733e89d149a7ad27cc8"
   license "MIT"
-  version "0.4.2"
 
   depends_on "node"
 
   def install
-    system "npm", "install", *Language::Node.std_npm_install_args(libexec)
+    system "npm", "install", *std_npm_args
     bin.install_symlink Dir["#{libexec}/bin/*"]
   end
 
@@ -24,7 +24,10 @@ class Agenticos < Formula
     ohai "Add the following to your shell profile (~/.zshrc or ~/.bashrc):"
     ohai "  export AGENTICOS_HOME=\"#{var}/agenticos\""
     ohai ""
-    ohai "Then bootstrap your agent (see caveats below) and restart the tool."
+    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --first-run"
+    ohai "On macOS, first-run mode also enables launchctl persistence for GUI/session inheritance."
+    ohai "To audit the current bootstrap state without changes, use: agenticos-bootstrap --verify"
+    ohai "Or bootstrap your agent manually (see caveats below) and restart the tool."
   end
 
   def caveats
@@ -42,6 +45,12 @@ class Agenticos < Formula
 
       2. Bootstrap one officially supported agent:
 
+         Recommended helper
+           agenticos-bootstrap --workspace "#{var}/agenticos" --first-run
+
+         macOS GUI/session helper
+           agenticos-bootstrap --workspace "#{var}/agenticos" --persist-shell-env --persist-launchctl-env --apply
+
          Claude Code
            claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 
@@ -55,11 +64,11 @@ class Agenticos < Formula
                  "command": "agenticos-mcp",
                  "args": [],
                  "env": {
-                   "AGENTICOS_HOME": "#{var}/agenticos"
+                   "AGENTICOS_HOME": "/absolute/path/to/your/AgenticOS-workspace"
                  }
-               }
-             }
-           }
+                }
+              }
+            }
 
          Gemini CLI
            gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
