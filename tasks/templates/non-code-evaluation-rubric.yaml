@@ -1,0 +1,50 @@
+version: 0.1
+name: non-code-evaluation-rubric
+purpose: Evaluate protocol, documentation, design, or analysis outputs before submission.
+
+artifact:
+  path: ""
+  type: protocol_doc
+  allowed_types:
+    - protocol_doc
+    - design_doc
+    - knowledge_doc
+    - issue_draft
+    - workflow_spec
+
+goal:
+  intended_outcome: ""
+  linked_issue: ""
+
+criteria:
+  - name: goal_alignment
+    question: Does the artifact solve the stated issue rather than only improving wording?
+    pass_threshold: explicit_and_substantive
+    result: pending
+    notes: ""
+  - name: executability
+    question: Are the rules or acceptance criteria operational enough to be implemented or checked?
+    pass_threshold: contains_checks_or_pseudocode
+    result: pending
+    notes: ""
+  - name: consistency
+    question: Is the artifact consistent with current project positioning, workflow model, and adjacent standards?
+    pass_threshold: no_material_conflicts
+    result: pending
+    notes: ""
+  - name: completeness
+    question: Does the artifact cover entry conditions, core flow, edge cases, and failure states?
+    pass_threshold: all_major_sections_present
+    result: pending
+    notes: ""
+  - name: downstream_usability
+    question: Could another agent use this artifact without the original chat history?
+    pass_threshold: yes
+    result: pending
+    notes: ""
+
+evaluation:
+  method: llm_rubric_review
+  passes_required: 1
+  overall_result: pending
+  residual_risks: []

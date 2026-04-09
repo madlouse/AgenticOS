@@ -16,6 +16,14 @@ working_memory:
     - "Use the workspace-home/project-source model from #235 as the default
       assumption for future project creation, audits, and runtime recovery
       work."
+memory_contract:
+  version: 1
+  quick_start_role: project_orientation
+  state_role: operational_working_state
+  conversations_role: append_only_session_history
+  knowledge_role: durable_synthesis
+  tasks_role: execution_artifacts
+  artifacts_role: deliverables
 session:
   last_backup: 2026-04-09T07:05:32.453Z
   id: entry-refresh-2026-04-09
