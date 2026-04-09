@@ -1,0 +1,171 @@
+working_memory:
+  facts:
+    - Created tasks/triage-issue-backlog-2026-04-08.md with the local triage
+      plan and issue grouping.
+    - Created tasks/triage-issue-backlog-2026-04-08.sh as a default-dry-run
+      GitHub issue comment script and verified it with bash -n and dry-run
+      output.
+    - "Posted triage comments to issues #181 #189 #191 #214 #218 #220 #169 #187
+      #222 #224 #145 #146 #149 #151 #164 #147 #175 #177 #178 #193 #197 #198 #211
+      #215 #154 #161 #173 #174."
+    - Observed that the active workspace project was still Ghostty Optimization
+      when recording was first attempted, which reinforces the need for tighter
+      project-alignment handling in AgenticOS workflows.
+    - "Created issue #232 Bootstrap and session-start guardrail hardening."
+    - "Created issue #233 Canonicalize issue-intake boundary via
+      agenticos_issue_bootstrap."
+    - "Created issue #234 Record surface hardening."
+    - "Created issue #235 Workspace registry and topology truth repair."
+    - "Created issue #236 Runtime release parity for installed AgenticOS."
+    - "Created issue #237 Decide Agent-CLI-API support tier before
+      adapter-matrix inclusion."
+    - "Created issue #238 Agent-Friendly standards backlog reset."
+    - "Verified sample issue bodies (#232, #233, #238) after creation to confirm
+      the posted markdown was intact."
+    - "Closed issues #181 #189 #191 #214 #218 #220 with reason completed."
+    - "Closed issues #169 #187 #222 #224 with reason not planned."
+    - "Rechecked the open backlog and confirmed the remaining open set now
+      contains the rewrite/defer candidates plus the new consolidated issues
+      #232-#238."
+    - "Closed #145 and #146 as duplicates of #232."
+    - "Closed #149 and #151 as duplicates of #234."
+    - "Closed #164 as a duplicate of #233."
+    - "Closed #175 #177 #178 #193 #197 #198 #211 as duplicates of #235."
+    - "Rechecked the open backlog and confirmed that only #147 #154 #161 #173
+      #174 #215 plus the new consolidated issues #232-#238 remain open."
+    - "Closed #147 as a duplicate of #237."
+    - "Closed #154 #173 #174 as duplicates of #238."
+    - "Closed #161 as not planned in the AgenticOS core backlog."
+    - "Closed #215 as a duplicate of #236."
+    - "Rechecked the final open backlog and confirmed that only #232 #233 #234
+      #235 #236 #237 #238 remain open."
+    - Created isolated worktree
+      /Users/jeking/dev/AgenticOS/worktrees/agenticos-236-runtime-release-parity
+      on branch feat/236-runtime-release-parity.
+    - "Installed mcp-server dependencies and ran the full test suite
+      successfully: 31 test files, 236 tests passed."
+    - Generated a local agenticos-mcp-0.4.1.tgz tarball and confirmed it
+      contains build/utils/canonical-main-guard.js.
+    - Computed tarball sha256
+      8e60590011f384e7442c79ee448040c9a8dc630b5b0f7b875b205ec7b19312a6.
+    - Updated homebrew-tap/Formula/agenticos.rb to v0.4.1 with the new release
+      URL and sha256.
+    - Confirmed gh release view v0.4.1 still reports release not found, so the
+      actual published release step remains pending.
+    - "Committed chore(release): update homebrew formula to 0.4.1 on branch
+      feat/236-runtime-release-parity at commit 2c3f327."
+    - Confirmed the isolated worktree is clean after the commit.
+    - Pushed branch feat/236-runtime-release-parity to origin.
+    - "Created PR #239: chore(release): update homebrew formula to 0.4.1."
+    - Verified the PR title and body on GitHub after creation.
+    - "Posted a status update comment on issue #236 linking the branch, PR #239,
+      local verification, tarball guard verification, and remaining
+      merge/tag/release steps."
+    - Created branch feat/236-runtime-release-parity-2 from origin/main.
+    - "Reapplied the formula-only change and committed it as 549e6da
+      chore(release): update homebrew formula to 0.4.1 for #236."
+    - "Confirmed agenticos_pr_scope_check passes for issue #236 on the
+      replacement branch."
+    - "Pushed feat/236-runtime-release-parity-2 and created replacement PR #240."
+    - "Closed superseded PR #239."
+    - "PR #240 merged and release tag v0.4.1 published successfully."
+    - GitHub Release v0.4.1 now serves agenticos-mcp.tgz with digest
+      sha256:70c1edf028bef71117ad841d87724806e147dad45926bdc65e917de9bec8bed6.
+    - "PR #241 merged to correct homebrew-tap/Formula/agenticos.rb in the
+      product repo."
+    - madlouse/homebrew-agenticos was updated to formula version 0.4.1 with the
+      matching release URL and digest.
+    - Local Homebrew install now resolves /opt/homebrew/bin/agenticos-mcp at
+      version 0.4.1 and contains build/utils/canonical-main-guard.js.
+    - tools/audit-runtime-recovery.sh --source-root
+      /Users/jeking/dev/AgenticOS/projects/agenticos now reports
+      installed-runtime PASS.
+  decisions:
+    - Backlog truth is now a higher priority than further priority-ranking of
+      the raw open-issue list.
+    - Root-git exit and product-root shell work are effectively complete
+      locally, so several migration-era issues should move to close-review or
+      superseded status.
+    - The live active work should converge around bootstrap/session-start
+      hardening, issue-intake boundary tightening, record-surface hardening,
+      workspace registry/topology truth repair, and runtime release parity.
+    - The backlog should now pivot from raw open-issue sprawl toward a smaller
+      set of consolidated issues that match the current product bottlenecks.
+    - New issue creation should happen before the close/superseded pass on old
+      issues so old-to-new mapping is explicit in GitHub.
+    - Close-review issues with clearly landed implementation or docs should be
+      closed now rather than left open after the consolidation pass.
+    - Superseded migration-era cleanup issues should be closed as not planned
+      once their scope has been replaced by narrower current issues.
+    - Once the new consolidated issues existed, the old rewrite-target issues
+      should be closed as duplicates rather than left open in parallel.
+    - The backlog should now keep only the unresolved defer/release-policy old
+      issues plus the new consolidated issue set.
+    - "The old policy/defer issues should now be closed because their intent is
+      carried by #237, #238, or by deliberate not-planned closure."
+    - "The old active release issue #215 should be closed in favor of the
+      consolidated runtime parity issue #236 so the final open backlog is
+      structurally clean."
+    - "Issue #236 is now a release-parity execution issue, not a version-bump
+      issue: source and changelog were already at 0.4.1, so the needed repo
+      change is the Homebrew formula parity update."
+    - The actual GitHub release/tag step should not be forced from an unmerged
+      issue branch; the branch should carry the formula update, while release
+      publication remains a post-merge action unless explicitly requested
+      otherwise.
+    - "The repository change for #236 should stay narrowly scoped to the
+      Homebrew formula parity update; actual GitHub release publication remains
+      a separate post-merge step."
+    - "The PR for #236 should stay narrowly scoped to formula parity and clearly
+      state that real release publication remains a separate follow-up after
+      merge."
+    - "Once PR #239 existed, the issue should explicitly track the release
+      handoff steps so future work does not need to reconstruct the state from
+      the PR alone."
+    - When the PR-scope guardrail blocks on commit-subject issue linkage, the
+      clean resolution is to replace the branch/PR with a guardrail-compliant
+      commit history rather than merging through the block.
+    - "The old PR #239 should be closed and superseded once the replacement PR
+      exists."
+    - "When the published GitHub Release asset digest differed from the locally
+      packed tarball used in PR #240, the correct recovery path was to reopen
+      #236 and land a follow-up checksum fix instead of leaving the source
+      formula incorrect."
+    - The Homebrew tap repository had to be updated in addition to the product
+      repository because brew installs resolve from madlouse/homebrew-agenticos,
+      not directly from AgenticOS/homebrew-tap.
+    - The remaining runtime recovery block under --expected-home
+      /opt/homebrew/var/agenticos is a local configuration choice pointing tools
+      at the source checkout, not an installed-runtime freshness failure.
+  pending:
+    - Optionally repoint local AGENTICOS_HOME config surfaces to
+      /opt/homebrew/var/agenticos when you want this machine to use the Homebrew
+      workspace instead of the source checkout.
+session:
+  last_backup: 2026-04-09T02:48:03.586Z
+current_task:
+  title: Runtime release parity for installed AgenticOS (#236)
+  status: completed
+  updated: 2026-04-09T02:47:56.955Z
+guardrail_evidence:
+  updated_at: 2026-04-09T02:40:06.705Z
+  last_command: agenticos_branch_bootstrap
+  branch_bootstrap:
+    command: agenticos_branch_bootstrap
+    recorded_at: 2026-04-09T02:40:06.705Z
+    repo_path: /Users/jeking/dev/AgenticOS/projects/agenticos
+    issue_id: "236"
+    branch_type: fix
+    slug: runtime-release-parity-sha-fix
+    remote_base_branch: origin/main
+    requested_worktree_root: /Users/jeking/dev/AgenticOS/worktrees
+    result:
+      status: CREATED
+      branch_name: fix/236-runtime-release-parity-sha-fix
+      base_commit: 468f7eba69ca6bab36c92e81e63928d13326190a
+      worktree_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-236-runtime-release-parity-sha-fix
+      notes:
+        - created branch fix/236-runtime-release-parity-sha-fix from origin/main
+        - created isolated worktree at
+          /Users/jeking/dev/AgenticOS/worktrees/agenticos-236-runtime-release-parity-sha-fix
+      block_reasons: []

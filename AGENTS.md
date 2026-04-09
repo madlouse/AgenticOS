@@ -1,40 +1,84 @@
-# AGENTS.md — AgenticOS Product Source
+<!-- agenticos-template: v7 -->
+# AGENTS.md — AgenticOS
 
-This file is the canonical operator and implementation guide for AgenticOS product work.
+## Adapter Role
 
-If you are editing AgenticOS itself, use this file instead of relying on the workspace-root compatibility copy.
+`AGENTS.md` is the Codex/generic adapter surface for this project.
+It must expose the same canonical policy as other agent adapters rather than defining a different workflow.
 
-## Quick Start
+## Canonical Policy (Shared Across Agents)
 
-```bash
-cd projects/agenticos/mcp-server
-npm install
-npm run build
-npm test
-```
+- This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.
+- Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.
+- PR creation or merge must not happen before executable scope validation passes.
+- Recording and save flow remain canonical project requirements rather than runtime-specific preferences.
+## Codex / Generic Runtime Notes
 
-## Product-Source Map
+- If natural-language routing is weak, use explicit `agenticos_*` tool calls before treating the issue as transport failure.
+- Bootstrap differences are runtime concerns rather than policy changes.
+## Task Intake Rule
+
+- At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.
+- Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.
+- Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
+## Guardrail Protocol (MANDATORY)
+
+Implementation work must use the executable guardrail flow:
+
+1. call `agenticos_preflight` before editing
+2. if preflight returns `REDIRECT`, call `agenticos_branch_bootstrap`
+3. do not submit a PR before running `agenticos_pr_scope_check`
+
+If any guardrail returns `BLOCK`, stop and resolve the blocking reason first.
+
+## Recording Protocol (MANDATORY)
+
+This project uses AgenticOS for persistent context management.
+All session activity MUST be recorded via MCP tools.
+
+### How to Record
+
+Call the MCP tool `agenticos_record` with:
+- `summary` (required): What happened in this session
+- `decisions`: Key decisions made
+- `outcomes`: What was accomplished
+- `pending`: What remains to be done
+- `current_task`: { title, status } to update current task
+
+### When to Record
+
+1. After completing any meaningful unit of work
+2. Before ending the session (MANDATORY — context is lost otherwise)
+
+After recording, call `agenticos_save` to commit to Git.
+
+### Session Start
+
+On session start, read these files for context:
+1. `.project.yaml` — Project metadata
+2. `.context/quick-start.md` — human-readable project summary
+3. `.context/state.yaml` — Current state and working memory
+4. `.context/conversations/` — Previous session records
+
+Then greet the user with: project name, last progress, current pending items, suggested next step.
+
+## Project
+
+**Name**: AgenticOS
+**Description**: Self-hosting AgenticOS product project. Canonical operational context lives under standards/.context while the root .context files remain compatibility shims.
+
+## Directory Structure
 
 | Path | Purpose |
 |------|---------|
-| `projects/agenticos/mcp-server/src/` | MCP server source |
-| `projects/agenticos/mcp-server/src/tools/` | Tool implementations |
-| `projects/agenticos/mcp-server/src/utils/` | Shared utilities |
-| `projects/agenticos/standards/` | Standards and product-definition area |
-| `projects/agenticos/.meta/` | Templates and agent protocol guides |
-| `projects/agenticos/.meta/standard-kit/` | Downstream reusable workflow kit |
-| `projects/agenticos/homebrew-tap/` | Homebrew distribution formula |
-
-## Working Rules
-
-1. Every change starts from a GitHub issue.
-2. Use an isolated issue branch/worktree from `origin/main`.
-3. Run `agenticos_preflight` before implementation-affecting work.
-4. Run `agenticos_pr_scope_check` before opening or merging a PR.
-5. Treat `projects/agenticos/` as the canonical product-source boundary.
-
-## Canonical References
-
-- contribution flow: [CONTRIBUTING.md](CONTRIBUTING.md)
-- MCP package and install surface: [mcp-server/README.md](mcp-server/README.md)
-- standards knowledge: [standards/knowledge/](standards/knowledge/)
+| `.project.yaml` | Project metadata |
+| `.context/quick-start.md` | Quick project summary |
+| `.context/state.yaml` | Session state and working memory |
+| `.context/conversations/` | Session records (auto-generated) |
+| `knowledge/` | Persistent knowledge documents |
+| `tasks/` | Task tracking |
+| `tasks/templates/agent-preflight-checklist.yaml` | Preflight checklist template |
+| `tasks/templates/issue-design-brief.md` | Design-loop template |
+| `tasks/templates/non-code-evaluation-rubric.yaml` | Non-code evaluation rubric |
+| `tasks/templates/submission-evidence.md` | Submission evidence template |
+| `artifacts/` | Outputs and deliverables |

@@ -1,70 +1,125 @@
-# CLAUDE.md — AgenticOS Product Source
+<!-- agenticos-template: v7 -->
+# CLAUDE.md — AgenticOS
 
-> Read [AGENTS.md](AGENTS.md) first. It is the canonical development guide for
-> the AgenticOS product source. This file adds Claude Code-specific guidance on
-> top of it.
+## Adapter Role
 
-## Claude Code Workflow
+`CLAUDE.md` is the Claude Code adapter surface for this project.
+It must expose the same canonical policy as other agent adapters while allowing Claude-specific operator guidance.
 
-### Worktree Isolation
+## Canonical Policy (Shared Across Agents)
 
-All implementation work must run in isolated worktrees:
+- This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.
+- Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.
+- PR creation or merge must not happen before executable scope validation passes.
+- Recording and save flow remain canonical project requirements rather than runtime-specific preferences.
+## Claude Runtime Notes
 
-```text
-Agent(isolation: "worktree", subagent_type: "...")
+- Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.
+- Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.
+## Task Intake Rule
+
+- At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.
+- Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.
+- Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
+## Guardrail Protocol (MANDATORY)
+
+For implementation-affecting work:
+
+1. call `agenticos_preflight` before editing
+2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+3. before PR creation or merge, call `agenticos_pr_scope_check`
+
+If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
+
+## MANDATORY: Recording Protocol
+
+> This is an AgenticOS project. All session activity MUST be recorded.
+> Recording is not optional — it is the core function of this system.
+
+### During Session
+
+After completing any meaningful unit of work (feature, fix, design decision, analysis), call `agenticos_record`:
+
+```
+agenticos_record({
+  summary: "what happened",
+  decisions: ["decision 1", ...],
+  outcomes: ["outcome 1", ...],
+  pending: ["next step 1", ...],
+  current_task: { title: "task name", status: "in_progress" }
+})
 ```
 
-Treat `.claude/worktrees/` and `.runtime/` as runtime-only areas. They are not
-canonical product source.
+### Before Session Ends
 
-### Before Spawning Sub-Agents
+When the user signals session end (says goodbye, thanks, done, or stops responding), you MUST:
 
-Sub-agents start without local context. Before spawning, inject:
+1. Call `agenticos_record` with a complete session summary
+2. Call `agenticos_save` to commit to Git
 
-1. this file and [AGENTS.md](AGENTS.md)
-2. the relevant files under `standards/knowledge/`
-3. the current project state from the active AgenticOS project
+**If you skip this step, all context from this session is permanently lost.**
 
-### MCP Tools Available
+---
 
-This project is managed by AgenticOS. Use these MCP tools:
+## Session Start Protocol
 
-| Tool | When |
-|------|------|
-| `agenticos_preflight` | Before implementation or PR work to evaluate guardrail status |
-| `agenticos_branch_bootstrap` | When preflight returns `REDIRECT` and a correct issue branch/worktree must be created |
-| `agenticos_pr_scope_check` | Before opening or merging a PR to verify diff scope |
-| `agenticos_record` | After meaningful work |
-| `agenticos_save` | Before session ends |
-| `agenticos_status` | Check current project state |
+When you open this project in a new session, **immediately do the following**:
 
-### Mandatory Guardrail Sequence
+1. Read the "Current State" section below
+2. Greet the user with a brief status report:
 
-Before implementation-affecting edits:
-
-1. call `agenticos_preflight`
-2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue
-   in the returned worktree
-3. if the result is `BLOCK`, stop and resolve the block reason first
-
-Before PR submission or merge:
-
-1. call `agenticos_pr_scope_check`
-2. do not proceed if it returns `BLOCK`
-
-### Design Artifacts
-
-Persist research, design, and analysis outputs to files immediately:
-
-- research reports -> `standards/knowledge/`
-- implementation artifacts -> `standards/artifacts/`
-- reference file paths in conversation instead of pasting long inline content
-
-### Build And Verify
-
-```bash
-cd mcp-server
-npm install
-npm run build
-npm test
 ```
+📍 项目：AgenticOS
+📌 上次进展：[current_task title + status]
+🎯 当前待办：[top pending items]
+💡 建议下一步：[recommended next action]
+
+继续上次的工作，还是有新的方向？
+```
+
+3. Wait for the user's direction before proceeding
+
+---
+
+## Project DNA
+
+**一句话定位**: Self-hosting AgenticOS product project. Canonical operational context lives under standards/.context while the root .context files remain compatibility shims.
+
+**核心设计原则**: (待补充 — 在项目推进中逐步完善)
+
+**技术栈**: (待补充)
+## Current State
+
+<!-- AGENT_CONTEXT_START -->
+**Last Updated**: 2026-04-09T02:48:03.586Z
+
+**Current Task**: Runtime release parity for installed AgenticOS (#236) (status: completed)
+
+**Active Items**:
+- Optionally repoint local AGENTICOS_HOME config surfaces to /opt/homebrew/var/agenticos when you want this machine to use the Homebrew workspace instead of the source checkout.
+
+**Recent Decisions**:
+- When the published GitHub Release asset digest differed from the locally packed tarball used in PR #240, the correct recovery path was to reopen #236 and land a follow-up checksum fix instead of leaving the source formula incorrect.
+- The Homebrew tap repository had to be updated in addition to the product repository because brew installs resolve from madlouse/homebrew-agenticos, not directly from AgenticOS/homebrew-tap.
+- The remaining runtime recovery block under --expected-home /opt/homebrew/var/agenticos is a local configuration choice pointing tools at the source checkout, not an installed-runtime freshness failure.
+
+**Next Action**: Optionally repoint local AGENTICOS_HOME config surfaces to /opt/homebrew/var/agenticos when you want this machine to use the Homebrew workspace instead of the source checkout.
+<!-- AGENT_CONTEXT_END -->
+
+---
+
+## Navigation
+
+| 目录/文件 | 用途 |
+|-----------|------|
+| `.project.yaml` | 项目元信息 |
+| `.context/quick-start.md` | 快速项目概览 |
+| `.context/state.yaml` | 当前会话状态及工作记忆 |
+| `.context/conversations/` | 会话记录（自动生成） |
+| `knowledge/` | 持久化知识文档 |
+| `tasks/` | 任务追踪 |
+| `tasks/templates/agent-preflight-checklist.yaml` | preflight 模板 |
+| `tasks/templates/issue-design-brief.md` | 设计循环模板 |
+| `tasks/templates/non-code-evaluation-rubric.yaml` | 非代码评估模板 |
+| `tasks/templates/submission-evidence.md` | 提交证据模板 |
+| `artifacts/` | 产出物 |
