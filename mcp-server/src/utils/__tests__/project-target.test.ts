@@ -378,8 +378,11 @@ describe('resolveManagedProjectContextPaths', () => {
     expect(resolveManagedProjectContextPaths('/workspace/alpha', {})).toEqual({
       quickStartPath: '/workspace/alpha/.context/quick-start.md',
       statePath: '/workspace/alpha/.context/state.yaml',
-      conversationsDir: '/workspace/alpha/.context/conversations',
+      conversationsDir: '/workspace/alpha/.context/conversations/',
       markerPath: '/workspace/alpha/.context/.last_record',
+      knowledgeDir: '/workspace/alpha/knowledge/',
+      tasksDir: '/workspace/alpha/tasks/',
+      artifactsDir: '/workspace/alpha/artifacts/',
     });
   });
 });

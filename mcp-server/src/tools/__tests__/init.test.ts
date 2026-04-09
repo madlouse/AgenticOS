@@ -91,7 +91,7 @@ describe('initProject', () => {
     await initProject({ name: 'Test Project', description: 'A test project', topology: 'local_directory_only' });
 
     // Collect all mkdir calls
-    const mkdirCalls = fsPromisesMock.mkdir.mock.calls.map((c) => c[0]);
+    const mkdirCalls = fsPromisesMock.mkdir.mock.calls.map((c) => String(c[0]).replace(/\/$/, ''));
 
     // The project path is: /home/testuser/AgenticOS/projects/test-project
     // We expect mkdir for: .context/conversations, knowledge, tasks, artifacts
