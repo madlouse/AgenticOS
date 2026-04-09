@@ -7,16 +7,16 @@ Self-hosting AgenticOS product project. Canonical operational context lives unde
 ## Current Status
 
 - **Status**: aligned
-- **Last Action**: Issue #248 merged — Workspace topology truth and downstream standard-kit conformance are both normalized on main after PRs #243 and #249.
-- **Current Focus**: AgenticOS now treats AGENTICOS_HOME as workspace home, projects/<id> as the project root, and downstream standard-kit conformance as restored for the self-hosting product project.
+- **Last Action**: Issue #250 merged — Canonical context path handling now honors configured agent_context across refresh, generated adapters, and self-hosting entry surfaces after PR #251.
+- **Current Focus**: AgenticOS canonical operational context is declared by .project.yaml.agent_context and now consistently renders as standards/.context/* for the self-hosting project.
 - **Resume Here**: Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
-- **Refreshed At**: 2026-04-09T07:21:27.101Z
+- **Refreshed At**: 2026-04-09T11:02:22.835Z
 
 ## Key Facts
-- PR #243 merged at commit e3343973199c1c911a291339a346d073d93756f7.
-- PR #249 merged at commit ffa98bdcb5b55dc0fa1ab22308fb75d82cff6e43.
-- Issue #235 and issue #248 are both closed.
-- agenticos_standard_kit_conformance_check now passes on the main checkout.
+- PR #251 merged at commit 3ef00a93954b4cdd5f59a64d111b69da372139fc.
+- Issue #250 is closed.
+- Full mcp-server test suite and lint pass after the canonical context alignment changes.
+- The self-hosting AGENTS.md and CLAUDE.md now point at standards/.context/* rather than root .context/*.
 
 ## Latest Landed Reports
 

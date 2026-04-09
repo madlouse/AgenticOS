@@ -1,16 +1,18 @@
 working_memory:
   facts:
-    - "PR #243 merged at commit e3343973199c1c911a291339a346d073d93756f7."
-    - "PR #249 merged at commit ffa98bdcb5b55dc0fa1ab22308fb75d82cff6e43."
-    - "Issue #235 and issue #248 are both closed."
-    - agenticos_standard_kit_conformance_check now passes on the main checkout.
+    - "PR #251 merged at commit 3ef00a93954b4cdd5f59a64d111b69da372139fc."
+    - "Issue #250 is closed."
+    - Full mcp-server test suite and lint pass after the canonical context
+      alignment changes.
+    - The self-hosting AGENTS.md and CLAUDE.md now point at standards/.context/*
+      rather than root .context/*.
   decisions:
-    - "Preserve the #235 workspace-home versus project-source model while
-      repairing downstream standard-kit drift."
-    - Restore missing task templates from the canonical standard-kit source
-      rather than inventing project-local variants.
-    - Keep the root compatibility state truthful by carrying the memory-layer
-      contract alongside the canonical standards state surfaces.
+    - Treat configured agent_context paths as the source of truth for entry
+      surfaces and generated adapter navigation.
+    - Use root .context paths only as defaults or compatibility shims when a
+      project does not declare alternate canonical paths.
+    - Keep generated adapter templates versioned so canonical path contract
+      changes force truthful regeneration.
   pending:
     - "Use the workspace-home/project-source model from #235 as the default
       assumption for future project creation, audits, and runtime recovery
@@ -24,15 +26,15 @@ memory_contract:
   tasks_role: execution_artifacts
   artifacts_role: deliverables
 session:
-  last_backup: 2026-04-09T08:53:11.381Z
+  last_backup: 2026-04-09T11:02:33.430Z
   id: entry-refresh-2026-04-09
   started: 2026-04-09T07:04:48.483Z
   agent: agenticos-entry-refresh
-  last_entry_surface_refresh: 2026-04-09T07:21:27.101Z
+  last_entry_surface_refresh: 2026-04-09T11:02:22.835Z
 current_task:
-  title: Repair AgenticOS standard-kit conformance drift (#248)
+  title: Align canonical context paths with configured agent_context (#250)
   status: completed
-  updated: 2026-04-09T07:21:27.101Z
+  updated: 2026-04-09T11:02:22.835Z
   next_step: "Use the workspace-home/project-source model from #235 as the default
     assumption for future project creation, audits, and runtime recovery work."
 guardrail_evidence:
@@ -99,14 +101,15 @@ loaded_context:
   - standards/knowledge/workspace-migration-runbook-2026-04-07.md
   - standards/knowledge/runtime-project-extraction-plan-2026-03-23.md
 entry_surface_refresh:
-  refreshed_at: 2026-04-09T07:21:27.101Z
-  issue_id: "248"
-  summary: "Workspace topology truth and downstream standard-kit conformance are
-    both normalized on main after PRs #243 and #249."
+  refreshed_at: 2026-04-09T11:02:22.835Z
+  issue_id: "250"
+  summary: "Canonical context path handling now honors configured agent_context
+    across refresh, generated adapters, and self-hosting entry surfaces after PR
+    #251."
   status: aligned
-  current_focus: AgenticOS now treats AGENTICOS_HOME as workspace home,
-    projects/<id> as the project root, and downstream standard-kit conformance
-    as restored for the self-hosting product project.
+  current_focus: AgenticOS canonical operational context is declared by
+    .project.yaml.agent_context and now consistently renders as
+    standards/.context/* for the self-hosting project.
   report_paths:
     - standards/knowledge/workspace-home-vs-project-source-model-2026-04-07.md
     - standards/knowledge/workspace-migration-runbook-2026-04-07.md

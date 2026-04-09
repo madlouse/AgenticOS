@@ -1,4 +1,4 @@
-<!-- agenticos-template: v8 -->
+<!-- agenticos-template: v7 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -91,16 +91,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T10:48:19.305Z
+**Last Updated**: 2026-04-09T11:02:33.430Z
 
-**Current Task**: No active task (status: unknown)
+**Current Task**: Align canonical context paths with configured agent_context (#250) (status: completed)
 
 **Active Items**:
-- Define project goals
-- Set up initial tasks
+- Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
 
+**Recent Decisions**:
+- Treat configured agent_context paths as the source of truth for entry surfaces and generated adapter navigation.
+- Use root .context paths only as defaults or compatibility shims when a project does not declare alternate canonical paths.
+- Keep generated adapter templates versioned so canonical path contract changes force truthful regeneration.
 
-**Next Action**: Define project goals
+**Next Action**: Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
 <!-- AGENT_CONTEXT_END -->
 
 ---
