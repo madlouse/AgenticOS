@@ -91,7 +91,7 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T11:02:33.430Z
+**Last Updated**: 2026-04-09T11:07:14.948Z
 
 **Current Task**: Align canonical context paths with configured agent_context (#250) (status: completed)
 

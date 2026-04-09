@@ -26,7 +26,7 @@ memory_contract:
   tasks_role: execution_artifacts
   artifacts_role: deliverables
 session:
-  last_backup: 2026-04-09T11:02:33.430Z
+  last_backup: 2026-04-09T11:07:14.948Z
   id: entry-refresh-2026-04-09
   started: 2026-04-09T07:04:48.483Z
   agent: agenticos-entry-refresh
@@ -38,62 +38,44 @@ current_task:
   next_step: "Use the workspace-home/project-source model from #235 as the default
     assumption for future project creation, audits, and runtime recovery work."
 guardrail_evidence:
-  updated_at: 2026-04-09T07:15:38.346Z
-  last_command: agenticos_preflight
-  preflight:
-    command: agenticos_preflight
-    recorded_at: 2026-04-09T07:15:38.346Z
-    repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-248-standard-kit-conformance-drift
-    issue_id: "248"
-    project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
-    task_type: implementation
+  updated_at: 2026-04-09T10:50:29.733Z
+  last_command: agenticos_pr_scope_check
+  pr_scope_check:
+    command: agenticos_pr_scope_check
+    recorded_at: 2026-04-09T10:50:29.733Z
+    repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-250-canonical-context-path-alignment
+    issue_id: "250"
+    remote_base_branch: origin/main
     declared_target_files:
-      - .context/state.yaml
-      - tasks/templates/agent-preflight-checklist.yaml
-      - tasks/templates/issue-design-brief.md
-      - tasks/templates/non-code-evaluation-rubric.yaml
-      - tasks/templates/sub-agent-handoff.md
-      - tasks/templates/global-review-log.md
-      - tasks/templates/submission-evidence.md
-    structural_move: false
-    worktree_required: true
-    root_scoped_exceptions:
-      - .github/
-    clean_reproducibility_gate: []
+      - AGENTS.md
+      - CLAUDE.md
+      - mcp-server/README.md
+      - mcp-server/src/index.ts
+      - mcp-server/src/tools/init.ts
+      - mcp-server/src/tools/project.ts
+      - mcp-server/src/tools/__tests__/standard-kit.test.ts
+      - mcp-server/src/utils/agent-context-paths.ts
+      - mcp-server/src/utils/distill.ts
+      - mcp-server/src/utils/entry-surface-refresh.ts
+      - mcp-server/src/utils/project-target.ts
+      - mcp-server/src/utils/standard-kit.ts
+      - mcp-server/src/utils/__tests__/distill.test.ts
+      - mcp-server/src/utils/__tests__/entry-surface-refresh.test.ts
+    expected_issue_scope: align canonical context path writes and generated adapter
+      surfaces with configured agent_context
     result:
       status: PASS
-      summary: preflight passed
-      repo_identity_confirmed: true
+      summary: pr scope check passed
+      commit_count: 0
+      changed_files: []
+      unexpected_files: []
+      unrelated_commit_subjects: []
       branch_ancestry_verified: true
-      branch_based_on_intended_remote: true
-      worktree_ok: true
-      scope_ok: true
-      reproducibility_gate_defined: true
+      remote_base_branch: origin/main
+      branch_fork_point: db7a0a0500ac3b9ee3862dc3e32ec8f240e54a82
+      expected_issue_scope: align canonical context path writes and generated adapter
+        surfaces with configured agent_context
       block_reasons: []
-      redirect_actions: []
-      evidence:
-        current_branch: fix/248-standard-kit-conformance-drift
-        active_project: agenticos
-        target_project_id: agenticos
-        target_project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
-        target_project_yaml_path: /Users/jeking/dev/AgenticOS/projects/agenticos/.project.yaml
-        declared_source_repo_roots:
-          - /Users/jeking/dev/AgenticOS/projects/agenticos
-        git_worktree_root: /Users/jeking/dev/AgenticOS/worktrees/agenticos-248-standard-kit-conformance-drift
-        git_common_dir: /Users/jeking/dev/AgenticOS/projects/agenticos/.git
-        git_common_repo_root: /Users/jeking/dev/AgenticOS/projects/agenticos
-        git_remote_origin: https://github.com/madlouse/AgenticOS.git
-        current_head: 8ccd00f5dbbd326ed3d240ecd87524eb36f23cbf
-        remote_base_branch: origin/main
-        remote_base_head: 8ccd00f5dbbd326ed3d240ecd87524eb36f23cbf
-        branch_fork_point: 8ccd00f5dbbd326ed3d240ecd87524eb36f23cbf
-        workspace_type: isolated_worktree
-        commit_subjects_since_base: []
-        issue_bootstrap:
-          recorded_at: 2026-04-09T07:15:20.304Z
-          issue_id: "248"
-          repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-248-standard-kit-conformance-drift
-          current_branch: fix/248-standard-kit-conformance-drift
 loaded_context:
   - .project.yaml
   - .context/quick-start.md
