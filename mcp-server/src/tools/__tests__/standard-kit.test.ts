@@ -241,8 +241,8 @@ describe('standard kit commands', () => {
 
     const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
-    expect(agentsMd).toContain('agenticos-template: v7');
-    expect(claudeMd).toContain('agenticos-template: v7');
+    expect(agentsMd).toContain('agenticos-template: v8');
+    expect(claudeMd).toContain('agenticos-template: v8');
     expect(agentsMd).toContain('## Task Intake Rule');
     expect(claudeMd).toContain('recover operator intent');
   });
@@ -314,7 +314,7 @@ describe('standard kit commands', () => {
     expect(result.created_files).toContain('.project.yaml');
 
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('agenticos-template: v7');
+    expect(claudeMd).toContain('agenticos-template: v8');
     expect(claudeMd).toContain('custom dna');
     expect(claudeMd).toContain('## Current State');
   });
@@ -324,7 +324,7 @@ describe('standard kit commands', () => {
     process.env.AGENTICOS_HOME = home;
 
     await writeFile(join(projectRoot, 'AGENTS.md'), generateAgentsMd('Sample Project', ''), 'utf-8');
-    await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- agenticos-template: v7 -->\ncurrent claude\n', 'utf-8');
+    await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- agenticos-template: v8 -->\ncurrent claude\n', 'utf-8');
 
     const result = JSON.parse(await runStandardKitUpgradeCheck({ project_path: projectRoot })) as {
       generated_files: Array<{ path: string; status: string; current_version: number | null }>;
@@ -332,11 +332,11 @@ describe('standard kit commands', () => {
 
     expect(result.generated_files.find((item) => item.path === 'AGENTS.md')).toMatchObject({
       status: 'current',
-      current_version: 7,
+      current_version: 8,
     });
     expect(result.generated_files.find((item) => item.path === 'CLAUDE.md')).toMatchObject({
       status: 'current',
-      current_version: 7,
+      current_version: 8,
     });
   });
 
@@ -499,7 +499,7 @@ describe('standard kit commands', () => {
 
     expect(result.upgraded_generated_files).toContain('AGENTS.md');
     const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
-    expect(agentsMd).toContain('agenticos-template: v7');
+    expect(agentsMd).toContain('agenticos-template: v8');
     expect(agentsMd).toContain('Guardrail Protocol');
   });
 

@@ -4,6 +4,7 @@ import yaml from 'yaml';
 import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
 import { buildProjectTopologyInitializationMessage, type ProjectTopology } from '../utils/project-contract.js';
+import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 
 function isValidGithubRepo(value: string): boolean {
   return /^[^/\s]+\/[^/\s]+$/.test(value);
@@ -131,11 +132,6 @@ export async function initProject(args: any): Promise<string> {
     await saveRegistry(registry);
   }
 
-  await mkdir(join(projectPath, '.context', 'conversations'), { recursive: true });
-  await mkdir(join(projectPath, 'knowledge'), { recursive: true });
-  await mkdir(join(projectPath, 'tasks'), { recursive: true });
-  await mkdir(join(projectPath, 'artifacts'), { recursive: true });
-
   const existingProjectYaml = pathExists ? await loadExistingProjectYaml(projectPath) : {};
   const today = new Date().toISOString().split('T')[0];
   const projectYaml = buildProjectYaml({
@@ -147,6 +143,13 @@ export async function initProject(args: any): Promise<string> {
     githubRepo,
   });
   await writeFile(join(projectPath, '.project.yaml'), yaml.stringify(projectYaml), 'utf-8');
+  const contextPaths = resolveManagedProjectContextPaths(projectPath, projectYaml);
+  const contextDisplayPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
+
+  await mkdir(contextPaths.conversationsDir, { recursive: true });
+  await mkdir(contextPaths.knowledgeDir, { recursive: true });
+  await mkdir(contextPaths.tasksDir, { recursive: true });
+  await mkdir(contextPaths.artifactsDir, { recursive: true });
 
   const stateYaml = {
     session: {
@@ -160,9 +163,9 @@ export async function initProject(args: any): Promise<string> {
       decisions: [],
       pending: [],
     },
-    loaded_context: ['.project.yaml', '.context/quick-start.md'],
+    loaded_context: ['.project.yaml', contextDisplayPaths.quickStartPath],
   };
-  await writeFile(join(projectPath, '.context', 'state.yaml'), yaml.stringify(stateYaml), 'utf-8');
+  await writeFile(contextPaths.statePath, yaml.stringify(stateYaml), 'utf-8');
 
   const quickStart = `# ${name} - Quick Start
 
@@ -178,12 +181,12 @@ ${description ?? existingProjectYaml?.meta?.description ?? ''}
 2. Set up initial tasks
 3. Begin development
 `;
-  await writeFile(join(projectPath, '.context', 'quick-start.md'), quickStart, 'utf-8');
+  await writeFile(contextPaths.quickStartPath, quickStart, 'utf-8');
 
-  const claudeMd = generateClaudeMd(name, description ?? existingProjectYaml?.meta?.description ?? '');
+  const claudeMd = generateClaudeMd(name, description ?? existingProjectYaml?.meta?.description ?? '', undefined, contextDisplayPaths);
   await writeFile(join(projectPath, 'CLAUDE.md'), claudeMd, 'utf-8');
 
-  const agentsMd = generateAgentsMd(name, description ?? existingProjectYaml?.meta?.description ?? '');
+  const agentsMd = generateAgentsMd(name, description ?? existingProjectYaml?.meta?.description ?? '', contextDisplayPaths);
   await writeFile(join(projectPath, 'AGENTS.md'), agentsMd, 'utf-8');
 
   const projectEntry = {

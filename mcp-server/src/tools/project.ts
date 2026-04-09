@@ -8,6 +8,7 @@ import { writeFile } from 'fs/promises';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
 import { type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
+import { resolveManagedProjectContextDisplayPaths } from '../utils/agent-context-paths.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -253,6 +254,7 @@ export async function switchProject(args: any): Promise<string> {
   let quickStart = '';
   description = projectYaml?.meta?.description || '';
   const contextPaths = resolveManagedProjectContextPaths(found.path, projectYaml);
+  const contextDisplayPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
   try {
     state = yaml.parse(await readFile(contextPaths.statePath, 'utf-8'));
   } catch {}
@@ -262,26 +264,26 @@ export async function switchProject(args: any): Promise<string> {
 
   // CLAUDE.md: create if missing, upgrade if stale template version
   if (!existsSync(claudeMdPath)) {
-    await writeFile(claudeMdPath, generateClaudeMd(found.name, description, state), 'utf-8');
+    await writeFile(claudeMdPath, generateClaudeMd(found.name, description, state, contextDisplayPaths), 'utf-8');
     bootstrapNotes.push('📝 CLAUDE.md created');
   } else {
     const existingContent = await readFile(claudeMdPath, 'utf-8');
     const existingVersion = extractTemplateVersion(existingContent);
     if (existingVersion < CURRENT_TEMPLATE_VERSION) {
-      await writeFile(claudeMdPath, upgradeClaudeMd(claudeMdPath, found.name, description, state), 'utf-8');
+      await writeFile(claudeMdPath, upgradeClaudeMd(claudeMdPath, found.name, description, state, contextDisplayPaths), 'utf-8');
       bootstrapNotes.push(`📝 CLAUDE.md upgraded: v${existingVersion} → v${CURRENT_TEMPLATE_VERSION} (user content preserved)`);
     }
   }
 
   // AGENTS.md: create if missing, upgrade if stale
   if (!existsSync(agentsMdPath)) {
-    await writeFile(agentsMdPath, generateAgentsMd(found.name, description), 'utf-8');
+    await writeFile(agentsMdPath, generateAgentsMd(found.name, description, contextDisplayPaths), 'utf-8');
     bootstrapNotes.push('📝 AGENTS.md created');
   } else {
     const existingContent = await readFile(agentsMdPath, 'utf-8');
     const existingVersion = extractTemplateVersion(existingContent);
     if (existingVersion < CURRENT_TEMPLATE_VERSION) {
-      await writeFile(agentsMdPath, generateAgentsMd(found.name, description), 'utf-8');
+      await writeFile(agentsMdPath, generateAgentsMd(found.name, description, contextDisplayPaths), 'utf-8');
       bootstrapNotes.push(`📝 AGENTS.md upgraded: v${existingVersion} → v${CURRENT_TEMPLATE_VERSION}`);
     }
   }

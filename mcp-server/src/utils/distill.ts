@@ -1,14 +1,37 @@
 import { readFile, writeFile } from 'fs/promises';
 import { readFileSync } from 'fs';
+import { joinDisplayPath, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
 
 /**
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 7;
+export const CURRENT_TEMPLATE_VERSION = 8;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
+
+const DEFAULT_AGENT_CONTEXT_PATHS: ManagedProjectContextDisplayPaths = {
+  quickStartPath: '.context/quick-start.md',
+  statePath: '.context/state.yaml',
+  conversationsDir: '.context/conversations/',
+  markerPath: '.context/.last_record',
+  knowledgeDir: 'knowledge/',
+  tasksDir: 'tasks/',
+  artifactsDir: 'artifacts/',
+};
+
+function normalizeAgentContextPaths(paths?: Partial<ManagedProjectContextDisplayPaths>): ManagedProjectContextDisplayPaths {
+  return {
+    quickStartPath: paths?.quickStartPath || DEFAULT_AGENT_CONTEXT_PATHS.quickStartPath,
+    statePath: paths?.statePath || DEFAULT_AGENT_CONTEXT_PATHS.statePath,
+    conversationsDir: paths?.conversationsDir || DEFAULT_AGENT_CONTEXT_PATHS.conversationsDir,
+    markerPath: paths?.markerPath || DEFAULT_AGENT_CONTEXT_PATHS.markerPath,
+    knowledgeDir: paths?.knowledgeDir || DEFAULT_AGENT_CONTEXT_PATHS.knowledgeDir,
+    tasksDir: paths?.tasksDir || DEFAULT_AGENT_CONTEXT_PATHS.tasksDir,
+    artifactsDir: paths?.artifactsDir || DEFAULT_AGENT_CONTEXT_PATHS.artifactsDir,
+  };
+}
 
 export const SHARED_POLICY_TITLE = 'Canonical Policy (Shared Across Agents)';
 export const SHARED_POLICY_BULLETS = [
@@ -82,7 +105,14 @@ function renderRuntimeGuidanceSection(title: string, bullets: readonly string[])
 // AGENTS.md template
 // ---------------------------------------------------------------------------
 
-export function generateAgentsMd(name: string, description: string): string {
+export function generateAgentsMd(
+  name: string,
+  description: string,
+  paths?: Partial<ManagedProjectContextDisplayPaths>,
+): string {
+  const contextPaths = normalizeAgentContextPaths(paths);
+  const taskTemplatesDir = joinDisplayPath(contextPaths.tasksDir, 'templates');
+
   return `${VERSION_MARKER}
 # AGENTS.md — ${name}
 
@@ -126,9 +156,9 @@ After recording, call \`agenticos_save\` to commit to Git.
 
 On session start, read these files for context:
 1. \`.project.yaml\` — Project metadata
-2. \`.context/quick-start.md\` — human-readable project summary
-3. \`.context/state.yaml\` — Current state and working memory
-4. \`.context/conversations/\` — Previous session records
+2. \`${contextPaths.quickStartPath}\` — human-readable project summary
+3. \`${contextPaths.statePath}\` — Current state and working memory
+4. \`${contextPaths.conversationsDir}\` — Previous session records
 
 Then greet the user with: project name, last progress, current pending items, suggested next step.
 
@@ -142,16 +172,16 @@ Then greet the user with: project name, last progress, current pending items, su
 | Path | Purpose |
 |------|---------|
 | \`.project.yaml\` | Project metadata |
-| \`.context/quick-start.md\` | Quick project summary |
-| \`.context/state.yaml\` | Session state and working memory |
-| \`.context/conversations/\` | Session records (auto-generated) |
-| \`knowledge/\` | Persistent knowledge documents |
-| \`tasks/\` | Task tracking |
-| \`tasks/templates/agent-preflight-checklist.yaml\` | Preflight checklist template |
-| \`tasks/templates/issue-design-brief.md\` | Design-loop template |
-| \`tasks/templates/non-code-evaluation-rubric.yaml\` | Non-code evaluation rubric |
-| \`tasks/templates/submission-evidence.md\` | Submission evidence template |
-| \`artifacts/\` | Outputs and deliverables |
+| \`${contextPaths.quickStartPath}\` | Quick project summary |
+| \`${contextPaths.statePath}\` | Session state and working memory |
+| \`${contextPaths.conversationsDir}\` | Session records (auto-generated) |
+| \`${contextPaths.knowledgeDir}\` | Persistent knowledge documents |
+| \`${contextPaths.tasksDir}\` | Task tracking |
+| \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | Preflight checklist template |
+| \`${joinDisplayPath(taskTemplatesDir, 'issue-design-brief.md')}\` | Design-loop template |
+| \`${joinDisplayPath(taskTemplatesDir, 'non-code-evaluation-rubric.yaml')}\` | Non-code evaluation rubric |
+| \`${joinDisplayPath(taskTemplatesDir, 'submission-evidence.md')}\` | Submission evidence template |
+| \`${contextPaths.artifactsDir}\` | Outputs and deliverables |
 `;
 }
 
@@ -212,7 +242,15 @@ function extractUserContent(content: string): ExtractedUserContent {
   };
 }
 
-function buildClaudeMdContent(name: string, description: string, state?: StateYaml, userContent?: ExtractedUserContent): string {
+function buildClaudeMdContent(
+  name: string,
+  description: string,
+  state?: StateYaml,
+  userContent?: ExtractedUserContent,
+  paths?: Partial<ManagedProjectContextDisplayPaths>,
+): string {
+  const contextPaths = normalizeAgentContextPaths(paths);
+  const taskTemplatesDir = joinDisplayPath(contextPaths.tasksDir, 'templates');
   const stateSection = state
     ? buildStateSection(state)
     : buildStateSection({ session: { last_backup: new Date().toISOString() }, current_task: null, working_memory: { facts: [], decisions: [], pending: ['Define project goals', 'Set up initial tasks'] } });
@@ -223,7 +261,7 @@ function buildClaudeMdContent(name: string, description: string, state?: StateYa
 
   const nav = userContent?.navigation
     ? `## Navigation\n\n${userContent.navigation}\n`
-    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`.context/quick-start.md\` | 快速项目概览 |\n| \`.context/state.yaml\` | 当前会话状态及工作记忆 |\n| \`.context/conversations/\` | 会话记录（自动生成） |\n| \`knowledge/\` | 持久化知识文档 |\n| \`tasks/\` | 任务追踪 |\n| \`tasks/templates/agent-preflight-checklist.yaml\` | preflight 模板 |\n| \`tasks/templates/issue-design-brief.md\` | 设计循环模板 |\n| \`tasks/templates/non-code-evaluation-rubric.yaml\` | 非代码评估模板 |\n| \`tasks/templates/submission-evidence.md\` | 提交证据模板 |\n| \`artifacts/\` | 产出物 |\n`;
+    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`${contextPaths.quickStartPath}\` | 快速项目概览 |\n| \`${contextPaths.statePath}\` | 当前会话状态及工作记忆 |\n| \`${contextPaths.conversationsDir}\` | 会话记录（自动生成） |\n| \`${contextPaths.knowledgeDir}\` | 持久化知识文档 |\n| \`${contextPaths.tasksDir}\` | 任务追踪 |\n| \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | preflight 模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'issue-design-brief.md')}\` | 设计循环模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'non-code-evaluation-rubric.yaml')}\` | 非代码评估模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'submission-evidence.md')}\` | 提交证据模板 |\n| \`${contextPaths.artifactsDir}\` | 产出物 |\n`;
 
   return `${VERSION_MARKER}
 # CLAUDE.md — ${name}
@@ -304,14 +342,25 @@ ${STATE_END}
 ${nav}`;
 }
 
-export function generateClaudeMd(name: string, description: string, state?: StateYaml): string {
-  return buildClaudeMdContent(name, description, state);
+export function generateClaudeMd(
+  name: string,
+  description: string,
+  state?: StateYaml,
+  paths?: Partial<ManagedProjectContextDisplayPaths>,
+): string {
+  return buildClaudeMdContent(name, description, state, undefined, paths);
 }
 
 /** Upgrade an existing CLAUDE.md to current template version, preserving user content. */
-export function upgradeClaudeMd(claudeMdPath: string, name: string, description: string, state?: StateYaml): string {
+export function upgradeClaudeMd(
+  claudeMdPath: string,
+  name: string,
+  description: string,
+  state?: StateYaml,
+  paths?: Partial<ManagedProjectContextDisplayPaths>,
+): string {
   const content = readFileSync(claudeMdPath, 'utf-8');
-  return buildClaudeMdContent(name, description, state, extractUserContent(content));
+  return buildClaudeMdContent(name, description, state, extractUserContent(content), paths);
 }
 
 // ---------------------------------------------------------------------------

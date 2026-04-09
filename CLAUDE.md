@@ -1,4 +1,4 @@
-<!-- agenticos-template: v7 -->
+<!-- agenticos-template: v8 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -91,19 +91,16 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T08:53:11.381Z
+**Last Updated**: 2026-04-09T10:48:19.305Z
 
-**Current Task**: Repair AgenticOS standard-kit conformance drift (#248) (status: completed)
+**Current Task**: No active task (status: unknown)
 
 **Active Items**:
-- Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
+- Define project goals
+- Set up initial tasks
 
-**Recent Decisions**:
-- Preserve the #235 workspace-home versus project-source model while repairing downstream standard-kit drift.
-- Restore missing task templates from the canonical standard-kit source rather than inventing project-local variants.
-- Keep the root compatibility state truthful by carrying the memory-layer contract alongside the canonical standards state surfaces.
 
-**Next Action**: Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
+**Next Action**: Define project goals
 <!-- AGENT_CONTEXT_END -->
 
 ---
@@ -113,9 +110,9 @@ When you open this project in a new session, **immediately do the following**:
 | 目录/文件 | 用途 |
 |-----------|------|
 | `.project.yaml` | 项目元信息 |
-| `.context/quick-start.md` | 快速项目概览 |
-| `.context/state.yaml` | 当前会话状态及工作记忆 |
-| `.context/conversations/` | 会话记录（自动生成） |
+| `standards/.context/quick-start.md` | 快速项目概览 |
+| `standards/.context/state.yaml` | 当前会话状态及工作记忆 |
+| `standards/.context/conversations/` | 会话记录（自动生成） |
 | `knowledge/` | 持久化知识文档 |
 | `tasks/` | 任务追踪 |
 | `tasks/templates/agent-preflight-checklist.yaml` | preflight 模板 |

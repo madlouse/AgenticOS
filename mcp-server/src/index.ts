@@ -269,7 +269,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_refresh_entry_surfaces',
-      description: 'Deterministically refresh .context/quick-start.md and .context/state.yaml from structured merged-work inputs.',
+      description: 'Deterministically refresh the configured quick-start and state paths from structured merged-work inputs, honoring .project.yaml agent_context when present.',
       inputSchema: {
         type: 'object',
         properties: {
