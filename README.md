@@ -31,12 +31,16 @@ exit:
 
 ## Quick Start
 
+Requires: node.js >= 20.0.0
+
 ```bash
 cd mcp-server
 npm install
 npm run build
 npm test
 ```
+
+Verify with `cd mcp-server && npm test` and confirm all tests pass.
 
 ## Supported Integration Modes
 
@@ -80,6 +84,8 @@ working.
 self-hosting AgenticOS workspace, as long as it is not the repo root of a
 project such as `projects/agenticos`.
 
+Requires: Node.js >= 20.0.0 for local build and packaged runtime workflows.
+
 ```bash
 export AGENTICOS_HOME=/absolute/path/to/your/workspace
 
@@ -89,6 +95,9 @@ claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME
 codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
 ```
+
+Verify with `agenticos-mcp --version`, then restart the target MCP client and
+confirm `agenticos_list` succeeds.
 
 For Cursor, add `agenticos` with explicit `env.AGENTICOS_HOME` to
 `~/.cursor/mcp.json`, then restart Cursor and verify `agenticos_list`.
