@@ -43,8 +43,14 @@ The current implementation can detect legacy state, but it cannot yet:
 - recover cleanly from an interrupted apply
 - define a trustworthy switch-time lazy-repair boundary
 
-That means `#263` currently proves where migration is needed, but not how to
-repair a project safely.
+That phase-2 gap has now been partially closed:
+
+- deterministic planning is implemented
+- deterministic per-project apply is implemented
+- migration evidence is written additively
+
+What still remains open is broader structural apply beyond the currently
+implemented deterministic action set.
 
 ## Critical Findings
 

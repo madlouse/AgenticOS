@@ -1,9 +1,9 @@
 import { createHash } from 'crypto';
-import { readFile } from 'fs/promises';
-import { basename, isAbsolute, join, resolve as resolveFsPath } from 'path';
+import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
+import { basename, dirname, isAbsolute, join, resolve as resolveFsPath } from 'path';
 import yaml from 'yaml';
 import { resolveManagedProjectContextPaths } from './agent-context-paths.js';
-import { getAgenticOSHome, loadRegistry, resolvePath, type Project, type Registry } from './registry.js';
+import { getAgenticOSHome, loadRegistry, patchRegistry, resolvePath, type Project, type Registry } from './registry.js';
 import { runMigrationAuditCheck, type MigrationAuditResult } from './migration-audit.js';
 
 type ApplyScope = 'safe_repairs_only' | 'full';
@@ -82,7 +82,7 @@ export interface MigrationProjectPlanResult {
   mode: 'plan';
   status: PlanStatus;
   apply_scope: ApplyScope;
-  apply_supported: false;
+  apply_supported: true;
   project: MigrationAuditResult['project'];
   audit_status: MigrationAuditResult['status'] | 'BLOCK';
   audit_finding_counts: MigrationAuditResult['finding_counts'];
@@ -97,14 +97,31 @@ export interface MigrationProjectPlanResult {
   notes: string[];
 }
 
-export interface MigrationProjectApplyStubResult {
+export interface MigrationProjectApplyResult {
   command: 'agenticos_migrate_project';
   mode: 'apply';
-  status: 'BLOCK';
+  status: 'APPLIED' | 'BLOCK';
   apply_scope: ApplyScope;
-  apply_supported: false;
+  apply_supported: true;
+  project: MigrationAuditResult['project'];
+  applied_plan_hash: string | null;
+  applied_actions: MigrationAction[];
+  deferred_findings: MigrationDeferredFinding[];
+  manual_blocks: MigrationManualBlock[];
+  evidence_paths: string[];
+  post_audit_status: MigrationAuditResult['status'] | 'BLOCK';
   block_reasons: string[];
   notes: string[];
+}
+
+interface ResolvedPlan {
+  audit: MigrationAuditResult;
+  plannedActions: MigrationAction[];
+  deferredFindings: MigrationDeferredFinding[];
+  manualBlocks: MigrationManualBlock[];
+  preconditions: MigrationPlanPreconditions | null;
+  planHash: string | null;
+  status: PlanStatus;
 }
 
 function registryFilePath(): string {
@@ -244,6 +261,14 @@ function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function emptyCounts(): MigrationAuditResult['finding_counts'] {
+  return {
+    compatible_only: 0,
+    safe_lazy_repair: 0,
+    explicit_migration_required: 0,
+  };
+}
+
 async function digestFileOrMarker(filePath: string): Promise<string> {
   try {
     return digest(await readFile(filePath, 'utf-8'));
@@ -296,6 +321,78 @@ async function buildPreconditions(
 
 function buildStateSurfacePath(projectPath: string): string {
   return join(projectPath, '.context', 'state.yaml');
+}
+
+function buildDefaultState(): any {
+  return {
+    session: {},
+    current_task: {
+      id: null,
+      title: null,
+      status: 'pending',
+      next_step: null,
+    },
+    working_memory: {
+      facts: [],
+      decisions: [],
+      pending: [],
+    },
+    memory_contract: {
+      version: 1,
+      quick_start_role: 'project_orientation',
+      state_role: 'operational_working_state',
+      conversations_role: 'append_only_session_history',
+      knowledge_role: 'durable_synthesis',
+      tasks_role: 'execution_artifacts',
+      artifacts_role: 'deliverables',
+    },
+    loaded_context: ['.project.yaml'],
+  };
+}
+
+async function readYamlFileOrDefault(filePath: string, fallback: any): Promise<any> {
+  try {
+    return yaml.parse(await readFile(filePath, 'utf-8')) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, content, 'utf-8');
+  await rename(tempPath, filePath);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withProjectMigrationLock<T>(projectPath: string, callback: () => Promise<T>): Promise<T> {
+  const lockPath = join(projectPath, '.context', '.migration.lock');
+  await mkdir(dirname(lockPath), { recursive: true });
+
+  let locked = false;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await mkdir(lockPath);
+      locked = true;
+      break;
+    } catch {
+      await sleep(10);
+    }
+  }
+
+  if (!locked) {
+    throw new Error(`failed to acquire project migration lock at ${lockPath}`);
+  }
+
+  try {
+    return await callback();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 function buildActions(audit: MigrationAuditResult, applyScope: ApplyScope): {
@@ -445,52 +542,10 @@ function buildPlanHash(
   }));
 }
 
-export async function runMigrationProjectPlan(args: any): Promise<MigrationProjectPlanResult | MigrationProjectApplyStubResult> {
-  const mode = args?.mode === 'apply' ? 'apply' : 'plan';
-  const applyScope: ApplyScope = args?.apply_scope === 'safe_repairs_only' ? 'safe_repairs_only' : 'full';
-
-  if (mode === 'apply') {
-    return {
-      command: 'agenticos_migrate_project',
-      mode: 'apply',
-      status: 'BLOCK',
-      apply_scope: applyScope,
-      apply_supported: false,
-      block_reasons: ['apply mode is not implemented yet; use mode=plan to review the deterministic migration plan in the current #263 slice.'],
-      notes: [],
-    };
-  }
-
-  const resolved = await resolveMigrationCandidate(args ?? {});
-  if (!resolved.candidate) {
-    return {
-      command: 'agenticos_migrate_project',
-      mode: 'plan',
-      status: 'BLOCK',
-      apply_scope: applyScope,
-      apply_supported: false,
-      project: null,
-      audit_status: 'BLOCK',
-      audit_finding_counts: {
-        compatible_only: 0,
-        safe_lazy_repair: 0,
-        explicit_migration_required: 0,
-      },
-      safe_to_continue_without_migration: false,
-      plan_hash: null,
-      apply_ready: false,
-      planned_actions: [],
-      deferred_findings: [],
-      manual_blocks: [],
-      preconditions: null,
-      block_reasons: resolved.blockReasons,
-      notes: ['No writes occurred. Plan mode requires an explicit project selector in the current phase-2 slice.'],
-    };
-  }
-
-  const audit = await runMigrationAuditCheck({ project_path: resolved.candidate.projectPath });
+async function resolvePlan(candidate: MigrationCandidate, applyScope: ApplyScope): Promise<ResolvedPlan> {
+  const audit = await runMigrationAuditCheck({ project_path: candidate.projectPath });
   const { plannedActions, deferredFindings, manualBlocks } = buildActions(audit, applyScope);
-  const preconditions = await buildPreconditions(resolved.candidate, audit, applyScope);
+  const preconditions = await buildPreconditions(candidate, audit, applyScope);
   const planHash = buildPlanHash(audit, applyScope, plannedActions, deferredFindings, manualBlocks, preconditions);
 
   const status: PlanStatus = manualBlocks.length > 0
@@ -500,11 +555,25 @@ export async function runMigrationProjectPlan(args: any): Promise<MigrationProje
       : 'NOOP';
 
   return {
+    audit,
+    plannedActions,
+    deferredFindings,
+    manualBlocks,
+    preconditions,
+    planHash,
+    status,
+  };
+}
+
+function buildPlanModeResult(resolved: ResolvedPlan, applyScope: ApplyScope): MigrationProjectPlanResult {
+  const { audit, plannedActions, deferredFindings, manualBlocks, preconditions, planHash, status } = resolved;
+
+  return {
     command: 'agenticos_migrate_project',
     mode: 'plan',
     status,
     apply_scope: applyScope,
-    apply_supported: false,
+    apply_supported: true,
     project: audit.project,
     audit_status: audit.status,
     audit_finding_counts: audit.finding_counts,
@@ -527,4 +596,306 @@ export async function runMigrationProjectPlan(args: any): Promise<MigrationProje
       ...(status === 'NOOP' ? ['No writes occurred. The current project has no deterministic migration actions in this phase-2 slice.'] : []),
     ],
   };
+}
+
+async function applyResolvedPlan(
+  candidate: MigrationCandidate,
+  resolved: ResolvedPlan,
+  applyScope: ApplyScope,
+): Promise<MigrationProjectApplyResult> {
+  if (!resolved.audit.project || !candidate.registryEntry) {
+    return {
+      command: 'agenticos_migrate_project',
+      mode: 'apply',
+      status: 'BLOCK',
+      apply_scope: applyScope,
+      apply_supported: true,
+      project: resolved.audit.project,
+      applied_plan_hash: resolved.planHash,
+      applied_actions: [],
+      deferred_findings: resolved.deferredFindings,
+      manual_blocks: resolved.manualBlocks,
+      evidence_paths: [],
+      post_audit_status: 'BLOCK',
+      block_reasons: ['The target project identity is not proven enough for apply mode.'],
+      notes: [],
+    };
+  }
+
+  const projectYaml = yaml.parse(await readFile(join(candidate.projectPath, '.project.yaml'), 'utf-8')) || {};
+  const contextPaths = resolveManagedProjectContextPaths(candidate.projectPath, projectYaml);
+  const statePath = contextPaths.statePath;
+  const artifactsDir = contextPaths.artifactsDir;
+  const appliedAt = new Date().toISOString();
+  const reportFileName = `migration-${appliedAt.replace(/[:.]/g, '-')}.yaml`;
+  const reportPath = join(artifactsDir, 'migrations', reportFileName);
+  const reportDisplayPath = reportPath.startsWith(`${candidate.projectPath}/`)
+    ? reportPath.substring(candidate.projectPath.length + 1)
+    : reportPath;
+
+  const appliedActions: MigrationAction[] = [];
+
+  const hasAction = (id: string): boolean =>
+    resolved.plannedActions.some((action) => action.id === id);
+
+  if (hasAction('state.rebuild_missing_surface')) {
+    const existingState = await readYamlFileOrDefault(statePath, null);
+    const nextState = existingState && typeof existingState === 'object'
+      ? existingState
+      : buildDefaultState();
+    await writeFileAtomic(statePath, yaml.stringify(nextState));
+    appliedActions.push(resolved.plannedActions.find((action) => action.id === 'state.rebuild_missing_surface')!);
+  }
+
+  const needsRegistryPatch =
+    hasAction('registry.clear_legacy_active_project') ||
+    hasAction('registry.normalize_project_path') ||
+    hasAction('registry.backfill_last_accessed');
+
+  if (needsRegistryPatch) {
+    await patchRegistry(async (registry) => {
+      const projectIndex = registry.projects.findIndex((project) => project.id === candidate.registryEntry!.id);
+      if (projectIndex < 0) {
+        throw new Error(`Project "${candidate.registryEntry!.id}" not found in registry during apply.`);
+      }
+
+      if (hasAction('registry.clear_legacy_active_project')) {
+        registry.active_project = null;
+      }
+
+      if (hasAction('registry.normalize_project_path')) {
+        registry.projects[projectIndex] = {
+          ...registry.projects[projectIndex],
+          path: candidate.projectPath,
+        };
+      }
+
+      if (hasAction('registry.backfill_last_accessed')) {
+        registry.projects[projectIndex] = {
+          ...registry.projects[projectIndex],
+          last_accessed: appliedAt,
+        };
+      }
+    });
+
+    for (const actionId of [
+      'registry.backfill_last_accessed',
+      'registry.clear_legacy_active_project',
+      'registry.normalize_project_path',
+    ]) {
+      const action = resolved.plannedActions.find((candidateAction) => candidateAction.id === actionId);
+      if (action) {
+        appliedActions.push(action);
+      }
+    }
+  }
+
+  const state = await readYamlFileOrDefault(statePath, buildDefaultState());
+  if (!state.migrations || typeof state.migrations !== 'object') {
+    state.migrations = {};
+  }
+  const existingReports = Array.isArray(state.migrations.reports) ? state.migrations.reports : [];
+  state.migrations.latest = {
+    applied_at: appliedAt,
+    plan_hash: resolved.planHash,
+    apply_scope: applyScope,
+    report_path: reportDisplayPath,
+    applied_action_ids: appliedActions.map((action) => action.id),
+  };
+  state.migrations.reports = [
+    ...existingReports,
+    {
+      applied_at: appliedAt,
+      plan_hash: resolved.planHash,
+      report_path: reportDisplayPath,
+    },
+  ];
+  await writeFileAtomic(statePath, yaml.stringify(state));
+
+  const report = {
+    command: 'agenticos_migrate_project',
+    applied_at: appliedAt,
+    project: resolved.audit.project,
+    apply_scope: applyScope,
+    plan_hash: resolved.planHash,
+    applied_actions: appliedActions.map((action) => ({
+      id: action.id,
+      actionability: action.actionability,
+      action_type: action.action_type,
+      summary: action.summary,
+      target_paths: action.target_paths,
+    })),
+    deferred_findings: resolved.deferredFindings,
+    manual_blocks: resolved.manualBlocks,
+  };
+  await writeFileAtomic(reportPath, yaml.stringify(report));
+
+  const postAudit = await runMigrationAuditCheck({ project_path: candidate.projectPath });
+
+  return {
+    command: 'agenticos_migrate_project',
+    mode: 'apply',
+    status: 'APPLIED',
+    apply_scope: applyScope,
+    apply_supported: true,
+    project: postAudit.project,
+    applied_plan_hash: resolved.planHash,
+    applied_actions: appliedActions,
+    deferred_findings: postAudit.findings
+      .filter((finding) => finding.migration_class === 'compatible_only')
+      .map((finding) => ({
+        code: finding.code,
+        actionability: 'defer_only' as const,
+        summary: finding.summary,
+        reason: finding.recommended_action,
+      })),
+    manual_blocks: [],
+    evidence_paths: [statePath, reportPath],
+    post_audit_status: postAudit.status,
+    block_reasons: [],
+    notes: [
+      ...postAudit.notes,
+      'Apply mode executed deterministic per-project migration actions only.',
+    ],
+  };
+}
+
+export async function runMigrationProjectPlan(args: any): Promise<MigrationProjectPlanResult | MigrationProjectApplyResult> {
+  const mode = args?.mode === 'apply' ? 'apply' : 'plan';
+  const applyScope: ApplyScope = args?.apply_scope === 'safe_repairs_only' ? 'safe_repairs_only' : 'full';
+
+  const resolved = await resolveMigrationCandidate(args ?? {});
+  if (!resolved.candidate) {
+    const planResult: MigrationProjectPlanResult = {
+      command: 'agenticos_migrate_project',
+      mode: 'plan',
+      status: 'BLOCK',
+      apply_scope: applyScope,
+      apply_supported: true,
+      project: null,
+      audit_status: 'BLOCK',
+      audit_finding_counts: emptyCounts(),
+      safe_to_continue_without_migration: false,
+      plan_hash: null,
+      apply_ready: false,
+      planned_actions: [],
+      deferred_findings: [],
+      manual_blocks: [],
+      preconditions: null,
+      block_reasons: resolved.blockReasons,
+      notes: ['No writes occurred. Plan mode requires an explicit project selector in the current phase-2 slice.'],
+    };
+    if (mode === 'apply') {
+      return {
+        command: 'agenticos_migrate_project',
+        mode: 'apply',
+        status: 'BLOCK',
+        apply_scope: applyScope,
+        apply_supported: true,
+        project: null,
+        applied_plan_hash: null,
+        applied_actions: [],
+        deferred_findings: [],
+        manual_blocks: [],
+        evidence_paths: [],
+        post_audit_status: 'BLOCK',
+        block_reasons: resolved.blockReasons,
+        notes: ['No writes occurred. Apply mode requires an explicit project selector in the current phase-2 slice.'],
+      };
+    }
+    return planResult;
+  }
+
+  const resolvedPlan = await resolvePlan(resolved.candidate, applyScope);
+
+  if (mode === 'plan') {
+    return buildPlanModeResult(resolvedPlan, applyScope);
+  }
+
+  const expectedPlanHash = typeof args?.expected_plan_hash === 'string' && args.expected_plan_hash.trim().length > 0
+    ? args.expected_plan_hash.trim()
+    : null;
+
+  if (!expectedPlanHash) {
+    return {
+      command: 'agenticos_migrate_project',
+      mode: 'apply',
+      status: 'BLOCK',
+      apply_scope: applyScope,
+      apply_supported: true,
+      project: resolvedPlan.audit.project,
+      applied_plan_hash: resolvedPlan.planHash,
+      applied_actions: [],
+      deferred_findings: resolvedPlan.deferredFindings,
+      manual_blocks: resolvedPlan.manualBlocks,
+      evidence_paths: [],
+      post_audit_status: 'BLOCK',
+      block_reasons: ['expected_plan_hash is required for apply mode.'],
+      notes: [],
+    };
+  }
+
+  if (resolvedPlan.planHash && resolvedPlan.planHash !== expectedPlanHash) {
+    return {
+      command: 'agenticos_migrate_project',
+      mode: 'apply',
+      status: 'BLOCK',
+      apply_scope: applyScope,
+      apply_supported: true,
+      project: resolvedPlan.audit.project,
+      applied_plan_hash: resolvedPlan.planHash,
+      applied_actions: [],
+      deferred_findings: resolvedPlan.deferredFindings,
+      manual_blocks: resolvedPlan.manualBlocks,
+      evidence_paths: [],
+      post_audit_status: 'BLOCK',
+      block_reasons: ['The reviewed plan hash no longer matches the current deterministic migration plan. Rerun mode=plan and review the new plan before applying.'],
+      notes: [],
+    };
+  }
+
+  if (resolvedPlan.status !== 'READY' || !resolvedPlan.planHash) {
+    return {
+      command: 'agenticos_migrate_project',
+      mode: 'apply',
+      status: 'BLOCK',
+      apply_scope: applyScope,
+      apply_supported: true,
+      project: resolvedPlan.audit.project,
+      applied_plan_hash: resolvedPlan.planHash,
+      applied_actions: [],
+      deferred_findings: resolvedPlan.deferredFindings,
+      manual_blocks: resolvedPlan.manualBlocks,
+      evidence_paths: [],
+      post_audit_status: 'BLOCK',
+      block_reasons: [
+        ...resolvedPlan.audit.block_reasons,
+        ...resolvedPlan.manualBlocks.map((block) => `${block.code}: ${block.reason}`),
+      ],
+      notes: ['Apply mode is only available when plan mode returns READY.'],
+    };
+  }
+
+  try {
+    return await withProjectMigrationLock(resolved.candidate.projectPath, async () =>
+      await applyResolvedPlan(resolved.candidate!, resolvedPlan, applyScope)
+    );
+  } catch (error: any) {
+    return {
+      command: 'agenticos_migrate_project',
+      mode: 'apply',
+      status: 'BLOCK',
+      apply_scope: applyScope,
+      apply_supported: true,
+      project: resolvedPlan.audit.project,
+      applied_plan_hash: resolvedPlan.planHash,
+      applied_actions: [],
+      deferred_findings: resolvedPlan.deferredFindings,
+      manual_blocks: resolvedPlan.manualBlocks,
+      evidence_paths: [],
+      post_audit_status: 'BLOCK',
+      block_reasons: [error instanceof Error ? error.message : 'migration apply failed'],
+      notes: [],
+    };
+  }
 }

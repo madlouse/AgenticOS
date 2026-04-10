@@ -35,5 +35,12 @@ Current decision:
 - keep historical evidence additive by default rather than rewriting it
 - defer home-wide apply, schema rename, and orphan discovery
 
+Current implementation status:
+
+- deterministic `plan` is implemented
+- guarded per-project `apply` is implemented for the current deterministic
+  actions
+- broader structural apply and home-wide mutation are still deferred
+
 For the full rationale, command contract, concurrency model, and rollout
 recommendation, use the technical review document above as the canonical source.

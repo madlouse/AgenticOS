@@ -366,15 +366,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_migrate_project',
-      description: 'Build a deterministic per-project migration plan. The current phase-2 slice is plan-only and blocks apply mode.',
+      description: 'Build or apply a deterministic per-project migration plan. Apply is limited to the currently supported deterministic actions and requires expected_plan_hash.',
       inputSchema: {
         type: 'object',
         properties: {
           project_path: { type: 'string', description: 'Explicit project path to migrate.' },
           project: { type: 'string', description: 'Managed project id, name, or path when project_path is not provided.' },
-          mode: { type: 'string', enum: ['plan', 'apply'], description: 'Migration execution mode. The current phase-2 slice supports plan only.' },
-          apply_scope: { type: 'string', enum: ['safe_repairs_only', 'full'], description: 'Planned apply scope. The current phase-2 slice uses this only to shape the deterministic plan output.' },
-          expected_plan_hash: { type: 'string', description: 'Reserved for future apply mode. Not yet honored because apply is not implemented.' },
+          mode: { type: 'string', enum: ['plan', 'apply'], description: 'Migration execution mode.' },
+          apply_scope: { type: 'string', enum: ['safe_repairs_only', 'full'], description: 'Apply scope. The current phase-2 slice supports deterministic per-project actions only.' },
+          expected_plan_hash: { type: 'string', description: 'Required for apply mode. Must match the reviewed deterministic plan.' },
         },
       },
     },

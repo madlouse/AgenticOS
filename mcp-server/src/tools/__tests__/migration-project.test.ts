@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import yaml from 'yaml';
@@ -173,17 +173,39 @@ describe('migration project planner', () => {
     expect(result.block_reasons[0]).toContain('requires an explicit project');
   });
 
-  it('fails closed for apply mode in the current phase-2 slice', async () => {
+  it('requires expected_plan_hash for apply mode', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'agenticos-migrate-project-'));
+    process.env.AGENTICOS_HOME = home;
+
+    const projectRoot = await createProject(home, 'apply-project', {
+      name: 'Apply Project',
+    });
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: 'apply-project',
+      projects: [
+        {
+          id: 'apply-project',
+          name: 'Apply Project',
+          path: projectRoot,
+          status: 'active',
+          created: '2026-04-10',
+        },
+      ],
+    });
+
     const result = JSON.parse(await runMigrateProject({
       mode: 'apply',
-      project: 'anything',
+      project: 'apply-project',
     })) as {
       status: string;
       block_reasons: string[];
     };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons[0]).toContain('apply mode is not implemented yet');
+    expect(result.block_reasons[0]).toContain('expected_plan_hash is required');
   });
 
   it('supports safe_repairs_only planning scope', async () => {
@@ -224,5 +246,185 @@ describe('migration project planner', () => {
     expect(result.apply_scope).toBe('safe_repairs_only');
     expect(result.preconditions?.apply_scope).toBe('safe_repairs_only');
     expect(result.planned_actions.every((action) => action.actionability === 'safe_repair')).toBe(true);
+  });
+
+  it('applies deterministic safe repairs and writes migration evidence', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'agenticos-migrate-project-'));
+    process.env.AGENTICOS_HOME = home;
+
+    const projectRoot = await createProject(home, 'apply-project', {
+      name: 'Apply Project',
+      stateYaml: {
+        session: {},
+        working_memory: { facts: [], decisions: [], pending: [] },
+      },
+    });
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: 'apply-project',
+      projects: [
+        {
+          id: 'apply-project',
+          name: 'Apply Project',
+          path: projectRoot,
+          status: 'active',
+          created: '2026-04-10',
+        },
+      ],
+    });
+
+    const planned = JSON.parse(await runMigrateProject({
+      project: 'apply-project',
+      mode: 'plan',
+    })) as {
+      status: string;
+      plan_hash: string;
+    };
+
+    const applied = JSON.parse(await runMigrateProject({
+      project: 'apply-project',
+      mode: 'apply',
+      expected_plan_hash: planned.plan_hash,
+    })) as {
+      status: string;
+      applied_actions: Array<{ id: string }>;
+      evidence_paths: string[];
+      post_audit_status: string;
+    };
+
+    const registry = yaml.parse(await readFile(join(home, '.agent-workspace', 'registry.yaml'), 'utf-8')) as any;
+    const state = yaml.parse(await readFile(join(projectRoot, '.context', 'state.yaml'), 'utf-8')) as any;
+    const reportPath = applied.evidence_paths.find((path) => path.includes('/artifacts/migrations/'));
+    if (!reportPath) {
+      throw new Error('expected migration report path to be written');
+    }
+    const report = yaml.parse(await readFile(reportPath, 'utf-8')) as any;
+
+    expect(applied.status).toBe('APPLIED');
+    expect(applied.applied_actions.map((action) => action.id)).toEqual([
+      'registry.backfill_last_accessed',
+      'registry.clear_legacy_active_project',
+      'registry.normalize_project_path',
+    ]);
+    expect(applied.post_audit_status).toBe('PASS');
+    expect(registry.active_project).toBeNull();
+    expect(registry.projects[0].path).toBe('projects/apply-project');
+    expect(typeof registry.projects[0].last_accessed).toBe('string');
+    expect(state.migrations.latest.report_path).toContain('artifacts/migrations/');
+    expect(report.plan_hash).toBe(planned.plan_hash);
+    expect(report.applied_actions).toHaveLength(3);
+  });
+
+  it('blocks apply when the reviewed plan hash is stale', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'agenticos-migrate-project-'));
+    process.env.AGENTICOS_HOME = home;
+
+    const projectRoot = await createProject(home, 'stale-project', {
+      name: 'Stale Project',
+    });
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: 'stale-project',
+      projects: [
+        {
+          id: 'stale-project',
+          name: 'Stale Project',
+          path: projectRoot,
+          status: 'active',
+          created: '2026-04-10',
+        },
+      ],
+    });
+
+    const planned = JSON.parse(await runMigrateProject({
+      project: 'stale-project',
+      mode: 'plan',
+    })) as {
+      plan_hash: string;
+    };
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: null,
+      projects: [
+        {
+          id: 'stale-project',
+          name: 'Stale Project',
+          path: 'projects/stale-project',
+          status: 'active',
+          created: '2026-04-10',
+          last_accessed: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const applied = JSON.parse(await runMigrateProject({
+      project: 'stale-project',
+      mode: 'apply',
+      expected_plan_hash: planned.plan_hash,
+    })) as {
+      status: string;
+      block_reasons: string[];
+    };
+
+    expect(applied.status).toBe('BLOCK');
+    expect(applied.block_reasons[0]).toContain('plan hash no longer matches');
+  });
+
+  it('rebuilds a missing state surface during apply when the plan is ready', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'agenticos-migrate-project-'));
+    process.env.AGENTICOS_HOME = home;
+
+    const projectRoot = await createProject(home, 'stateful-project', {
+      name: 'Stateful Project',
+    });
+    await rm(join(projectRoot, '.context', 'state.yaml'));
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: null,
+      projects: [
+        {
+          id: 'stateful-project',
+          name: 'Stateful Project',
+          path: 'projects/stateful-project',
+          status: 'active',
+          created: '2026-04-10',
+          last_accessed: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const planned = JSON.parse(await runMigrateProject({
+      project: 'stateful-project',
+      mode: 'plan',
+    })) as {
+      status: string;
+      plan_hash: string;
+      planned_actions: Array<{ id: string }>;
+    };
+
+    const applied = JSON.parse(await runMigrateProject({
+      project: 'stateful-project',
+      mode: 'apply',
+      expected_plan_hash: planned.plan_hash,
+    })) as {
+      status: string;
+      evidence_paths: string[];
+    };
+
+    const state = yaml.parse(await readFile(join(projectRoot, '.context', 'state.yaml'), 'utf-8')) as any;
+
+    expect(planned.status).toBe('READY');
+    expect(planned.planned_actions.map((action) => action.id)).toContain('state.rebuild_missing_surface');
+    expect(applied.status).toBe('APPLIED');
+    expect(state.memory_contract.version).toBe(1);
+    expect(applied.evidence_paths).toContain(join(projectRoot, '.context', 'state.yaml'));
   });
 });

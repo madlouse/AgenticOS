@@ -367,23 +367,33 @@ Build a deterministic per-project migration plan for a legacy managed project.
 **Parameters**:
 - `project_path` (optional) - Explicit project path to migrate
 - `project` (optional) - Managed project id, name, or path when `project_path` is not provided
-- `mode` (optional) - `plan` or `apply`; the current phase-2 slice supports `plan` only
+- `mode` (optional) - `plan` or `apply`
 - `apply_scope` (optional) - `safe_repairs_only` or `full`
-- `expected_plan_hash` (optional) - Reserved for future apply mode
+- `expected_plan_hash` (optional) - Required for `mode=apply`
 
-**Returns**: JSON with `READY`, `BLOCK`, or `NOOP`, plus deterministic planned actions, manual blocks, and a `plan_hash`
+**Returns**: JSON with:
+- `READY`, `BLOCK`, or `NOOP` in `mode=plan`
+- `APPLIED` or `BLOCK` in `mode=apply`
 
 Current behavior:
 - requires an explicit `project` or `project_path`
 - does not use session fallback
 - builds a deterministic plan from the current audit state
+- supports guarded per-project `apply` for the currently implemented deterministic actions
 - separates:
   - planned actions
   - deferred compatible-only findings
   - manual blocks
-- exposes a stable `plan_hash` and preconditions for the future apply path
-- blocks `mode=apply` in the current phase-2 slice
-- does not write project or registry state
+- exposes a stable `plan_hash` and preconditions
+- `mode=apply` requires `expected_plan_hash`
+- `mode=apply` writes:
+  - project-local migration evidence
+  - latest migration summary pointer in state
+  - patch-based registry repairs for supported deterministic actions
+- current `apply` scope is still intentionally narrow:
+  - no home-wide apply
+  - no orphan discovery
+  - no structural guessing for ambiguous identity/topology cases
 
 ### agenticos_migrate_home
 Generate a registry-backed legacy-project migration inventory across one `AGENTICOS_HOME`.
@@ -397,7 +407,7 @@ Current behavior:
 - report-only
 - scans managed projects currently registered in the home registry without mutating them
 - highlights blocked projects explicitly instead of skipping them silently
-- is intended to be the operator-first inventory step before any future explicit migration command
+- is intended to be the operator-first inventory step before explicit per-project migration
 
 ### agenticos_refresh_entry_surfaces
 Deterministically refresh the configured quick-start and state paths from structured merged-work inputs, honoring `.project.yaml.agent_context` when present and defaulting to root `.context/*` otherwise.
