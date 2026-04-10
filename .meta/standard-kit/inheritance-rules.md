@@ -18,6 +18,7 @@ Implication:
 - conversations stay append-only
 - knowledge stays synthesized
 - tasks stay future-facing
+- `.project.yaml` must also declare the context publication policy that governs whether raw conversation history is allowed in tracked source for the project class
 
 ## Rule 1: Generated Files vs Copied Templates
 

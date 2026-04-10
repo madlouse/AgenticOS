@@ -3,17 +3,46 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
-import { buildProjectTopologyInitializationMessage, type ProjectTopology } from '../utils/project-contract.js';
+import { buildProjectTopologyInitializationMessage, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 
 function isValidGithubRepo(value: string): boolean {
   return /^[^/\s]+\/[^/\s]+$/.test(value);
 }
 
-function resolveTopologyArgs(args: any): { topology: ProjectTopology; githubRepo?: string; normalizeExisting: boolean } {
+function resolveContextPublicationPolicy(
+  topology: ProjectTopology,
+  rawPolicy: unknown,
+  existingProjectYaml?: any,
+): ContextPublicationPolicy {
+  const policy = typeof rawPolicy === 'string' ? rawPolicy.trim() : '';
+  const existingPolicy = typeof existingProjectYaml?.source_control?.context_publication_policy === 'string'
+    ? existingProjectYaml.source_control.context_publication_policy.trim()
+    : '';
+  const resolvedPolicy = policy || existingPolicy;
+
+  if (topology === 'local_directory_only') {
+    if (!resolvedPolicy) return 'local_private';
+    if (resolvedPolicy !== 'local_private') {
+      throw new Error('context_publication_policy must be "local_private" when topology is "local_directory_only".');
+    }
+    return 'local_private';
+  }
+
+  if (resolvedPolicy !== 'private_continuity' && resolvedPolicy !== 'public_distilled') {
+    throw new Error('context_publication_policy is required when topology is "github_versioned" and must be "private_continuity" or "public_distilled".');
+  }
+
+  return resolvedPolicy;
+}
+
+function resolveTopologyArgs(args: any): { topology: ProjectTopology; rawContextPublicationPolicy?: string; githubRepo?: string; normalizeExisting: boolean } {
   const topology = typeof args.topology === 'string' ? args.topology.trim() : '';
   const githubRepo = typeof args.github_repo === 'string' ? args.github_repo.trim() : '';
   const normalizeExisting = args.normalize_existing === true;
+  const rawContextPublicationPolicy = typeof args.context_publication_policy === 'string'
+    ? args.context_publication_policy
+    : undefined;
 
   if (topology !== 'local_directory_only' && topology !== 'github_versioned') {
     throw new Error('topology is required and must be "local_directory_only" or "github_versioned".');
@@ -26,10 +55,14 @@ function resolveTopologyArgs(args: any): { topology: ProjectTopology; githubRepo
     if (!isValidGithubRepo(githubRepo)) {
       throw new Error('github_repo must use the form "OWNER/REPO".');
     }
-    return { topology, githubRepo, normalizeExisting };
+    return { topology, rawContextPublicationPolicy, githubRepo, normalizeExisting };
   }
 
-  return { topology, normalizeExisting };
+  return {
+    topology,
+    rawContextPublicationPolicy,
+    normalizeExisting,
+  };
 }
 
 async function loadExistingProjectYaml(projectPath: string): Promise<any> {
@@ -46,9 +79,10 @@ function buildProjectYaml(args: {
   description?: string;
   existingProjectYaml?: any;
   topology: ProjectTopology;
+  contextPublicationPolicy: ContextPublicationPolicy;
   githubRepo?: string;
 }): any {
-  const { name, id, description, existingProjectYaml = {}, topology, githubRepo } = args;
+  const { name, id, description, existingProjectYaml = {}, topology, contextPublicationPolicy, githubRepo } = args;
   const today = new Date().toISOString().split('T')[0];
   const meta = existingProjectYaml?.meta || {};
   const merged: any = {
@@ -63,6 +97,7 @@ function buildProjectYaml(args: {
     },
     source_control: {
       topology,
+      context_publication_policy: contextPublicationPolicy,
       ...(topology === 'github_versioned'
         ? {
             github_repo: githubRepo,
@@ -96,7 +131,7 @@ function buildProjectYaml(args: {
 export async function initProject(args: any): Promise<string> {
   const { name, path: customPath } = args;
   const description = typeof args.description === 'string' ? args.description : undefined;
-  const { topology, githubRepo, normalizeExisting } = resolveTopologyArgs(args);
+  const { topology, rawContextPublicationPolicy, githubRepo, normalizeExisting } = resolveTopologyArgs(args);
   const id = name.toLowerCase().replace(/\s+/g, '-');
 
   const projectPath = customPath || join(getAgenticOSHome(), 'projects', id);
@@ -118,6 +153,10 @@ export async function initProject(args: any): Promise<string> {
     if (!existingProjectYaml?.source_control?.topology) {
       return buildProjectTopologyInitializationMessage(name);
     }
+    const publicationValidation = validateContextPublicationPolicy(name, existingProjectYaml);
+    if (!publicationValidation.ok) {
+      return `${publicationValidation.message} Re-run agenticos_init with normalize_existing=true and the intended topology/publication contract.`;
+    }
     registry.active_project = id;
     await saveRegistry(registry);
     return `Project '${name}' already exists at ${projectPath}. Use \`agenticos_switch\` to activate it.`;
@@ -133,6 +172,11 @@ export async function initProject(args: any): Promise<string> {
   }
 
   const existingProjectYaml = pathExists ? await loadExistingProjectYaml(projectPath) : {};
+  const contextPublicationPolicy = resolveContextPublicationPolicy(
+    topology,
+    rawContextPublicationPolicy,
+    existingProjectYaml,
+  );
   const today = new Date().toISOString().split('T')[0];
   const projectYaml = buildProjectYaml({
     name,
@@ -140,6 +184,7 @@ export async function initProject(args: any): Promise<string> {
     description,
     existingProjectYaml,
     topology,
+    contextPublicationPolicy,
     githubRepo,
   });
   await writeFile(join(projectPath, '.project.yaml'), yaml.stringify(projectYaml), 'utf-8');
@@ -208,6 +253,7 @@ ${description ?? existingProjectYaml?.meta?.description ?? ''}
   const topologyLine = topology === 'github_versioned'
     ? `Topology: github_versioned (${githubRepo}, github_flow)`
     : 'Topology: local_directory_only';
+  const publicationLine = `Context Publication: ${contextPublicationPolicy}`;
   const prefix = pathExists ? 'Normalized' : 'Created';
-  return `✅ ${prefix} project "${name}" at ${projectPath}\n\nProject ID: ${id}\nStatus: Active\n${topologyLine}\n\nUse agenticos_switch to load this project context.`;
+  return `✅ ${prefix} project "${name}" at ${projectPath}\n\nProject ID: ${id}\nStatus: Active\n${topologyLine}\n${publicationLine}\n\nUse agenticos_switch to load this project context.`;
 }

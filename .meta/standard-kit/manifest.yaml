@@ -122,6 +122,7 @@ adoption:
   required_behavior:
     - operator_intent_resolution
     - memory_layer_contracts
+    - context_publication_policy_contract
     - cross_agent_policy_contract
     - session_start_alignment
     - implementation_preflight

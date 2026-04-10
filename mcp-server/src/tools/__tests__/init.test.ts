@@ -80,8 +80,14 @@ describe('initProject', () => {
 
   it('fails when github_versioned is missing github_repo', async () => {
     await expect(
-      initProject({ name: 'Test Project', description: 'A test project', topology: 'github_versioned' }),
+      initProject({ name: 'Test Project', description: 'A test project', topology: 'github_versioned', context_publication_policy: 'private_continuity' }),
     ).rejects.toThrow('github_repo is required');
+  });
+
+  it('fails when github_versioned is missing context_publication_policy', async () => {
+    await expect(
+      initProject({ name: 'Test Project', description: 'A test project', topology: 'github_versioned', github_repo: 'madlouse/test-project' }),
+    ).rejects.toThrow('context_publication_policy is required');
   });
 
   it('creates directories with correct structure', async () => {
@@ -127,6 +133,7 @@ describe('initProject', () => {
     expect(parsed.meta.description).toBe('A test project');
     expect(parsed.meta.version).toBe('1.0.0');
     expect(parsed.source_control.topology).toBe('local_directory_only');
+    expect(parsed.source_control.context_publication_policy).toBe('local_private');
     expect(parsed.agent_context.quick_start).toBe('.context/quick-start.md');
     expect(parsed.agent_context.current_state).toBe('.context/state.yaml');
   });
@@ -136,6 +143,7 @@ describe('initProject', () => {
       name: 'Test Project',
       description: 'A test project',
       topology: 'github_versioned',
+      context_publication_policy: 'private_continuity',
       github_repo: 'madlouse/test-project',
     });
 
@@ -145,6 +153,7 @@ describe('initProject', () => {
 
     const parsed = JSON.parse(projectYamlCall![1] as string);
     expect(parsed.source_control.topology).toBe('github_versioned');
+    expect(parsed.source_control.context_publication_policy).toBe('private_continuity');
     expect(parsed.source_control.github_repo).toBe('madlouse/test-project');
     expect(parsed.source_control.branch_strategy).toBe('github_flow');
     expect(parsed.execution.source_repo_roots).toEqual(['.']);
@@ -231,6 +240,63 @@ describe('initProject', () => {
     expect(testProject.name).toBe('Test Project');
     expect(testProject.status).toBe('active');
     expect(writtenRegistry.active_project).toBe('test-project');
+  });
+
+  it('normalizes an existing github_versioned project when context_publication_policy is provided explicitly', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockImplementation(async (path: any) => {
+      const normalizedPath = String(path);
+      if (normalizedPath.endsWith('registry.yaml')) {
+        return JSON.stringify({
+          version: '1.0.0',
+          last_updated: '2025-01-01T00:00:00.000Z',
+          active_project: 'test-project',
+          projects: [
+            {
+              id: 'test-project',
+              name: 'Test Project',
+              path: '/home/testuser/AgenticOS/projects/test-project',
+              status: 'active',
+              created: '2025-01-01',
+              last_accessed: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        });
+      }
+
+      if (normalizedPath.endsWith('.project.yaml')) {
+        return JSON.stringify({
+          meta: { name: 'Test Project', id: 'test-project' },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'public_distilled',
+            github_repo: 'madlouse/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['.'],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected readFile path: ${normalizedPath}`);
+    });
+
+    await initProject({
+      name: 'Test Project',
+      topology: 'github_versioned',
+      github_repo: 'madlouse/test-project',
+      context_publication_policy: 'public_distilled',
+      normalize_existing: true,
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const projectYamlCall = writeCalls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.source_control.context_publication_policy).toBe('public_distilled');
   });
 
   it('returns success message with project path and ID', async () => {

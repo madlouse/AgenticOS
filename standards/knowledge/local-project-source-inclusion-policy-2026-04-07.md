@@ -4,10 +4,13 @@
 
 `AgenticOS` must distinguish project workflow topology from canonical source-control inclusion.
 
+That still is not enough by itself. Context publication policy is a third question.
+
 These are different questions:
 
 1. how should the project iterate?
 2. should the project remain tracked inside the GitHub-backed canonical source tree?
+3. if the project is Git-backed, which context surfaces are publishable into tracked source?
 
 ## Workflow Topology
 
@@ -31,6 +34,19 @@ Two source-inclusion modes matter in practice:
 - `excluded_local_root`
   - the project root lives under `AGENTICOS_HOME/projects/`, but is intentionally ignored by the canonical repository
 
+## Context Publication Policy
+
+Context publication policy answers whether AI continuity surfaces are allowed in tracked source for the project class.
+
+- `local_private`
+  - local/private by definition
+  - used with `local_directory_only`
+- `private_continuity`
+  - full continuity surfaces may be tracked because the repo is private
+- `public_distilled`
+  - distilled context may be tracked
+  - raw session history and other non-publishable runtime surfaces must be isolated from the public tree
+
 ## Policy Matrix
 
 ### `github_versioned` + included in canonical source
@@ -49,6 +65,8 @@ Use this for downstream projects that are GitHub-managed but own their own repos
 Examples:
 
 - `projects/agent-cli-api`
+
+For those projects, context publication policy still must be declared separately as `private_continuity` or `public_distilled`.
 
 ### `local_directory_only` + excluded local root
 

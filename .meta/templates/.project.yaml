@@ -7,6 +7,7 @@ meta:
 
 source_control:
   topology: "local_directory_only"  # local_directory_only for local work/knowledge; github_versioned for reusable capability surfaces
+  context_publication_policy: "local_private"  # local_private for local_directory_only; private_continuity or public_distilled for github_versioned
   # github_repo: "OWNER/REPO"       # Required when topology is github_versioned
   # branch_strategy: "github_flow"  # Required when topology is github_versioned
 

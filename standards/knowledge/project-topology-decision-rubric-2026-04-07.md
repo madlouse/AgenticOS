@@ -9,6 +9,11 @@
 
 This rubric defines when to choose each one, when to stop and confirm, and how a local project can later upgrade into GitHub Flow.
 
+Topology answers workflow mode only.
+
+It does not answer whether raw or distilled continuity surfaces should live in tracked Git source.
+That is governed separately by `source_control.context_publication_policy`.
+
 ## Direct Rules
 
 Choose `local_directory_only` when the project is primarily:
@@ -80,4 +85,9 @@ GitHub Flow is for capability growth.
 A local project that only evolves private knowledge, writing, or working material should remain `local_directory_only` even if it changes frequently.
 
 Only the capability-like subset should move into GitHub Flow.
+
+After topology is chosen, context publication policy still must be set independently:
+
+- `local_directory_only` -> `local_private`
+- `github_versioned` -> `private_continuity` or `public_distilled`
 When necessary, split that subset into its own project rather than forcing the whole local project into a versioned workflow.

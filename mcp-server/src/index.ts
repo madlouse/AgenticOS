@@ -63,6 +63,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           description: { type: 'string', description: 'Project description' },
           path: { type: 'string', description: 'Optional custom path (otherwise uses $AGENTICOS_HOME/projects/{id})' },
           topology: { type: 'string', enum: ['local_directory_only', 'github_versioned'], description: 'Required source-control topology for the project.' },
+          context_publication_policy: { type: 'string', enum: ['local_private', 'private_continuity', 'public_distilled'], description: 'Context publication policy. local_directory_only projects use local_private; github_versioned projects must choose private_continuity or public_distilled.' },
           github_repo: { type: 'string', description: 'Required when topology is github_versioned. Use OWNER/REPO.' },
           normalize_existing: { type: 'boolean', description: 'When true, normalize an existing project directory/registry entry instead of failing closed.' },
         },
