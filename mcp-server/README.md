@@ -361,6 +361,30 @@ Current behavior:
   - `safe_lazy_repair`
   - `explicit_migration_required`
 
+### agenticos_migrate_project
+Build a deterministic per-project migration plan for a legacy managed project.
+
+**Parameters**:
+- `project_path` (optional) - Explicit project path to migrate
+- `project` (optional) - Managed project id, name, or path when `project_path` is not provided
+- `mode` (optional) - `plan` or `apply`; the current phase-2 slice supports `plan` only
+- `apply_scope` (optional) - `safe_repairs_only` or `full`
+- `expected_plan_hash` (optional) - Reserved for future apply mode
+
+**Returns**: JSON with `READY`, `BLOCK`, or `NOOP`, plus deterministic planned actions, manual blocks, and a `plan_hash`
+
+Current behavior:
+- requires an explicit `project` or `project_path`
+- does not use session fallback
+- builds a deterministic plan from the current audit state
+- separates:
+  - planned actions
+  - deferred compatible-only findings
+  - manual blocks
+- exposes a stable `plan_hash` and preconditions for the future apply path
+- blocks `mode=apply` in the current phase-2 slice
+- does not write project or registry state
+
 ### agenticos_migrate_home
 Generate a registry-backed legacy-project migration inventory across one `AGENTICOS_HOME`.
 

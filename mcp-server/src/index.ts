@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runMigrationAudit, runMigrateHome } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runMigrationAudit, runMigrateHome, runMigrateProject } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -365,6 +365,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_migrate_project',
+      description: 'Build a deterministic per-project migration plan. The current phase-2 slice is plan-only and blocks apply mode.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Explicit project path to migrate.' },
+          project: { type: 'string', description: 'Managed project id, name, or path when project_path is not provided.' },
+          mode: { type: 'string', enum: ['plan', 'apply'], description: 'Migration execution mode. The current phase-2 slice supports plan only.' },
+          apply_scope: { type: 'string', enum: ['safe_repairs_only', 'full'], description: 'Planned apply scope. The current phase-2 slice uses this only to shape the deterministic plan output.' },
+          expected_plan_hash: { type: 'string', description: 'Reserved for future apply mode. Not yet honored because apply is not implemented.' },
+        },
+      },
+    },
+    {
       name: 'agenticos_migration_audit',
       description: 'Audit one managed project for legacy post-#262 migration findings without mutating anything.',
       inputSchema: {
@@ -429,6 +443,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
     case 'agenticos_archive_import_evaluate':
       return { content: [{ type: 'text', text: await runArchiveImportEvaluate(args ?? {}) }] };
+    case 'agenticos_migrate_project':
+      return { content: [{ type: 'text', text: await runMigrateProject(args ?? {}) }] };
     case 'agenticos_migration_audit':
       return { content: [{ type: 'text', text: await runMigrationAudit(args ?? {}) }] };
     case 'agenticos_migrate_home':

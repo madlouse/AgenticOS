@@ -13,3 +13,4 @@ export { runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConforma
 export { runNonCodeEvaluate } from './non-code-evaluate.js';
 export { runArchiveImportEvaluate } from './archive-import-evaluate.js';
 export { runMigrationAudit, runMigrateHome } from './migration-audit.js';
+export { runMigrateProject } from './migration-project.js';

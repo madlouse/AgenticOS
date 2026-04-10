@@ -292,6 +292,13 @@ Suggested command shape:
 
 - `agenticos_migrate_project`
 
+Current implementation state:
+
+- phase 2 minimum planner landed
+- `agenticos_migrate_project` now supports deterministic `plan` output
+- `apply` remains intentionally unimplemented and fail-closed in the current
+  slice
+
 Minimum inputs:
 
 - `project_path` or `project`
@@ -422,10 +429,10 @@ Canonical reviewed follow-up design for Workstream 2 is persisted in:
 
 ## Suggested Issue Checklist
 
-- [ ] Define the migration finding schema and severity model.
-- [ ] Implement report-only audit for a single project.
-- [ ] Implement home-wide report-only migration inventory.
-- [ ] Define the per-project migration action plan and dry-run output.
+- [x] Define the migration finding schema and severity model.
+- [x] Implement report-only audit for a single project.
+- [x] Implement home-wide report-only migration inventory.
+- [x] Define the per-project migration action plan and dry-run output.
 - [ ] Implement per-project explicit migration with evidence logging.
 - [ ] Document safe lazy repair cases allowed during explicit project entry.
 - [ ] Publish the upgrade guide and migration checklist.
