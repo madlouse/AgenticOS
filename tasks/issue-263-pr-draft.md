@@ -4,7 +4,7 @@ Closes #263.
 
 ## Title
 
-`design: add report-only legacy managed-project migration audit surfaces`
+`design: add deterministic legacy project migration workflow`
 
 ## Summary
 
@@ -65,7 +65,7 @@ It adds:
 
 Result:
 
-- `33` test files passed
+- `34` test files passed
 - `274` tests passed
 - lint passed
 
