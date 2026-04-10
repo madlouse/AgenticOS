@@ -23,6 +23,7 @@ async function setupBootstrapHome(): Promise<string> {
         legacy_source_checkout_paths_unsupported: true,
         automation_boundary: 'manual_agent_cli',
         automation_rationale: ['agent-owned config'],
+        session_start_sequence: ['call agenticos_status'],
       },
       supported_agents: [
         {
@@ -72,6 +73,7 @@ async function setupBootstrapHomeWithoutExperimental(): Promise<string> {
         legacy_source_checkout_paths_unsupported: true,
         automation_boundary: 'manual_agent_cli',
         automation_rationale: ['agent-owned config'],
+        session_start_sequence: ['call agenticos_status'],
       },
       supported_agents: [
         {
@@ -107,6 +109,7 @@ describe('bootstrap matrix', () => {
     expect(matrix.version).toBe(1);
     expect(matrix.primary_integration_mode).toBe('mcp-native');
     expect(matrix.verification_contract.canonical_runtime_entrypoint).toBe('agenticos-mcp');
+    expect(matrix.verification_contract.session_start_sequence).toContain('call agenticos_status');
     expect(matrix.supported_agents.map((agent) => agent.id)).toEqual(['claude-code']);
   });
 

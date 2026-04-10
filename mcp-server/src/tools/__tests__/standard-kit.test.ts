@@ -74,6 +74,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         'operator_intent_resolution',
         'memory_layer_contracts',
         'cross_agent_policy_contract',
+        'session_start_alignment',
         'implementation_preflight',
         'issue_first_branching',
         'isolated_worktree_execution',
@@ -100,6 +101,17 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
     yaml.stringify({
       version: 1,
       primary_integration_mode: 'mcp-native',
+      verification_contract: {
+        canonical_runtime_entrypoint: 'agenticos-mcp',
+        legacy_source_checkout_paths_unsupported: true,
+        automation_boundary: 'manual_agent_cli',
+        automation_rationale: ['agent-owned config'],
+        session_start_sequence: [
+          'call `agenticos_status` before meaningful work',
+          'if the active project is missing or wrong, call `agenticos_switch`',
+          'review the latest `agenticos_issue_bootstrap` record',
+        ],
+      },
       supported_agents: [
         {
           id: 'claude-code',
@@ -132,7 +144,11 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
     yaml.stringify({
       version: 1,
       contract_id: 'cross-agent-execution-contract',
-      policy_invariants: [{ id: 'issue_first_execution' }],
+      policy_invariants: [
+        { id: 'session_start_alignment' },
+        { id: 'issue_first_execution' },
+        { id: 'issue_bootstrap_entry' },
+      ],
       adapter_surfaces: [
         { id: 'codex-generic', generated_file: 'AGENTS.md' },
         { id: 'claude-code', generated_file: 'CLAUDE.md' },
@@ -156,6 +172,9 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
             '## Claude Runtime Notes',
             'Claude CLI-managed user MCP config',
             'optional local stop-hook reminders',
+            '`agenticos_status`',
+            '`agenticos_switch`',
+            '`agenticos_issue_bootstrap`',
           ],
         },
         {
@@ -168,6 +187,9 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
             '## Codex / Generic Runtime Notes',
             'use explicit `agenticos_*` tool calls',
             'Bootstrap differences are runtime concerns',
+            '`agenticos_status`',
+            '`agenticos_switch`',
+            '`agenticos_issue_bootstrap`',
           ],
         },
       ],

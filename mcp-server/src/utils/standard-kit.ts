@@ -451,6 +451,9 @@ export async function checkStandardKitConformance(args: { project_path?: string;
   const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
   const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');
   const designBrief = await readProjectFile(upgrade.project_path, 'tasks/templates/issue-design-brief.md');
+  const bootstrapMatrixSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'agent-bootstrap-matrix.yaml'), 'utf-8');
+  const adapterMatrixSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'agent-adapter-matrix.yaml'), 'utf-8');
+  const crossAgentContractSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'cross-agent-execution-contract.yaml'), 'utf-8');
   const officialAdapters = getOfficialAgentAdapters(await loadAgentAdapterMatrix());
 
   const behaviorChecks: ConformanceBehaviorStatus[] = [];
@@ -514,6 +517,28 @@ export async function checkStandardKitConformance(args: { project_path?: string;
             ? 'Generated adapter docs expose the shared cross-agent policy block.'
             : 'Generated adapter docs are missing the shared cross-agent policy block.',
           evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'session_start_alignment': {
+        const pass = fileContainsAll(agentsMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
+          && fileContainsAll(claudeMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
+          && fileContainsAll(bootstrapMatrixSource, ['session_start_sequence', 'agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
+          && fileContainsAll(adapterMatrixSource, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
+          && fileContainsAll(crossAgentContractSource, ['session_start_alignment', 'issue_bootstrap_entry']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Adapter surfaces and canonical bootstrap metadata preserve the session-start alignment and issue-bootstrap entry contract.'
+            : 'Session-start alignment or issue-bootstrap entry guidance is missing from adapter surfaces or canonical bootstrap metadata.',
+          evidence_paths: [
+            'AGENTS.md',
+            'CLAUDE.md',
+            join(toCanonicalProductRelativePath('projects/agenticos/.meta/bootstrap/agent-bootstrap-matrix.yaml')),
+            join(toCanonicalProductRelativePath('projects/agenticos/.meta/bootstrap/agent-adapter-matrix.yaml')),
+            join(toCanonicalProductRelativePath('projects/agenticos/.meta/bootstrap/cross-agent-execution-contract.yaml')),
+          ],
         });
         break;
       }

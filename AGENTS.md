@@ -1,4 +1,4 @@
-<!-- agenticos-template: v9 -->
+<!-- agenticos-template: v10 -->
 # AGENTS.md — AgenticOS
 
 ## Adapter Role
@@ -22,6 +22,8 @@ It must expose the same canonical policy as other agent adapters rather than def
 - Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.
 - Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
 ## Guardrail Protocol (MANDATORY)
+
+Before implementation edits, confirm project alignment with `agenticos_status`; if the active project is missing or wrong, call `agenticos_switch`.
 
 Implementation work must use the executable guardrail flow:
 
@@ -56,11 +58,12 @@ After recording, call `agenticos_save` to commit to Git.
 
 ### Session Start
 
-On session start, read these files for context:
-1. `.project.yaml` — Project metadata
-2. `standards/.context/quick-start.md` — human-readable project summary
-3. `standards/.context/state.yaml` — Current state and working memory
-4. `standards/.context/conversations/` — Previous session records
+On session start, align the runtime before meaningful work:
+1. call `agenticos_status` to confirm the active project, current task, pending work, and latest recorded state
+2. if the active project is missing or not `AgenticOS`, call `agenticos_switch`
+3. read `.project.yaml`, `standards/.context/quick-start.md`, `standards/.context/state.yaml`, and `standards/.context/conversations/`
+4. review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
+5. if implementation work is requested, follow the Guardrail Protocol above exactly before editing
 
 Then greet the user with: project name, last progress, current pending items, suggested next step.
 

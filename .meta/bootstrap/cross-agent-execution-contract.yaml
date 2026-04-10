@@ -9,8 +9,12 @@ summary: >
 policy_invariants:
   - id: active_project_alignment
     summary: Implementation work must align to the intended active project before edits begin.
+  - id: session_start_alignment
+    summary: Session start must verify active-project alignment and current status before meaningful work begins.
   - id: issue_first_execution
     summary: Implementation work must start from an issue-scoped task rather than ad hoc mutation.
+  - id: issue_bootstrap_entry
+    summary: Implementation work must record canonical issue bootstrap evidence after issue worktree startup load and before further guardrails continue.
   - id: implementation_preflight
     summary: Implementation-affecting work must pass executable preflight before editing.
   - id: isolated_worktree_execution
