@@ -19,8 +19,8 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template marker, adapter role, and guardrail flow', () => {
     const content = generateAgentsMd('Demo Project', 'Guardrail test');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(9);
-    expect(content).toContain('<!-- agenticos-template: v9 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(10);
+    expect(content).toContain('<!-- agenticos-template: v10 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -38,6 +38,8 @@ describe('distill templates', () => {
     }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
+    expect(content).toContain('agenticos_status');
+    expect(content).toContain('agenticos_switch');
     expect(content).toContain('agenticos_issue_bootstrap');
     expect(content).toContain('agenticos_edit_guard');
     expect(content).toContain('agenticos_branch_bootstrap');
@@ -67,6 +69,8 @@ describe('distill templates', () => {
     }
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
+    expect(content).toContain('agenticos_status');
+    expect(content).toContain('agenticos_switch');
     expect(content).toContain('agenticos_issue_bootstrap');
     expect(content).toContain('agenticos_edit_guard');
     expect(content).toContain('agenticos_branch_bootstrap');

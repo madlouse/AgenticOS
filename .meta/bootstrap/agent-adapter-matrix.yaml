@@ -10,6 +10,9 @@ adapters:
       - '## Claude Runtime Notes'
       - 'Claude CLI-managed user MCP config'
       - 'optional local stop-hook reminders'
+      - '`agenticos_status`'
+      - '`agenticos_switch`'
+      - '`agenticos_issue_bootstrap`'
   - agent_id: codex
     support_tier: official
     adapter_file: AGENTS.md
@@ -19,6 +22,9 @@ adapters:
       - '## Codex / Generic Runtime Notes'
       - 'use explicit `agenticos_*` tool calls'
       - 'Bootstrap differences are runtime concerns'
+      - '`agenticos_status`'
+      - '`agenticos_switch`'
+      - '`agenticos_issue_bootstrap`'
   - agent_id: cursor
     support_tier: official
     adapter_file: AGENTS.md
@@ -28,6 +34,9 @@ adapters:
       - '## Codex / Generic Runtime Notes'
       - 'use explicit `agenticos_*` tool calls'
       - 'Bootstrap differences are runtime concerns'
+      - '`agenticos_status`'
+      - '`agenticos_switch`'
+      - '`agenticos_issue_bootstrap`'
   - agent_id: gemini-cli
     support_tier: official
     adapter_file: AGENTS.md
@@ -37,3 +46,6 @@ adapters:
       - '## Codex / Generic Runtime Notes'
       - 'use explicit `agenticos_*` tool calls'
       - 'Bootstrap differences are runtime concerns'
+      - '`agenticos_status`'
+      - '`agenticos_switch`'
+      - '`agenticos_issue_bootstrap`'

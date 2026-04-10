@@ -171,6 +171,20 @@ AgenticOS does not treat every fallback as equal:
 
 ---
 
+## Session-Start Contract
+
+Every officially supported adapter must align the runtime before meaningful work begins:
+
+1. call `agenticos_status` to confirm the active project, current task, pending work, and latest recorded state
+2. if the active project is missing or wrong, call `agenticos_switch`
+3. load the project's startup surfaces (`.project.yaml`, quick-start, state, and session history)
+4. review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
+5. if implementation work is requested, enter the canonical guardrail flow below
+
+This is canonical policy. Adapter-specific bootstrap notes must not replace it.
+
+---
+
 ## Guardrail Flow
 
 Implementation-affecting work uses one canonical issue-start chain:
@@ -220,6 +234,8 @@ Switch to existing project and load context.
 
 **Returns**: Loaded context (project config, quick-start, state)
 
+Use this when `agenticos_status` shows the active project is missing or not the intended project.
+
 The quick-start/state split is intentional:
 - `quick-start.md` is a concise entry surface
 - `state.yaml` is mutable operational state
@@ -242,6 +258,8 @@ Save state and backup to Git.
 Show the status of the active project.
 
 **Returns**: Current task, pending items, and recent decisions
+
+Call this first at session start to verify project alignment before meaningful work.
 
 ### agenticos_issue_bootstrap
 Record canonical issue-start evidence for the current issue after the intended issue worktree is active and the normal startup load has completed.

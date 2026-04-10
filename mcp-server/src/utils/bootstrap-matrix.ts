@@ -23,6 +23,7 @@ export interface BootstrapVerificationContract {
   legacy_source_checkout_paths_unsupported: boolean;
   automation_boundary: string;
   automation_rationale: string[];
+  session_start_sequence?: string[];
 }
 
 export interface AgentBootstrapMatrix {
