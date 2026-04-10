@@ -342,6 +342,39 @@ Evaluate whether a canonical checkout and project context are fresh enough to tr
 
 **Returns**: JSON with overall `PASS`, `WARN`, or `BLOCK`
 
+### agenticos_migration_audit
+Audit one managed project for legacy post-`#262` migration findings without mutating anything.
+
+**Parameters**:
+- `project_path` (optional) - Explicit project path to audit
+- `project` (optional) - Managed project id, name, or path when `project_path` is not provided
+
+**Returns**: JSON with `PASS`, `WARN`, or `BLOCK`, plus structured findings
+
+Current behavior:
+- report-only
+- supports explicit project path, explicit project selector, or the current session project
+- if neither `project_path` nor `project` is passed, a session-bound project must already exist or the audit fails closed
+- fails closed when identity is ambiguous
+- classifies findings into:
+  - `compatible_only`
+  - `safe_lazy_repair`
+  - `explicit_migration_required`
+
+### agenticos_migrate_home
+Generate a registry-backed legacy-project migration inventory across one `AGENTICOS_HOME`.
+
+**Parameters**:
+- `report_only` (optional) - Must remain `true` for the current `#263` slice
+
+**Returns**: JSON with aggregate `PASS`, `WARN`, or `BLOCK`, per-project summaries, and home-wide finding totals
+
+Current behavior:
+- report-only
+- scans managed projects currently registered in the home registry without mutating them
+- highlights blocked projects explicitly instead of skipping them silently
+- is intended to be the operator-first inventory step before any future explicit migration command
+
 ### agenticos_refresh_entry_surfaces
 Deterministically refresh the configured quick-start and state paths from structured merged-work inputs, honoring `.project.yaml.agent_context` when present and defaulting to root `.context/*` otherwise.
 

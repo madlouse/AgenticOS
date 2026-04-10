@@ -34,7 +34,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runMigrationAudit, runMigrateHome } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 
 const server = new Server(
@@ -364,6 +364,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['project_path', 'candidate_paths'],
       },
     },
+    {
+      name: 'agenticos_migration_audit',
+      description: 'Audit one managed project for legacy post-#262 migration findings without mutating anything.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_path: { type: 'string', description: 'Optional explicit project path to audit. If omitted, uses project or the current session project.' },
+          project: { type: 'string', description: 'Optional managed project id, name, or path when project_path is not provided.' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_migrate_home',
+      description: 'Generate a registry-backed home migration inventory. The current #263 slice is report-only.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          report_only: { type: 'boolean', description: 'Must remain true for the current report-only implementation.' },
+        },
+      },
+    },
   ],
 }));
 
@@ -408,6 +429,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
     case 'agenticos_archive_import_evaluate':
       return { content: [{ type: 'text', text: await runArchiveImportEvaluate(args ?? {}) }] };
+    case 'agenticos_migration_audit':
+      return { content: [{ type: 'text', text: await runMigrationAudit(args ?? {}) }] };
+    case 'agenticos_migrate_home':
+      return { content: [{ type: 'text', text: await runMigrateHome(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

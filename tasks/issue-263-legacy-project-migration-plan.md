@@ -233,6 +233,47 @@ Acceptance criteria:
 - ambiguous identity fails closed
 - the same project can be audited repeatedly without side effects
 
+Initial finding schema for the first implementation slice:
+
+- `code`
+  - stable machine-readable finding identifier
+- `migration_class`
+  - `compatible_only`
+  - `safe_lazy_repair`
+  - `explicit_migration_required`
+- `severity`
+  - `info`
+  - `warning`
+  - `error`
+- `summary`
+  - concise human-readable explanation
+- `evidence`
+  - concrete file paths, field names, or mismatch values
+- `recommended_action`
+  - bounded next step
+- `safe_to_defer`
+  - whether operators can keep using the project under compatibility-on-read without immediate migration
+
+Initial audit coverage should detect at least:
+
+- populated legacy `registry.active_project`
+- registry path normalization drift
+- missing lightweight registry metadata such as `last_accessed`
+- missing or unreadable `.project.yaml`
+- missing `meta.id`
+- registry / `.project.yaml` identity mismatches
+- missing or invalid topology/publication-policy normalization
+- compatibility-only legacy `active_project` evidence still present in state artifacts
+
+Explicit first-slice boundary:
+
+- `agenticos_migrate_home --report-only` inventories registry-backed managed
+  projects only; it does not yet scan arbitrary on-disk directories under
+  `AGENTICOS_HOME/projects`
+- guardrail/state archaeology is intentionally narrow in the first slice; the
+  initial implementation only detects compatibility-era `active_project`
+  evidence, not every historical guardrail record shape
+
 ### Workstream 2: Per-Project Explicit Migration
 
 Goal:
