@@ -34,6 +34,10 @@ GitHub issue:
 
 - https://github.com/madlouse/AgenticOS/issues/262
 
+Live RCA confirmation:
+
+- `tasks/issue-262-active-project-drift-live-rca-2026-04-10.md`
+
 ## Problem Statement
 
 Current behavior is centered around a single mutable `active_project` stored in

@@ -58,6 +58,7 @@ Result:
 - `mcp-server/src/utils/standard-kit.ts`
 - `mcp-server/src/utils/distill.ts`
 - `mcp-server/src/index.ts`
+- `tasks/issue-262-active-project-drift-live-rca-2026-04-10.md`
 - `standards/knowledge/agent-friendly-readme-spec-v1.md`
 - `standards/knowledge/standard-kit-command-design-v1-2026-03-23.md`
 - `standards/knowledge/complete-design.md`
@@ -70,4 +71,5 @@ Result:
 ## Risks / Notes
 
 - the local installed/runtime MCP on the machine will still reflect old behavior until this branch is merged and shipped
+- live validation on 2026-04-10 confirmed the old runtime still drifts through home-global `registry.active_project`; see `tasks/issue-262-active-project-drift-live-rca-2026-04-10.md`
 - legacy `registry.active_project` still exists in schema/compatibility surfaces, but runtime command resolution no longer depends on it
