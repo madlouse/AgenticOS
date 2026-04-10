@@ -66,11 +66,21 @@ describe('runEditGuard', () => {
       if (cmd.includes('rev-parse --git-common-dir')) {
         return { stdout: '.git\n', stderr: '' };
       }
+      if (cmd.includes('rev-parse --abbrev-ref HEAD')) {
+        return { stdout: 'feat/113-fail-closed-edit-boundaries\n', stderr: '' };
+      }
       throw new Error(`Unexpected command: ${cmd}`);
     });
     readFileMock.mockImplementation(async (path: string) => {
       if (path.endsWith('/.context/state.yaml')) {
         return JSON.stringify({
+          issue_bootstrap: {
+            latest: {
+              issue_id: '113',
+              repo_path: '/workspace/source',
+              current_branch: 'feat/113-fail-closed-edit-boundaries',
+            },
+          },
           guardrail_evidence: {
             preflight: {
               issue_id: '113',
@@ -133,7 +143,15 @@ describe('runEditGuard', () => {
   it('blocks when no preflight evidence is recorded', async () => {
     readFileMock.mockImplementation(async (path: string) => {
       if (path.endsWith('/.context/state.yaml')) {
-        return JSON.stringify({});
+        return JSON.stringify({
+          issue_bootstrap: {
+            latest: {
+              issue_id: '113',
+              repo_path: '/workspace/source',
+              current_branch: 'feat/113-fail-closed-edit-boundaries',
+            },
+          },
+        });
       }
 
       throw new Error(`Unexpected path: ${path}`);
@@ -151,6 +169,85 @@ describe('runEditGuard', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.block_reasons.join(' ')).toContain('no preflight evidence');
+  });
+
+  it('blocks when no issue bootstrap evidence is recorded', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          guardrail_evidence: {
+            preflight: {
+              issue_id: '113',
+              repo_path: '/workspace/source',
+              declared_target_files: [
+                'projects/agenticos/mcp-server/src/index.ts',
+              ],
+              result: {
+                status: 'PASS',
+              },
+            },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = JSON.parse(await runEditGuard({
+      issue_id: '113',
+      task_type: 'implementation',
+      repo_path: '/workspace/source',
+      project_path: '/workspace/projects/agenticos/standards',
+      declared_target_files: [
+        'projects/agenticos/mcp-server/src/index.ts',
+      ],
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('no issue bootstrap evidence');
+  });
+
+  it('blocks when the latest issue bootstrap does not match the requested issue', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          issue_bootstrap: {
+            latest: {
+              issue_id: '179',
+              repo_path: '/workspace/source',
+              current_branch: 'feat/113-fail-closed-edit-boundaries',
+            },
+          },
+          guardrail_evidence: {
+            preflight: {
+              issue_id: '113',
+              repo_path: '/workspace/source',
+              declared_target_files: [
+                'projects/agenticos/mcp-server/src/index.ts',
+              ],
+              result: {
+                status: 'PASS',
+              },
+            },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = JSON.parse(await runEditGuard({
+      issue_id: '113',
+      task_type: 'implementation',
+      repo_path: '/workspace/source',
+      project_path: '/workspace/projects/agenticos/standards',
+      declared_target_files: [
+        'projects/agenticos/mcp-server/src/index.ts',
+      ],
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('latest issue bootstrap issue');
   });
 
   it('blocks when attempted targets exceed the preflight-declared scope', async () => {
@@ -176,6 +273,9 @@ describe('runEditGuard', () => {
       }
       if (cmd.includes('rev-parse --git-common-dir')) {
         return { stdout: '.git\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --abbrev-ref HEAD')) {
+        return { stdout: 'fix/113-wrong-repo\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
     });

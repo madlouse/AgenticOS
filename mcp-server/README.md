@@ -26,7 +26,7 @@ Use `agenticos-bootstrap --verify` to audit the selected agents and optional per
 After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
 MCP registration can be correct while the live client session is still holding an older server process.
 
-When the client supports a pre-edit hook or local command wrapper, point that layer at `agenticos-edit-guard` so implementation edits fail closed unless project alignment and matching PASS preflight evidence already exist.
+When the client supports a pre-edit hook or local command wrapper, point that layer at `agenticos-edit-guard` so implementation edits fail closed unless project alignment, matching issue bootstrap evidence, and matching PASS preflight evidence already exist.
 
 For stop-event reminders, prefer `agenticos-record-reminder`.
 The old root `tools/check-edit-boundary.sh` and `tools/record-reminder.sh` paths should now be treated as legacy compatibility shims.
@@ -171,6 +171,22 @@ AgenticOS does not treat every fallback as equal:
 
 ---
 
+## Guardrail Flow
+
+Implementation-affecting work uses one canonical issue-start chain:
+
+1. call `agenticos_preflight`
+2. if it returns `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+3. after entering that worktree, perform the normal startup context load and record `agenticos_issue_bootstrap`
+4. rerun `agenticos_preflight` in the active issue worktree
+5. call `agenticos_edit_guard` immediately before implementation edits
+6. call `agenticos_pr_scope_check` before PR creation or merge
+
+`agenticos_issue_bootstrap` is the canonical issue-intake boundary for implementation-affecting work.
+It proves the current issue packet, startup surfaces, and issue-bound repo/worktree before downstream guardrails continue.
+
+---
+
 ## 🛠️ Tools Reference
 
 ### agenticos_init
@@ -227,8 +243,22 @@ Show the status of the active project.
 
 **Returns**: Current task, pending items, and recent decisions
 
+### agenticos_issue_bootstrap
+Record canonical issue-start evidence for the current issue after the intended issue worktree is active and the normal startup load has completed.
+
+**Parameters**:
+- `issue_id` (required)
+- `issue_title` (required)
+- `repo_path` (required)
+- `context_reset_performed` (required)
+- `project_hot_load_performed` (required)
+- `issue_payload_attached` (required)
+- `project_path` (optional, but recommended when `repo_path` is a larger checkout or worktree)
+
+**Returns**: JSON with `RECORDED` or `BLOCK`
+
 ### agenticos_preflight
-Run machine-checkable guardrail preflight before implementation or PR creation.
+Run machine-checkable guardrail preflight after issue bootstrap and before implementation or PR creation.
 
 **Parameters**:
 - `task_type` (required)
@@ -240,7 +270,7 @@ Run machine-checkable guardrail preflight before implementation or PR creation.
 **Returns**: JSON with `PASS`, `BLOCK`, or `REDIRECT`
 
 ### agenticos_edit_guard
-Fail closed before implementation-affecting edits unless the active project and latest persisted preflight evidence already match the intended edit.
+Fail closed before implementation-affecting edits unless the active project, latest issue bootstrap evidence, and latest persisted PASS preflight evidence already match the intended edit.
 
 **Parameters**:
 - `repo_path` (required)
