@@ -2,13 +2,14 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
-import { loadRegistry, saveRegistry } from '../utils/registry.js';
+import { loadRegistry, patchProjectMetadata } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
-import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
+import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../utils/project-target.js';
 import { type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
 import { resolveManagedProjectContextDisplayPaths } from '../utils/agent-context-paths.js';
+import { bindSessionProject, getSessionProjectBinding } from '../utils/session-context.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -240,12 +241,22 @@ export async function switchProject(args: any): Promise<string> {
     return `❌ ${topologyValidation.message}`;
   }
 
-  registry.active_project = found.id;
   found.last_accessed = new Date().toISOString();
-  await saveRegistry(registry);
+  bindSessionProject({
+    projectId: found.id,
+    projectName: found.name,
+    projectPath: found.path,
+  });
 
   // Auto-bootstrap: generate or upgrade CLAUDE.md / AGENTS.md
   const bootstrapNotes: string[] = [];
+  try {
+    await patchProjectMetadata(found.id, {
+      last_accessed: found.last_accessed,
+    });
+  } catch (error: any) {
+    bootstrapNotes.push(`⚠️ Session bound, but registry metadata was not updated: ${error.message}`);
+  }
   const claudeMdPath = join(found.path, 'CLAUDE.md');
   const agentsMdPath = join(found.path, 'AGENTS.md');
 
@@ -305,6 +316,7 @@ export async function switchProject(args: any): Promise<string> {
 
 export async function listProjects(): Promise<string> {
   const registry = await loadRegistry();
+  const sessionProject = getSessionProjectBinding();
 
   if (registry.projects.length === 0) {
     return 'No projects found. Use agenticos_init to create your first project.';
@@ -313,7 +325,7 @@ export async function listProjects(): Promise<string> {
   const lines = ['# AgenticOS Projects\n'];
 
   for (const p of registry.projects) {
-    const active = p.id === registry.active_project ? '🟢 ' : '';
+    const active = p.id === sessionProject?.projectId ? '🟢 ' : '';
     lines.push(`${active}**${p.name}** (${p.id})`);
     lines.push(`  Path: ${p.path}`);
     lines.push(`  Status: ${p.status}`);
@@ -329,32 +341,18 @@ export async function listProjects(): Promise<string> {
   return lines.join('\n');
 }
 
-export async function getStatus(): Promise<string> {
-  const registry = await loadRegistry();
-
-  if (!registry.active_project) {
-    return '❌ No active project. Use agenticos_switch first.';
-  }
-
-  const project = registry.projects.find((p) => p.id === registry.active_project);
-  if (!project) return '❌ Active project not found in registry.';
-
-  let projectYaml: any = {};
+export async function getStatus(args: any = {}): Promise<string> {
+  let resolved;
   try {
-    projectYaml = yaml.parse(await readFile(join(project.path, '.project.yaml'), 'utf-8')) || {};
-  } catch {}
-
-  if (isArchivedReferenceProject(projectYaml, project.status)) {
-    return `❌ ${buildArchivedReferenceMessage(project.name, projectYaml?.archive_contract?.replacement_project)}`;
+    resolved = await resolveManagedProjectTarget({
+      project: args?.project,
+      commandName: 'agenticos_status',
+    });
+  } catch (error: any) {
+    return `❌ ${error.message}`;
   }
 
-  const topologyValidation = validateManagedProjectTopology(project.name, projectYaml);
-  if (!topologyValidation.ok) {
-    return `❌ ${topologyValidation.message}`;
-  }
-
-  const contextPaths = resolveManagedProjectContextPaths(project.path, projectYaml);
-  const statePath = contextPaths.statePath;
+  const { project, statePath } = resolved;
   let state: any = {};
   try {
     const content = await readFile(statePath, 'utf-8');

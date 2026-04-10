@@ -65,7 +65,7 @@ describe('runPreflight', () => {
     });
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos',
-      resolutionSource: 'active_project',
+      resolutionSource: 'repo_path_match',
       resolutionErrors: [],
       targetProject: {
         id: 'agenticos',
@@ -195,7 +195,7 @@ describe('runPreflight', () => {
     }));
   });
 
-  it('persists the resolved active project path even when repo_path is a larger checkout root', async () => {
+  it('persists the resolved target project path even when repo_path is a larger checkout root', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
       'rev-parse --git-common-dir': '.git\n',
@@ -209,7 +209,7 @@ describe('runPreflight', () => {
     });
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos-standards',
-      resolutionSource: 'active_project',
+      resolutionSource: 'repo_path_match',
       resolutionErrors: [],
       targetProject: {
         id: 'agenticos-standards',

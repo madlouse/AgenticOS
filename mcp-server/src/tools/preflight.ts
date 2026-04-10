@@ -189,10 +189,13 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
 
   if (!projectResolution.targetProject) {
     result.block_reasons.push(...projectResolution.resolutionErrors);
-    if (!projectResolution.activeProjectId) {
-      result.redirect_actions.push('call agenticos_switch or pass project_path before implementation-affecting work');
+    if (project_path) {
+      result.redirect_actions.push('pass a valid project_path pointing at the intended managed project root');
     } else {
-      result.redirect_actions.push('pass project_path explicitly if the active project is not the intended target');
+      result.redirect_actions.push('pass project_path explicitly if repo_path cannot be proven against the intended managed project');
+      if (!projectResolution.activeProjectId) {
+        result.redirect_actions.push('call agenticos_switch before implementation-affecting work when no explicit project identity is available');
+      }
     }
   }
 

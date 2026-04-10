@@ -60,7 +60,7 @@ describe('runIssueBootstrap', () => {
     vi.clearAllMocks();
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos',
-      resolutionSource: 'active_project',
+      resolutionSource: 'repo_path_match',
       resolutionErrors: [],
       targetProject: {
         id: 'agenticos',

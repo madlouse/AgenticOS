@@ -1,8 +1,8 @@
 import { access, readFile } from 'fs/promises';
 import { basename, isAbsolute, join, resolve, sep } from 'path';
 import yaml from 'yaml';
-import { resolveManagedProjectTarget } from './project-target.js';
 import { loadRegistry } from './registry.js';
+import { getSessionProjectBinding } from './session-context.js';
 
 export type GuardrailTaskType =
   | 'discussion_only'
@@ -23,7 +23,7 @@ export interface GuardrailProjectTarget {
 
 export interface GuardrailProjectResolution {
   activeProjectId: string | null;
-  resolutionSource: 'explicit_project_path' | 'active_project' | 'repo_path_match' | null;
+  resolutionSource: 'explicit_project_path' | 'repo_path_match' | 'session_project' | null;
   targetProject: GuardrailProjectTarget | null;
   resolutionErrors: string[];
 }
@@ -103,6 +103,24 @@ async function buildTargetFromProjectPath(
   };
 }
 
+function uniqueRegistryProjectMatch<T>(matches: T[], notFound: string, ambiguous: string): T {
+  if (matches.length === 0) {
+    throw new Error(notFound);
+  }
+  if (matches.length > 1) {
+    throw new Error(ambiguous);
+  }
+  return matches[0];
+}
+
+async function resolveRegistryProjectTarget(project: {
+  id: string;
+  name: string;
+  path: string;
+}): Promise<GuardrailProjectTarget | null> {
+  return await buildTargetFromProjectPath(project.path, project.id, project.name);
+}
+
 export function isImplementationAffectingTask(taskType: GuardrailTaskType): boolean {
   return taskType === 'implementation' || taskType === 'bugfix';
 }
@@ -115,6 +133,7 @@ export async function resolveGuardrailProjectTarget(args: {
   const { commandName, repoPath, projectPath } = args;
   const registry = await loadRegistry();
   const activeProjectId = registry.active_project || null;
+  const sessionProject = getSessionProjectBinding();
 
   if (projectPath) {
     try {
@@ -135,61 +154,94 @@ export async function resolveGuardrailProjectTarget(args: {
     }
   }
 
-  if (activeProjectId) {
+  if (repoPath) {
     try {
-      const resolved = await resolveManagedProjectTarget({
-        commandName,
-      });
-      const targetProject = await buildTargetFromProjectPath(
-        resolved.projectPath,
-        resolved.projectId,
-        resolved.projectName,
-      );
+      const normalizedRepoPath = normalizePath(repoPath);
+      const candidates: Array<{
+        targetProject: GuardrailProjectTarget;
+        matchLength: number;
+      }> = [];
+
+      for (const project of registry.projects) {
+        const targetProject = await resolveRegistryProjectTarget(project);
+        if (!targetProject) continue;
+
+        const matchedRoots = [
+          targetProject.path,
+          ...targetProject.sourceRepoRoots,
+        ].filter((candidatePath) => isWithinProject(normalizedRepoPath, candidatePath));
+
+        if (matchedRoots.length === 0) continue;
+
+        candidates.push({
+          targetProject,
+          matchLength: Math.max(...matchedRoots.map((candidatePath) => normalizePath(candidatePath).length)),
+        });
+      }
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => b.matchLength - a.matchLength);
+        const strongestMatchLength = candidates[0].matchLength;
+        const strongestMatches = candidates.filter((candidate) => candidate.matchLength === strongestMatchLength);
+
+        if (strongestMatches.length > 1) {
+          return {
+            activeProjectId,
+            resolutionSource: null,
+            targetProject: null,
+            resolutionErrors: [`repo_path "${repoPath}" matches multiple managed projects; pass project_path explicitly`],
+          };
+        }
+
+        return {
+          activeProjectId,
+          resolutionSource: 'repo_path_match',
+          targetProject: strongestMatches[0].targetProject,
+          resolutionErrors: [],
+        };
+      }
+    } catch (error) {
       return {
         activeProjectId,
-        resolutionSource: 'active_project',
+        resolutionSource: null,
+        targetProject: null,
+        resolutionErrors: [error instanceof Error ? error.message : `failed to resolve repo_path: ${repoPath}`],
+      };
+    }
+  }
+
+  if (sessionProject) {
+    try {
+      const project = uniqueRegistryProjectMatch(
+        registry.projects.filter((candidate) =>
+          candidate.id === sessionProject.projectId || candidate.path === sessionProject.projectPath
+        ),
+        `Session project "${sessionProject.projectId}" not found in registry.`,
+        `Session project "${sessionProject.projectId}" is ambiguous in registry.`,
+      );
+      const targetProject = await resolveRegistryProjectTarget(project);
+      return {
+        activeProjectId,
+        resolutionSource: targetProject ? 'session_project' : null,
         targetProject,
-        resolutionErrors: targetProject ? [] : [`active project "${activeProjectId}" is missing a readable .project.yaml`],
+        resolutionErrors: targetProject ? [] : [`session project "${sessionProject.projectId}" is missing a readable .project.yaml`],
       };
     } catch (error) {
       return {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : 'failed to resolve active project'],
+        resolutionErrors: [error instanceof Error ? error.message : 'failed to resolve session project'],
       };
     }
   }
 
-  if (!repoPath) {
-    return {
-      activeProjectId,
-      resolutionSource: null,
-      targetProject: null,
-      resolutionErrors: ['no active project is set'],
-    };
-  }
-
-  const normalizedRepoPath = normalizePath(repoPath);
-  const match = registry.projects
-    .map((project) => ({ ...project, path: normalizePath(project.path) }))
-    .filter((project) => isWithinProject(normalizedRepoPath, project.path))
-    .sort((a, b) => b.path.length - a.path.length)[0];
-
-  if (!match) {
-    return {
-      activeProjectId,
-      resolutionSource: null,
-      targetProject: null,
-      resolutionErrors: ['target project could not be resolved from repo_path; pass project_path explicitly'],
-    };
-  }
-
-  const targetProject = await buildTargetFromProjectPath(match.path, match.id, match.name);
   return {
     activeProjectId,
-    resolutionSource: targetProject ? 'repo_path_match' : null,
-    targetProject,
-    resolutionErrors: targetProject ? [] : [`project_path is not a resolvable managed project: ${match.path}`],
+    resolutionSource: null,
+    targetProject: null,
+    resolutionErrors: repoPath
+      ? ['target project could not be resolved from repo_path or session binding; pass project_path explicitly']
+      : [`No project_path, repo_path proof, or session binding is available for ${commandName}.`],
   };
 }

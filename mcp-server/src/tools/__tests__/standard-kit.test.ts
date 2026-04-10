@@ -5,6 +5,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { runStandardKitAdopt, runStandardKitConformanceCheck, runStandardKitUpgradeCheck } from '../standard-kit.js';
 import { CURRENT_TEMPLATE_VERSION, generateAgentsMd } from '../../utils/distill.js';
+import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
 
 async function writeRegistry(home: string, registry: unknown): Promise<void> {
   await mkdir(join(home, '.agent-workspace'), { recursive: true });
@@ -109,7 +110,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         automation_rationale: ['agent-owned config'],
         session_start_sequence: [
           'call `agenticos_status` before meaningful work',
-          'if the active project is missing or wrong, call `agenticos_switch`',
+          'if no session project is bound or the bound project is not the intended one, call `agenticos_switch`',
           'review the latest `agenticos_issue_bootstrap` record',
         ],
       },
@@ -219,6 +220,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
 
 describe('standard kit commands', () => {
   afterEach(() => {
+    clearSessionProjectBinding();
     delete process.env.AGENTICOS_HOME;
   });
 
@@ -310,9 +312,29 @@ describe('standard kit commands', () => {
     expect(subAgentHandoffStatus).toMatchObject({ status: 'missing' });
   });
 
-  it('adopt can resolve the active project from registry and upgrades stale generated files while skipping current ones', async () => {
+  it('adopt can resolve the session-local project and upgrades stale generated files while skipping current ones', async () => {
     const { home, projectRoot } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: null,
+      projects: [
+        {
+          id: 'sample-project',
+          name: 'Sample Project',
+          path: 'projects/sample-project',
+          status: 'active',
+          created: '2026-03-23',
+          last_accessed: new Date().toISOString(),
+        },
+      ],
+    });
+    bindSessionProject({
+      projectId: 'sample-project',
+      projectName: 'Sample Project',
+      projectPath: projectRoot,
+    });
 
     await writeFile(join(projectRoot, 'AGENTS.md'), generateAgentsMd('Sample Project', ''), 'utf-8');
     await writeFile(
@@ -489,9 +511,29 @@ describe('standard kit commands', () => {
     expect(result.missing_required_files).toEqual([]);
   });
 
-  it('upgrade check can resolve project identity from an existing .project.yaml through the active registry project', async () => {
+  it('upgrade check can resolve project identity from an existing .project.yaml through the session-local project', async () => {
     const { home, projectRoot } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: null,
+      projects: [
+        {
+          id: 'sample-project',
+          name: 'Sample Project',
+          path: 'projects/sample-project',
+          status: 'active',
+          created: '2026-03-23',
+          last_accessed: new Date().toISOString(),
+        },
+      ],
+    });
+    bindSessionProject({
+      projectId: 'sample-project',
+      projectName: 'Sample Project',
+      projectPath: projectRoot,
+    });
 
     await writeFile(
       join(projectRoot, '.project.yaml'),
@@ -506,6 +548,40 @@ describe('standard kit commands', () => {
 
     expect(result.project_name).toBe('Yaml Project');
     expect(result.project_id).toBe('yaml-project');
+  });
+
+  it('adopt can resolve an explicit managed project without relying on session fallback state', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeRegistry(home, {
+      version: '1.0.0',
+      last_updated: new Date().toISOString(),
+      active_project: null,
+      projects: [
+        {
+          id: 'sample-project',
+          name: 'Sample Project',
+          path: 'projects/sample-project',
+          status: 'active',
+          created: '2026-03-23',
+          last_accessed: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const result = JSON.parse(await runStandardKitAdopt({
+      project: 'sample-project',
+    })) as {
+      project_name: string;
+      project_id: string;
+      status: string;
+    };
+
+    expect(result.status).toBe('ADOPTED');
+    expect(result.project_name).toBe('Sample Project');
+    expect(result.project_id).toBe('sample-project');
+    expect(await readFile(join(projectRoot, '.project.yaml'), 'utf-8')).toContain('sample-project');
   });
 
   it('adopt upgrades stale AGENTS.md files to the current generated template', async () => {
@@ -697,7 +773,7 @@ describe('standard kit commands', () => {
     expect(result.copied_templates).toEqual([]);
   });
 
-  it('adopt blocks when no active project exists and no project_path is provided', async () => {
+  it('adopt blocks when no explicit target and no session project are available', async () => {
     const { home } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
 
@@ -709,11 +785,11 @@ describe('standard kit commands', () => {
     });
 
     await expect(runStandardKitAdopt(undefined)).rejects.toThrow(
-      'No project_path provided and no active project found in registry.',
+      'No project_path provided, no explicit project provided, and no session project is bound.',
     );
   });
 
-  it('adopt blocks when the registry active project cannot be resolved', async () => {
+  it('adopt ignores a populated legacy registry active_project when no session project is bound', async () => {
     const { home } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
 
@@ -725,7 +801,7 @@ describe('standard kit commands', () => {
     });
 
     await expect(runStandardKitAdopt({})).rejects.toThrow(
-      'Active project "missing-project" not found in registry.',
+      'No project_path provided, no explicit project provided, and no session project is bound.',
     );
   });
 

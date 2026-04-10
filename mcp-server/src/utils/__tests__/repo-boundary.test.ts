@@ -6,7 +6,6 @@ const yamlMock = vi.hoisted(() => ({
   parse: vi.fn(),
 }));
 const loadRegistryMock = vi.hoisted(() => vi.fn());
-const resolveManagedProjectTargetMock = vi.hoisted(() => vi.fn());
 
 vi.mock('fs/promises', () => ({
   access: accessMock,
@@ -21,32 +20,49 @@ vi.mock('../registry.js', () => ({
   loadRegistry: loadRegistryMock,
 }));
 
-vi.mock('../project-target.js', () => ({
-  resolveManagedProjectTarget: resolveManagedProjectTargetMock,
-}));
-
 import { resolveGuardrailProjectTarget } from '../repo-boundary.js';
+import { bindSessionProject, clearSessionProjectBinding } from '../session-context.js';
 
 describe('resolveGuardrailProjectTarget', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSessionProjectBinding();
     yamlMock.parse.mockImplementation((content: string) => JSON.parse(content));
     accessMock.mockResolvedValue(undefined);
-    readFileMock.mockResolvedValue(JSON.stringify({
-      meta: {
-        id: 'alpha',
-        name: 'Alpha Project',
-      },
-      agent_context: {
-        current_state: '.context/state.yaml',
-      },
-      execution: {
-        source_repo_roots: ['../..'],
-      },
-    }));
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/alpha/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'alpha',
+            name: 'Alpha Project',
+          },
+          agent_context: {
+            current_state: '.context/state.yaml',
+          },
+          execution: {
+            source_repo_roots: ['../../source/alpha'],
+          },
+        });
+      }
+      if (path.endsWith('/beta/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'beta',
+            name: 'Beta Project',
+          },
+          agent_context: {
+            current_state: '.context/state.yaml',
+          },
+          execution: {
+            source_repo_roots: ['../../source/beta'],
+          },
+        });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
   });
 
-  it('prefers the active managed project and resolves relative source repo roots', async () => {
+  it('prefers repo_path proof over a drifted legacy registry active_project field', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: 'alpha',
       projects: [
@@ -58,33 +74,10 @@ describe('resolveGuardrailProjectTarget', () => {
           created: '2026-04-06',
           last_accessed: '2026-04-06T00:00:00.000Z',
         },
-      ],
-    });
-    resolveManagedProjectTargetMock.mockResolvedValue({
-      projectId: 'alpha',
-      projectName: 'Alpha Project',
-      projectPath: '/workspace/projects/alpha',
-    });
-
-    const result = await resolveGuardrailProjectTarget({
-      commandName: 'agenticos_preflight',
-      repoPath: '/workspace/repo/worktrees/alpha-160',
-    });
-
-    expect(result.activeProjectId).toBe('alpha');
-    expect(result.targetProject?.id).toBe('alpha');
-    expect(result.targetProject?.sourceRepoRoots).toEqual(['/workspace']);
-    expect(result.resolutionSource).toBe('active_project');
-  });
-
-  it('falls back to repo_path containment when no active project is set', async () => {
-    loadRegistryMock.mockResolvedValue({
-      active_project: null,
-      projects: [
         {
-          id: 'alpha',
-          name: 'Alpha Project',
-          path: '/workspace/projects/alpha',
+          id: 'beta',
+          name: 'Beta Project',
+          path: '/workspace/projects/beta',
           status: 'active',
           created: '2026-04-06',
           last_accessed: '2026-04-06T00:00:00.000Z',
@@ -94,11 +87,51 @@ describe('resolveGuardrailProjectTarget', () => {
 
     const result = await resolveGuardrailProjectTarget({
       commandName: 'agenticos_preflight',
-      repoPath: '/workspace/projects/alpha/src',
+      repoPath: '/workspace/source/beta/worktrees/issue-160',
     });
 
-    expect(result.targetProject?.id).toBe('alpha');
+    expect(result.activeProjectId).toBe('alpha');
+    expect(result.targetProject?.id).toBe('beta');
+    expect(result.targetProject?.sourceRepoRoots).toEqual(['/workspace/source/beta']);
     expect(result.resolutionSource).toBe('repo_path_match');
+  });
+
+  it('uses the session-bound project when repo_path cannot be proven', async () => {
+    bindSessionProject({
+      projectId: 'beta',
+      projectName: 'Beta Project',
+      projectPath: '/workspace/projects/beta',
+    });
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'alpha',
+      projects: [
+        {
+          id: 'alpha',
+          name: 'Alpha Project',
+          path: '/workspace/projects/alpha',
+          status: 'active',
+          created: '2026-04-06',
+          last_accessed: '2026-04-06T00:00:00.000Z',
+        },
+        {
+          id: 'beta',
+          name: 'Beta Project',
+          path: '/workspace/projects/beta',
+          status: 'active',
+          created: '2026-04-06',
+          last_accessed: '2026-04-06T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await resolveGuardrailProjectTarget({
+      commandName: 'agenticos_preflight',
+      repoPath: '/workspace/unmatched/repo',
+    });
+
+    expect(result.activeProjectId).toBe('alpha');
+    expect(result.targetProject?.id).toBe('beta');
+    expect(result.resolutionSource).toBe('session_project');
   });
 
   it('resolves an explicit project_path even when active_project has drifted elsewhere', async () => {
@@ -135,23 +168,52 @@ describe('resolveGuardrailProjectTarget', () => {
     expect(result.targetProject?.path).toBe('/workspace/projects/alpha');
     expect(result.resolutionSource).toBe('explicit_project_path');
     expect(result.resolutionErrors).toEqual([]);
-    expect(resolveManagedProjectTargetMock).not.toHaveBeenCalled();
   });
 
-  it('returns a fail-closed resolution error when project metadata cannot be proven', async () => {
+  it('fails closed when only the legacy registry active_project field is available', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: 'alpha',
-      projects: [],
+      projects: [
+        {
+          id: 'alpha',
+          name: 'Alpha Project',
+          path: '/workspace/projects/alpha',
+          status: 'active',
+          created: '2026-04-06',
+          last_accessed: '2026-04-06T00:00:00.000Z',
+        },
+      ],
     });
-    resolveManagedProjectTargetMock.mockRejectedValue(new Error('Project identity could not be proven.'));
 
     const result = await resolveGuardrailProjectTarget({
       commandName: 'agenticos_preflight',
-      repoPath: '/workspace/repo',
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toContain('could not be proven');
+    expect(result.resolutionSource).toBeNull();
+    expect(result.resolutionErrors[0]).toContain('No project_path, repo_path proof, or session binding is available');
+  });
+
+  it('ignores a populated legacy registry active_project field even when its metadata exists', async () => {
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'alpha',
+      projects: [
+        {
+          id: 'alpha',
+          name: 'Alpha Project',
+          path: '/workspace/projects/alpha',
+          status: 'active',
+          created: '2026-04-06',
+          last_accessed: '2026-04-06T00:00:00.000Z',
+        },
+      ],
+    });
+    const result = await resolveGuardrailProjectTarget({
+      commandName: 'agenticos_preflight',
+    });
+
+    expect(result.targetProject).toBeNull();
+    expect(result.resolutionErrors[0]).toContain('No project_path, repo_path proof, or session binding is available');
     expect(result.resolutionSource).toBeNull();
   });
 });

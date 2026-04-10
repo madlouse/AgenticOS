@@ -9,6 +9,7 @@ import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './pro
 import { validateContextPublicationPolicy } from './project-contract.js';
 import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
+import { getSessionProjectBinding } from './session-context.js';
 
 interface StandardKitEntry {
   path: string;
@@ -135,20 +136,52 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-async function resolveProjectPath(projectPath?: string): Promise<string> {
+function uniqueProjectMatch<T>(matches: T[], notFound: string, ambiguous: string): T {
+  if (matches.length === 0) {
+    throw new Error(notFound);
+  }
+  if (matches.length > 1) {
+    throw new Error(ambiguous);
+  }
+  return matches[0];
+}
+
+async function resolveProjectPath(projectPath?: string, project?: string): Promise<string> {
   if (projectPath) return projectPath;
 
   const registry = await loadRegistry();
-  if (!registry.active_project) {
-    throw new Error('No project_path provided and no active project found in registry.');
+  const requestedProject = typeof project === 'string' && project.trim().length > 0
+    ? project.trim()
+    : null;
+  const sessionProject = getSessionProjectBinding();
+
+  if (requestedProject) {
+    const match = uniqueProjectMatch(
+      registry.projects.filter((candidate) =>
+        candidate.id === requestedProject ||
+        candidate.name === requestedProject ||
+        candidate.path === requestedProject
+      ),
+      `Project "${requestedProject}" not found in registry.`,
+      `Project "${requestedProject}" is ambiguous in registry.`,
+    );
+    return match.path;
   }
 
-  const active = registry.projects.find((project) => project.id === registry.active_project);
-  if (!active) {
-    throw new Error(`Active project "${registry.active_project}" not found in registry.`);
+  if (sessionProject) {
+    const match = uniqueProjectMatch(
+      registry.projects.filter((candidate) =>
+        candidate.id === sessionProject.projectId || candidate.path === sessionProject.projectPath
+      ),
+      `Session project "${sessionProject.projectId}" not found in registry.`,
+      `Session project "${sessionProject.projectId}" is ambiguous in registry.`,
+    );
+    return match.path;
   }
 
-  return active.path;
+  throw new Error(
+    'No project_path provided, no explicit project provided, and no session project is bound. Pass project_path, pass project, or call agenticos_switch first.'
+  );
 }
 
 async function readProjectYaml(projectPath: string): Promise<any | null> {
@@ -280,9 +313,13 @@ function fileContainsAll(content: string | null, needles: string[]): boolean {
   return !!content && needles.every((needle) => content.includes(needle));
 }
 
-export async function adoptStandardKit(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<AdoptResult> {
+function fileContainsNone(content: string | null, needles: string[]): boolean {
+  return !!content && needles.every((needle) => !content.includes(needle));
+}
+
+export async function adoptStandardKit(args: { project_path?: string; project?: string; project_name?: string; project_description?: string }): Promise<AdoptResult> {
   const manifest = await loadStandardKitManifest();
-  const projectPath = await resolveProjectPath(args.project_path);
+  const projectPath = await resolveProjectPath(args.project_path, args.project);
   const project = await resolveProjectIdentity(projectPath, args.project_name, args.project_description);
 
   await ensureStandardDirectories(project);
@@ -347,9 +384,9 @@ export async function adoptStandardKit(args: { project_path?: string; project_na
   };
 }
 
-export async function checkStandardKitUpgrade(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<UpgradeCheckResult> {
+export async function checkStandardKitUpgrade(args: { project_path?: string; project?: string; project_name?: string; project_description?: string }): Promise<UpgradeCheckResult> {
   const manifest = await loadStandardKitManifest();
-  const projectPath = await resolveProjectPath(args.project_path);
+  const projectPath = await resolveProjectPath(args.project_path, args.project);
   const project = await resolveProjectIdentity(projectPath, args.project_name, args.project_description);
 
   const missingRequiredFiles: string[] = [];
@@ -419,9 +456,9 @@ export async function checkStandardKitUpgrade(args: { project_path?: string; pro
   };
 }
 
-export async function checkStandardKitConformance(args: { project_path?: string; project_name?: string; project_description?: string }): Promise<StandardKitConformanceResult> {
+export async function checkStandardKitConformance(args: { project_path?: string; project?: string; project_name?: string; project_description?: string }): Promise<StandardKitConformanceResult> {
   const manifest = await loadStandardKitManifest();
-  const projectPath = await resolveProjectPath(args.project_path);
+  const projectPath = await resolveProjectPath(args.project_path, args.project);
   const project = await resolveProjectIdentity(projectPath, args.project_name, args.project_description);
   const projectYaml = yaml.parse((await readProjectFile(project.projectPath, '.project.yaml')) || '{}') as any;
 
@@ -538,8 +575,10 @@ export async function checkStandardKitConformance(args: { project_path?: string;
         break;
       }
       case 'session_start_alignment': {
-        const pass = fileContainsAll(agentsMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
-          && fileContainsAll(claudeMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
+        const pass = fileContainsAll(agentsMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap', 'current session project', 'no session project is bound'])
+          && fileContainsNone(agentsMd, ['confirm the active project', 'active project is missing or wrong'])
+          && fileContainsAll(claudeMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap', 'current session project', 'no session project is bound'])
+          && fileContainsNone(claudeMd, ['confirm the active project', 'active project is missing or wrong'])
           && fileContainsAll(bootstrapMatrixSource, ['session_start_sequence', 'agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
           && fileContainsAll(adapterMatrixSource, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
           && fileContainsAll(crossAgentContractSource, ['session_start_alignment', 'issue_bootstrap_entry']);
@@ -547,8 +586,8 @@ export async function checkStandardKitConformance(args: { project_path?: string;
           behavior,
           status: pass ? 'PASS' : 'FAIL',
           summary: pass
-            ? 'Adapter surfaces and canonical bootstrap metadata preserve the session-start alignment and issue-bootstrap entry contract.'
-            : 'Session-start alignment or issue-bootstrap entry guidance is missing from adapter surfaces or canonical bootstrap metadata.',
+            ? 'Adapter surfaces and canonical bootstrap metadata preserve session-local startup alignment and issue-bootstrap entry semantics.'
+            : 'Session-start alignment, session-local binding semantics, or issue-bootstrap entry guidance is missing from adapter surfaces or canonical bootstrap metadata.',
           evidence_paths: [
             'AGENTS.md',
             'CLAUDE.md',

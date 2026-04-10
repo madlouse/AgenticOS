@@ -72,7 +72,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_switch',
-      description: 'Switch to an existing AgenticOS project',
+      description: 'Bind the current MCP session to an existing AgenticOS project',
       inputSchema: {
         type: 'object',
         properties: {
@@ -92,7 +92,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          project: { type: 'string', description: 'Optional project ID, name, or path. If provided, it must match the active project or the call fails closed.' },
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
           summary: { type: 'string', description: 'What happened in this session (required)' },
           decisions: { type: 'array', items: { type: 'string' }, description: 'Key decisions made during this session' },
           outcomes: { type: 'array', items: { type: 'string' }, description: 'What was accomplished' },
@@ -115,19 +115,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          project: { type: 'string', description: 'Optional project ID, name, or path. If provided, it must match the active project or the call fails closed.' },
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
           message: { type: 'string', description: 'Optional commit message' },
         },
       },
     },
     {
       name: 'agenticos_status',
-      description: 'Show status of the active project: last recorded time, current task, pending items, recent decisions.',
-      inputSchema: { type: 'object', properties: {} },
+      description: 'Show status of the current session project, or an explicit project when provided.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+        },
+      },
     },
     {
       name: 'agenticos_preflight',
-      description: 'Run machine-checkable guardrail preflight before implementation or PR creation. Returns JSON with PASS, BLOCK, or REDIRECT.',
+      description: 'Run machine-checkable guardrail preflight before implementation or PR creation. Target resolution prefers explicit project_path, then provable repo_path, then session-local binding, otherwise fails closed. Returns JSON with PASS, BLOCK, or REDIRECT.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -163,7 +168,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_edit_guard',
-      description: 'Fail closed before implementation-affecting edits unless active-project alignment, matching issue bootstrap evidence, and matching PASS preflight evidence already exist.',
+      description: 'Fail closed before implementation-affecting edits unless the resolved managed project identity, matching issue bootstrap evidence, and matching PASS preflight evidence already exist.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -186,7 +191,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_issue_bootstrap',
-      description: 'Record canonical issue-start evidence for the current issue after entering the intended branch/worktree, performing a clear-equivalent reset, and loading normal startup context.',
+      description: 'Record canonical issue-start evidence for the current issue after entering the intended branch/worktree, performing a clear-equivalent reset, and loading normal startup context. Guardrail target resolution prefers explicit project_path, then provable repo_path, then session-local binding.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -218,7 +223,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_branch_bootstrap',
-      description: 'Create an issue branch and isolated worktree from the intended remote base. Returns JSON with CREATED or BLOCK.',
+      description: 'Create an issue branch and isolated worktree from the intended remote base. Guardrail target resolution prefers explicit project_path, then provable repo_path, then session-local binding. Returns JSON with CREATED or BLOCK.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -235,7 +240,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_pr_scope_check',
-      description: 'Validate that the current branch diff is scoped to the intended issue relative to the intended remote base.',
+      description: 'Validate that the current branch diff is scoped to the intended issue relative to the intended remote base. Guardrail target resolution prefers explicit project_path, then provable repo_path, then session-local binding.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -298,7 +303,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses the active project from the registry.' },
+          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses explicit project, then the session-local current project.' },
+          project: { type: 'string', description: 'Optional managed project id, name, or path when project_path is not provided.' },
           project_name: { type: 'string', description: 'Project name to use when creating missing .project.yaml or generated guidance.' },
           project_description: { type: 'string', description: 'Optional project description used for generated guidance.' },
         },
@@ -310,7 +316,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses the active project from the registry.' },
+          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses explicit project, then the session-local current project.' },
+          project: { type: 'string', description: 'Optional managed project id, name, or path when project_path is not provided.' },
           project_name: { type: 'string', description: 'Optional project name override used for reporting when .project.yaml is missing.' },
           project_description: { type: 'string', description: 'Optional project description override used for reporting.' },
         },
@@ -322,7 +329,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses the active project from the registry.' },
+          project_path: { type: 'string', description: 'Absolute target project path. If omitted, uses explicit project, then the session-local current project.' },
+          project: { type: 'string', description: 'Optional managed project id, name, or path when project_path is not provided.' },
           project_name: { type: 'string', description: 'Optional project name override used for reporting when .project.yaml is missing.' },
           project_description: { type: 'string', description: 'Optional project description override used for reporting.' },
         },
@@ -375,7 +383,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case 'agenticos_save':
       return { content: [{ type: 'text', text: await saveState(args) }] };
     case 'agenticos_status':
-      return { content: [{ type: 'text', text: await getStatus() }] };
+      return { content: [{ type: 'text', text: await getStatus(args ?? {}) }] };
     case 'agenticos_preflight':
       return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
     case 'agenticos_issue_bootstrap':
@@ -411,7 +419,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     {
       uri: 'agenticos://context/current',
       name: 'Current Project Context',
-      description: 'Get context for the currently active project',
+      description: 'Get context for the current session project',
       mimeType: 'text/markdown',
     },
   ],

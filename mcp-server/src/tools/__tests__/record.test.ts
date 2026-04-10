@@ -30,7 +30,7 @@ vi.mock('yaml', () => ({
 
 vi.mock('../../utils/registry.js', () => ({
   loadRegistry: vi.fn(),
-  saveRegistry: vi.fn(),
+  patchProjectMetadata: vi.fn(),
   getAgenticOSHome: vi.fn(() => '/home/testuser/AgenticOS'),
   resolvePath: vi.fn((p: string) => p),
 }));
@@ -42,6 +42,7 @@ vi.mock('../../utils/distill.js', () => ({
 import { recordSession } from '../record.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
+import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -50,7 +51,7 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
 };
 const registryMock = registry as typeof registry & {
   loadRegistry: ReturnType<typeof vi.fn>;
-  saveRegistry: ReturnType<typeof vi.fn>;
+  patchProjectMetadata: ReturnType<typeof vi.fn>;
 };
 
 function buildRegistry(overrides: Record<string, unknown> = {}) {
@@ -113,11 +114,17 @@ function mockProjectFiles(options?: {
 
 describe('recordSession', () => {
   beforeEach(() => {
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
     // Clear mock calls but preserve implementations
     fsPromisesMock.readFile.mockClear();
     fsPromisesMock.writeFile.mockClear();
     registryMock.loadRegistry.mockClear();
-    registryMock.saveRegistry.mockClear();
+    registryMock.patchProjectMetadata.mockClear();
     yamlMock.parse.mockClear();
     yamlMock.stringify.mockClear();
     // Set up default yamlMock implementations
@@ -132,11 +139,12 @@ describe('recordSession', () => {
       active_project: null,
       projects: [],
     });
-    registryMock.saveRegistry.mockResolvedValue(undefined);
+    registryMock.patchProjectMetadata.mockResolvedValue(undefined);
     mockProjectFiles();
   });
 
   afterEach(() => {
+    clearSessionProjectBinding();
     vi.restoreAllMocks();
   });
 
@@ -145,12 +153,15 @@ describe('recordSession', () => {
     expect(result).toContain('summary is required');
   });
 
-  it('returns error when no active project', async () => {
+  it('returns error when no explicit project and no session project are available', async () => {
+    clearSessionProjectBinding();
     const result = await recordSession({ summary: 'test summary' });
-    expect(result).toContain('No active project');
+    expect(result).toContain('No project provided and no session project is bound');
+    expect(result).toContain('agenticos_switch');
   });
 
-  it('returns error when active project not found in registry', async () => {
+  it('ignores a populated legacy registry active_project when no session project is bound', async () => {
+    clearSessionProjectBinding();
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -168,7 +179,7 @@ describe('recordSession', () => {
     });
 
     const result = await recordSession({ summary: 'test summary' });
-    expect(result).toContain('not found in registry');
+    expect(result).toContain('No project provided and no session project is bound');
   });
 
   it('creates conversation file with correct date-based filename', async () => {
@@ -354,10 +365,12 @@ describe('recordSession', () => {
 
     await recordSession({ summary: 'test' });
 
-    expect(registryMock.saveRegistry).toHaveBeenCalled();
-    const savedRegistry = registryMock.saveRegistry.mock.calls[0][0];
-    const testProject = savedRegistry.projects.find((p: any) => p.id === 'test-project');
-    expect(testProject.last_recorded).toBeDefined();
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalledWith(
+      'test-project',
+      expect.objectContaining({
+        last_recorded: expect.any(String),
+      }),
+    );
   });
 
   it('parses JSON-stringified array arguments without spreading as characters', async () => {
@@ -578,15 +591,15 @@ describe('recordSession', () => {
 
     await recordSession({ summary: 'test session' });
 
-    const savedRegistry = registryMock.saveRegistry.mock.calls[0][0];
-    const testProject = savedRegistry.projects.find((p: any) => p.id === 'test-project');
-    const otherProject = savedRegistry.projects.find((p: any) => p.id === 'other-project');
-
-    expect(testProject.last_recorded).toBeDefined();
-    expect(otherProject.last_recorded).toBe('2025-01-01T12:00:00.000Z');
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalledWith(
+      'test-project',
+      expect.objectContaining({
+        last_recorded: expect.any(String),
+      }),
+    );
   });
 
-  it('fails closed when explicit project does not match the active project', async () => {
+  it('allows an explicit project even when legacy active_project differs', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       ...buildRegistry(),
       projects: [
@@ -601,14 +614,105 @@ describe('recordSession', () => {
         },
       ],
     });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/other/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'other-project', name: 'Other Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/other/path/.context/state.yaml') {
+        return JSON.stringify({
+          session: {},
+          working_memory: { decisions: [], facts: [], pending: [] },
+        });
+      }
+      if (path === '/other/path/.context/quick-start.md') {
+        return '# Quick Start\n\n1. Define project goals';
+      }
+      if (path.includes('/other/path/.context/conversations/') && path.endsWith('.md')) {
+        return '';
+      }
+      if (path === '/test/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/test/path/.context/state.yaml') {
+        return JSON.stringify({
+          session: {},
+          working_memory: { decisions: [], facts: [], pending: [] },
+        });
+      }
+      if (path === '/test/path/.context/quick-start.md') {
+        return '# Quick Start\n\n1. Define project goals';
+      }
+      if (path.includes('/test/path/.context/conversations/') && path.endsWith('.md')) {
+        return '';
+      }
+      return '';
+    });
 
     const result = await recordSession({
       project: 'other-project',
       summary: 'test',
     });
 
-    expect(result).toContain('does not match active project');
-    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    expect(result).toContain('Session recorded for "Other Project"');
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalledWith(
+      'other-project',
+      expect.objectContaining({
+        last_recorded: expect.any(String),
+      }),
+    );
+  });
+
+  it('uses the session-local bound project when no explicit project is provided', async () => {
+    bindSessionProject({
+      projectId: 'other-project',
+      projectName: 'Other Project',
+      projectPath: '/other/path',
+    });
+    registryMock.loadRegistry.mockResolvedValue({
+      ...buildRegistry({ active_project: null }),
+      projects: [
+        ...buildRegistry().projects,
+        {
+          id: 'other-project',
+          name: 'Other Project',
+          path: '/other/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/other/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'other-project', name: 'Other Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/other/path/.context/state.yaml') {
+        return JSON.stringify({
+          session: {},
+          working_memory: { decisions: [], facts: [], pending: [] },
+        });
+      }
+      if (path === '/other/path/.context/quick-start.md') {
+        return '# Quick Start\n\n1. Define project goals';
+      }
+      if (path.includes('/other/path/.context/conversations/') && path.endsWith('.md')) {
+        return '';
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const result = await recordSession({ summary: 'session-bound record' });
+
+    expect(result).toContain('Session recorded for "Other Project"');
   });
 
   it('fails closed when .project.yaml identity mismatches the registry project', async () => {

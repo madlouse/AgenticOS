@@ -1,7 +1,7 @@
 import { mkdir, writeFile, access, readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
-import { loadRegistry, saveRegistry, getAgenticOSHome } from '../utils/registry.js';
+import { loadRegistry, patchRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
 import { buildProjectTopologyInitializationMessage, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
@@ -157,8 +157,6 @@ export async function initProject(args: any): Promise<string> {
     if (!publicationValidation.ok) {
       return `${publicationValidation.message} Re-run agenticos_init with normalize_existing=true and the intended topology/publication contract.`;
     }
-    registry.active_project = id;
-    await saveRegistry(registry);
     return `Project '${name}' already exists at ${projectPath}. Use \`agenticos_switch\` to activate it.`;
   }
 
@@ -167,8 +165,12 @@ export async function initProject(args: any): Promise<string> {
   }
 
   if (!pathExists && registryHasId) {
-    registry.projects.splice(existingIdx, 1);
-    await saveRegistry(registry);
+    await patchRegistry((current) => {
+      current.projects = current.projects.filter((project) => project.id !== id);
+      if (current.active_project === id) {
+        current.active_project = null;
+      }
+    });
   }
 
   const existingProjectYaml = pathExists ? await loadExistingProjectYaml(projectPath) : {};
@@ -243,12 +245,11 @@ ${description ?? existingProjectYaml?.meta?.description ?? ''}
     last_accessed: new Date().toISOString(),
   };
 
-  if (existingIdx >= 0) {
-    registry.projects.splice(existingIdx, 1);
-  }
-  registry.projects.push(projectEntry);
-  registry.active_project = id;
-  await saveRegistry(registry);
+  await patchRegistry((current) => {
+    current.projects = current.projects.filter((project) => project.id !== id);
+    current.projects.push(projectEntry);
+    current.active_project = null;
+  });
 
   const topologyLine = topology === 'github_versioned'
     ? `Topology: github_versioned (${githubRepo}, github_flow)`

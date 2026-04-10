@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import yaml from 'yaml';
-import { saveRegistry } from '../utils/registry.js';
+import { patchProjectMetadata } from '../utils/registry.js';
 import { updateClaudeMdState } from '../utils/distill.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 
@@ -35,7 +35,7 @@ export async function recordSession(args: any): Promise<string> {
     return `❌ ${error.message}`;
   }
 
-  const { registry, project, projectPath, statePath, conversationsDir: convDir, markerPath } = resolved;
+  const { project, projectPath, statePath, conversationsDir: convDir, markerPath } = resolved;
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const time = now.toISOString().substring(11, 16);
@@ -115,12 +115,9 @@ export async function recordSession(args: any): Promise<string> {
   await writeFile(markerPath, now.toISOString(), 'utf-8');
 
   // 5. Update registry with last_recorded timestamp
-  registry.projects = registry.projects.map((p) =>
-    p.id === project.id
-      ? { ...p, last_recorded: now.toISOString() }
-      : p
-  );
-  await saveRegistry(registry);
+  await patchProjectMetadata(project.id, {
+    last_recorded: now.toISOString(),
+  });
 
   return `✅ Session recorded for "${project.name}"\n\n` +
     `📝 Conversation: .context/conversations/${today}.md\n` +

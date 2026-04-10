@@ -6,7 +6,7 @@ import { joinDisplayPath, type ManagedProjectContextDisplayPaths } from './agent
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 10;
+export const CURRENT_TEMPLATE_VERSION = 11;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -123,7 +123,7 @@ ${AGENTS_ADAPTER_LINES[1]}
 
 ${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
-Before implementation edits, confirm project alignment with \`agenticos_status\`; if the active project is missing or wrong, call \`agenticos_switch\`.
+Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
 Implementation work must use the executable guardrail flow:
 
@@ -159,8 +159,8 @@ After recording, call \`agenticos_save\` to commit to Git.
 ### Session Start
 
 On session start, align the runtime before meaningful work:
-1. call \`agenticos_status\` to confirm the active project, current task, pending work, and latest recorded state
-2. if the active project is missing or not \`${name}\`, call \`agenticos_switch\`
+1. call \`agenticos_status\` to confirm the current session project, current task, pending work, and latest recorded state
+2. if no session project is bound or the bound project is not \`${name}\`, call \`agenticos_switch\`
 3. read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, \`${contextPaths.statePath}\`, and \`${contextPaths.conversationsDir}\`
 4. review the latest guardrail evidence and latest \`agenticos_issue_bootstrap\` record before implementation-affecting work
 5. if implementation work is requested, follow the Guardrail Protocol above exactly before editing
@@ -278,7 +278,7 @@ ${CLAUDE_ADAPTER_LINES[1]}
 
 ${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
-Before implementation edits, confirm project alignment with \`agenticos_status\`; if the active project is missing or wrong, call \`agenticos_switch\`.
+Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
 For implementation-affecting work:
 
@@ -324,8 +324,8 @@ When the user signals session end (says goodbye, thanks, done, or stops respondi
 
 When you open this project in a new session, **immediately do the following**:
 
-1. Call \`agenticos_status\` to confirm the active project, current task, pending work, and latest recorded state
-2. If the active project is missing or not \`${name}\`, call \`agenticos_switch\`
+1. Call \`agenticos_status\` to confirm the current session project, current task, pending work, and latest recorded state
+2. If no session project is bound or the bound project is not \`${name}\`, call \`agenticos_switch\`
 3. Read \`.project.yaml\`, the "Current State" section below, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.conversationsDir}\`
 4. Review the latest guardrail evidence and latest \`agenticos_issue_bootstrap\` record before implementation-affecting work
 5. Greet the user with a brief status report:
