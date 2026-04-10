@@ -8,23 +8,22 @@ Closes #263.
 
 ## Summary
 
-This PR lands the first safe slice of `#263`.
+This PR now covers the first complete operator-safe tranche of `#263`.
 
-It adds report-only migration inventory commands after `#262` so operators can
-audit legacy managed-project state without mutating projects or the home
-registry.
+It adds:
 
-The new surface is intentionally audit-first:
-
-1. per-project audit via `agenticos_migration_audit`
-2. registry-backed home inventory via `agenticos_migrate_home`
-3. explicit `BLOCK` output for ambiguous or structurally unsafe states
-4. no apply-mode mutation yet
+1. report-only migration audit and registry-backed home inventory
+2. reviewed phase-2 design documentation
+3. deterministic per-project migration planning
+4. guarded per-project apply for the currently supported deterministic actions
+5. operator migration guide and per-project checklist
 
 ## What Changed
 
 - added `agenticos_migration_audit` for per-project report-only migration checks
 - added `agenticos_migrate_home` for registry-backed home-wide inventory
+- added `agenticos_migrate_project` for deterministic per-project migration
+  planning and guarded apply
 - implemented a structured finding model:
   - `compatible_only`
   - `safe_lazy_repair`
@@ -41,9 +40,23 @@ The new surface is intentionally audit-first:
   - compatibility-only legacy `active_project` evidence in state artifacts
 - treated archived/reference projects as inventory-only during audit instead of
   forcing active managed-project topology/state checks
-- documented the report-only first-slice boundary and clarified that
+- added a reviewed phase-2 migration design with explicit invariants for:
+  - explicit-target apply
+  - plan hash verification
+  - project-local migration lock
+  - additive migration evidence
+- implemented guarded apply for the currently supported deterministic actions:
+  - patch-based registry cleanup
+  - state surface rebuild when already provable
+  - additive migration report + state summary pointer
+- documented the current migration boundary and clarified that
   `agenticos_migrate_home` currently inventories registry-backed projects rather
   than scanning arbitrary on-disk directories
+- published an operator migration guide with:
+  - upgrade guidance
+  - per-project checklist
+  - mixed-state rollout advice
+  - FAQ
 
 ## Verification
 
@@ -53,30 +66,36 @@ The new surface is intentionally audit-first:
 Result:
 
 - `33` test files passed
-- `266` tests passed
+- `274` tests passed
 - lint passed
 
 ## Key Files
 
 - `mcp-server/src/utils/migration-audit.ts`
+- `mcp-server/src/utils/migration-project.ts`
 - `mcp-server/src/tools/migration-audit.ts`
+- `mcp-server/src/tools/migration-project.ts`
 - `mcp-server/src/tools/__tests__/migration-audit.test.ts`
+- `mcp-server/src/tools/__tests__/migration-project.test.ts`
 - `mcp-server/src/index.ts`
 - `mcp-server/README.md`
 - `tasks/issue-263-legacy-project-migration-plan.md`
+- `tasks/issue-263-phase2-technical-design-review.md`
+- `tasks/issue-263-operator-migration-guide.md`
 
 ## Follow-Ups
 
-- per-project explicit migration (`agenticos_migrate_project`) remains future
-  work in `#263`
 - home-wide apply-safe-repair mode is still intentionally deferred until
-  single-project migration is proven
-- filesystem-wide orphan discovery under `AGENTICOS_HOME/projects` is not part
-  of this first report-only slice
+  single-project migration is proven across more real projects
+- filesystem-wide orphan discovery under `AGENTICOS_HOME/projects` is still not
+  part of this tranche
+- ambiguous identity / topology remediation remains explicit operator work, not
+  automatic migration
 
 ## Risks / Notes
 
-- `agenticos_migrate_home` is registry-backed by design in this slice, so
+- `agenticos_migrate_home` is registry-backed by design in this tranche, so
   unregistered directories are not yet inventoried
-- report-only audit can prove that migration is needed, but it does not perform
-  any mutation or write migration evidence yet
+- `agenticos_migrate_project` apply remains intentionally narrow and will still
+  block on ambiguous/manual states
+- historical evidence is preserved additively rather than rewritten

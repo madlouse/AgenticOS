@@ -429,6 +429,10 @@ Canonical reviewed follow-up design for Workstream 2 is persisted in:
 
 - [issue-263-phase2-technical-design-review.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-phase2-technical-design-review.md)
 
+Operator migration guide is persisted in:
+
+- [issue-263-operator-migration-guide.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-operator-migration-guide.md)
+
 ## Suggested Issue Checklist
 
 - [x] Define the migration finding schema and severity model.
@@ -436,8 +440,8 @@ Canonical reviewed follow-up design for Workstream 2 is persisted in:
 - [x] Implement home-wide report-only migration inventory.
 - [x] Define the per-project migration action plan and dry-run output.
 - [x] Implement per-project explicit migration with evidence logging.
-- [ ] Document safe lazy repair cases allowed during explicit project entry.
-- [ ] Publish the upgrade guide and migration checklist.
+- [x] Document safe lazy repair cases allowed during explicit project entry.
+- [x] Publish the upgrade guide and migration checklist.
 - [ ] Decide whether home-wide apply-safe-repairs is warranted after single-project migration is proven.
 
 ## Decision
