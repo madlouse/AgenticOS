@@ -8,6 +8,10 @@ unsafe or misleading under the new concurrent runtime model.
 
 This migration problem should be tracked as a separate issue from `#262`.
 
+Detailed phase-2 technical review for the next implementation tranche:
+
+- `tasks/issue-263-phase2-technical-design-review.md`
+
 The migration contract should answer three questions:
 
 1. Which existing projects actually require migration?
@@ -280,6 +284,10 @@ Goal:
 
 - migrate one target project deliberately and safely
 
+Canonical reviewed phase-2 design:
+
+- `tasks/issue-263-phase2-technical-design-review.md`
+
 Suggested command shape:
 
 - `agenticos_migrate_project`
@@ -393,6 +401,13 @@ Recommended order:
 3. Workstream 2: per-project explicit migration
 4. Workstream 3: home-wide report and optional safe-repair expansion
 
+Detailed follow-up design review for Workstream 2:
+
+- see [tasks/issue-263-phase2-design-review.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-phase2-design-review.md)
+- canonical technical detail lives in [tasks/issue-263-phase2-technical-design-review.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-phase2-technical-design-review.md)
+- the next safe milestone is `agenticos_migrate_project` with explicit
+  `plan/apply` semantics, not home-wide apply mode
+
 Reasoning:
 
 - audit must exist before operators can trust migration decisions
@@ -400,6 +415,10 @@ Reasoning:
 - per-project explicit migration is safer than starting with home-wide mutation
 - estate-level apply behavior should only come after single-project migration is
   proven
+
+Canonical reviewed follow-up design for Workstream 2 is persisted in:
+
+- [issue-263-phase2-technical-design-review.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-phase2-technical-design-review.md)
 
 ## Suggested Issue Checklist
 
