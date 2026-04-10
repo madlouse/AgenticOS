@@ -26,7 +26,7 @@ vi.mock('../canonical-main-guard.js', () => ({
 import { access, readFile, writeFile } from 'fs/promises';
 import { detectCanonicalMainWriteProtection } from '../canonical-main-guard.js';
 import { loadRegistry } from '../registry.js';
-import { persistGuardrailEvidence } from '../guardrail-evidence.js';
+import { persistGuardrailEvidence, persistIssueBootstrapEvidence } from '../guardrail-evidence.js';
 
 const accessMock = access as unknown as ReturnType<typeof vi.fn>;
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
@@ -264,6 +264,86 @@ describe('persistGuardrailEvidence', () => {
       payload: {
         issue_id: '212',
         result: { status: 'REDIRECT' },
+      },
+    });
+
+    expect(result.persisted).toBe(false);
+    expect(result.reason).toContain('write-protected');
+    expect(writeFileMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('persistIssueBootstrapEvidence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    yamlMock.parse.mockImplementation((content: string) => {
+      try {
+        return JSON.parse(content);
+      } catch {
+        return undefined;
+      }
+    });
+    yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'agenticos',
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active',
+          created: '2026-03-23',
+          last_accessed: '2026-03-23T00:00:00.000Z',
+        },
+      ],
+    });
+    accessMock.mockResolvedValue(undefined);
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'agenticos', name: 'AgenticOS' },
+          agent_context: { current_state: 'standards/.context/state.yaml' },
+        });
+      }
+      return JSON.stringify({ session: {}, working_memory: { facts: [], decisions: [], pending: [] } });
+    });
+    writeFileMock.mockResolvedValue(undefined);
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({ blocked: false });
+  });
+
+  it('persists the latest issue bootstrap record into the matching managed project state', async () => {
+    const result = await persistIssueBootstrapEvidence({
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '260',
+        issue_title: 'Stop runtime persistence pollution',
+        repo_path: '/workspace/projects/agenticos/mcp-server',
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.project_id).toBe('agenticos');
+    expect(writeFileMock).toHaveBeenCalledTimes(1);
+    expect(writeFileMock.mock.calls[0]?.[0]).toBe('/workspace/projects/agenticos/standards/.context/state.yaml');
+
+    const [, content] = writeFileMock.mock.calls[0];
+    const writtenState = JSON.parse(content as string);
+    expect(writtenState.issue_bootstrap.latest.issue_id).toBe('260');
+    expect(writtenState.issue_bootstrap.latest.issue_title).toBe('Stop runtime persistence pollution');
+    expect(writtenState.issue_bootstrap.latest.repo_path).toBe('/workspace/projects/agenticos/mcp-server');
+  });
+
+  it('does not persist issue bootstrap evidence into canonical main checkouts', async () => {
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: true,
+      reason: 'canonical main checkout is write-protected for runtime persistence: /workspace/root',
+    });
+
+    const result = await persistIssueBootstrapEvidence({
+      repo_path: '/workspace/root/projects/agenticos/mcp-server',
+      payload: {
+        issue_id: '260',
+        issue_title: 'Stop runtime persistence pollution',
       },
     });
 

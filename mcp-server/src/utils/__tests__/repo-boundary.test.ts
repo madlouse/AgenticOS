@@ -101,6 +101,43 @@ describe('resolveGuardrailProjectTarget', () => {
     expect(result.resolutionSource).toBe('repo_path_match');
   });
 
+  it('resolves an explicit project_path even when active_project has drifted elsewhere', async () => {
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'beta',
+      projects: [
+        {
+          id: 'alpha',
+          name: 'Alpha Project',
+          path: '/workspace/projects/alpha',
+          status: 'active',
+          created: '2026-04-06',
+          last_accessed: '2026-04-06T00:00:00.000Z',
+        },
+        {
+          id: 'beta',
+          name: 'Beta Project',
+          path: '/workspace/projects/beta',
+          status: 'active',
+          created: '2026-04-06',
+          last_accessed: '2026-04-06T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await resolveGuardrailProjectTarget({
+      commandName: 'agenticos_preflight',
+      repoPath: '/workspace/source',
+      projectPath: '/workspace/projects/alpha',
+    });
+
+    expect(result.activeProjectId).toBe('beta');
+    expect(result.targetProject?.id).toBe('alpha');
+    expect(result.targetProject?.path).toBe('/workspace/projects/alpha');
+    expect(result.resolutionSource).toBe('explicit_project_path');
+    expect(result.resolutionErrors).toEqual([]);
+    expect(resolveManagedProjectTargetMock).not.toHaveBeenCalled();
+  });
+
   it('returns a fail-closed resolution error when project metadata cannot be proven', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: 'alpha',

@@ -337,6 +337,17 @@ export async function persistIssueBootstrapEvidence(
     };
   }
 
+  const writeProtection = await detectCanonicalMainWriteProtection(repo_path);
+  if (writeProtection.blocked) {
+    return {
+      attempted: true,
+      persisted: false,
+      project_id: project.id,
+      state_path: project.statePath,
+      reason: writeProtection.reason,
+    };
+  }
+
   const statePath = project.statePath;
   let state: StateYaml = {};
 
