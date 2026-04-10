@@ -175,8 +175,8 @@ AgenticOS does not treat every fallback as equal:
 
 Every officially supported adapter must align the runtime before meaningful work begins:
 
-1. call `agenticos_status` to confirm the active project, current task, pending work, and latest recorded state
-2. if the active project is missing or wrong, call `agenticos_switch`
+1. call `agenticos_status` to confirm the current session project, current task, pending work, and latest recorded state
+2. if no session project is bound or the bound project is wrong, call `agenticos_switch`
 3. load the project's startup surfaces (`.project.yaml`, quick-start, state, and session history)
 4. review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
 5. if implementation work is requested, enter the canonical guardrail flow below
@@ -242,7 +242,7 @@ Switch to existing project and load context.
 
 **Returns**: Loaded context (project config, quick-start, state)
 
-Use this when `agenticos_status` shows the active project is missing or not the intended project.
+Use this when `agenticos_status` shows that no session project is bound or the bound project is not the intended one.
 
 The quick-start/state split is intentional:
 - `quick-start.md` is a concise entry surface
@@ -252,7 +252,7 @@ The quick-start/state split is intentional:
 ### agenticos_list
 List all projects with status.
 
-**Returns**: Formatted list with active project highlighted
+**Returns**: Formatted list with the current session project highlighted when one is bound
 
 ### agenticos_save
 Save state and backup to Git.
@@ -263,7 +263,7 @@ Save state and backup to Git.
 **Returns**: Backup confirmation with timestamp
 
 ### agenticos_status
-Show the status of the active project.
+Show the status of the current session project, or an explicit project when provided.
 
 **Returns**: Current task, pending items, and recent decisions
 
@@ -296,7 +296,7 @@ Run machine-checkable guardrail preflight after issue bootstrap and before imple
 **Returns**: JSON with `PASS`, `BLOCK`, or `REDIRECT`
 
 ### agenticos_edit_guard
-Fail closed before implementation-affecting edits unless the active project, latest issue bootstrap evidence, and latest persisted PASS preflight evidence already match the intended edit.
+Fail closed before implementation-affecting edits unless the resolved managed project identity, latest issue bootstrap evidence, and latest persisted PASS preflight evidence already match the intended edit.
 
 **Parameters**:
 - `repo_path` (required)
@@ -373,7 +373,7 @@ Validate a completed non-code evaluation rubric against the canonical contract a
 ## 📦 Resources Reference
 
 ### agenticos://context/current
-Get complete context for active project.
+Get complete context for the current session project.
 
 **Returns**:
 - Project configuration (.project.yaml)

@@ -47,16 +47,16 @@ project/
 
 **核心工具**:
 - `agenticos_init` - 创建项目
-- `agenticos_switch` - 切换项目
+- `agenticos_switch` - 绑定当前会话项目
 - `agenticos_list` - 列出项目
 - `agenticos_save` - 保存备份
 
 **核心资源**:
-- `agenticos://context/current` - 项目上下文
+- `agenticos://context/current` - 当前会话项目上下文
 
 **Registry 管理**:
 - 位置: `~/AgenticOS/.agent-workspace/registry.yaml`
-- 作用: 跟踪所有项目、活跃项目
+- 作用: 跟踪所有已注册项目与兼容性元数据；当前项目不再由 home-global registry authoritative 决定
 - 格式: 人类可读的 YAML
 
 ### Layer 3: Agent 适配层（Agent-Specific Layer）
@@ -229,7 +229,7 @@ agenticos-mcp/
 ```yaml
 version: "1.0.0"
 last_updated: "2026-03-16T08:52:20Z"
-active_project: "my-project"
+active_project: null   # legacy compatibility field, not current-session truth
 projects:
   - id: "my-project"
     name: "My Project"

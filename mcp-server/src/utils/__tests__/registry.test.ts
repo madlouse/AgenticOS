@@ -39,6 +39,8 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
   access: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
 }));
 
 vi.mock('yaml', () => ({
@@ -53,6 +55,7 @@ vi.mock('../canonical-main-guard.js', () => ({
 import {
   loadRegistry,
   saveRegistry,
+  patchProjectMetadata,
   getAgenticOSHome,
   MISSING_AGENTICOS_HOME_MESSAGE,
 } from '../registry.js';
@@ -64,6 +67,8 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
   writeFile: ReturnType<typeof vi.fn>;
   mkdir: ReturnType<typeof vi.fn>;
   access: ReturnType<typeof vi.fn>;
+  rename: ReturnType<typeof vi.fn>;
+  rm: ReturnType<typeof vi.fn>;
 };
 const detectCanonicalMainWriteProtectionMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
@@ -72,6 +77,8 @@ describe('registry utilities', () => {
     vi.clearAllMocks();
     process.env.AGENTICOS_HOME = '/home/testuser/AgenticOS';
     detectCanonicalMainWriteProtectionMock.mockResolvedValue({ blocked: false });
+    fsPromisesMock.rename.mockResolvedValue(undefined);
+    fsPromisesMock.rm.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -149,7 +156,9 @@ describe('registry utilities', () => {
     });
 
     it('returns default registry when YAML parse fails', async () => {
-      yamlMock.parse.mockRejectedValue(new Error('parse error'));
+      yamlMock.parse.mockImplementation(() => {
+        throw new Error('parse error');
+      });
       fsPromisesMock.readFile.mockResolvedValue('invalid: yaml: content:');
 
       const registry = await loadRegistry();
@@ -233,6 +242,46 @@ describe('registry utilities', () => {
 
       await expect(saveRegistry(registry)).rejects.toThrow('write-protected');
       expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('patchProjectMetadata', () => {
+    it('reloads the current registry and patches only the requested project metadata', async () => {
+      yamlMock.parse.mockReturnValue({
+        version: '1.0.0',
+        last_updated: '2025-01-01T00:00:00.000Z',
+        active_project: null,
+        projects: [
+          {
+            id: 'alpha',
+            name: 'Alpha',
+            path: 'projects/alpha',
+            status: 'active',
+            created: '2025-01-01',
+            last_accessed: '2025-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'beta',
+            name: 'Beta',
+            path: 'projects/beta',
+            status: 'active',
+            created: '2025-01-01',
+            last_accessed: '2025-01-01T12:00:00.000Z',
+          },
+        ],
+      } as any);
+      fsPromisesMock.readFile.mockResolvedValue('registry');
+
+      await patchProjectMetadata('alpha', {
+        last_recorded: '2026-04-10T10:00:00.000Z',
+      });
+
+      const writeCall = fsPromisesMock.writeFile.mock.calls[0];
+      const writtenContent = writeCall[1] as string;
+      expect(writtenContent).toContain('last_recorded: 2026-04-10T10:00:00.000Z');
+      expect(writtenContent).toContain('last_accessed: 2025-01-01T12:00:00.000Z');
+      expect(fsPromisesMock.rename).toHaveBeenCalled();
+      expect(fsPromisesMock.rm).toHaveBeenCalled();
     });
   });
 });

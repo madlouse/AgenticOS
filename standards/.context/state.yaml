@@ -27,33 +27,60 @@ issue_bootstrap:
     recorded_at: 2026-04-10T08:45:19.949Z
 working_memory:
   facts:
-    - Fixed `resolveGuardrailProjectTarget()` so explicit `project_path` no
-      longer routes through active-project mismatch enforcement.
-    - Fixed `persistIssueBootstrapEvidence()` so canonical `main` checkouts are
-      not dirtied by runtime persistence.
-    - Added regression coverage for explicit-project resolution drift and
-      issue-bootstrap write protection.
-    - "Ran targeted tests, full `npm test`, and `npm run lint` successfully in
-      the #260 worktree."
-    - "Pushed branch fix/260-stop-active-project-drift-and-main-state-pollution
-      and opened PR #261."
+    - AGENTICOS_HOME is modeled as a long-term runtime workspace, not
+      necessarily a source checkout.
+    - Projects under AGENTICOS_HOME/Projects may be source-managed or local
+      knowledge/runtime-only.
+    - Multi-agent and multi-project concurrency requires fail-closed resolution
+      when no explicit or session-local target is available.
   decisions:
-    - Guardrail commands should honor an explicit `project_path` even when
-      global `active_project` has drifted to another managed project.
-    - Canonical `main` write protection must apply to
-      `agenticos_issue_bootstrap` persistence exactly as it already applies to
-      other guardrail evidence writes.
-    - Keep strict active-project matching in general managed-project resolution;
-      loosen only the guardrail-side explicit-project path.
+    - Runtime target resolution now prefers explicit target, repo-path proof
+      where applicable, and session-local binding; it no longer resolves through
+      legacy registry.active_project.
+    - registry.active_project remains compatibility-only metadata rather than a
+      home-global enforcement primitive.
+    - Normative design/spec docs were updated to reflect the runtime-home plus
+      projects model and session-local project semantics.
   pending:
-    - "Review and merge PR #261."
-    - "After #260 lands, continue remaining backlog in priority order: #245
-      public github_versioned raw conversation isolation, then #244 private
-      github_versioned full continuity persistence."
+    - Review any remaining historical docs that should only get superseded notes
+      rather than body edits.
+    - "Prepare the #262 issue/PR update with the final scope: runtime
+      resolution, standard-kit semantics, and normative doc refresh."
+    - "Keep #263 focused on migration/audit guidance for legacy projects rather
+      than mutate-first runtime fallback."
 session:
-  last_backup: 2026-04-10T08:55:55.177Z
+  last_backup: 2026-04-10T10:58:11.098Z
+  id: entry-refresh-2026-04-10
+  started: 2026-04-10T10:58:11.098Z
+  agent: agenticos-entry-refresh
+  last_entry_surface_refresh: 2026-04-10T10:58:11.098Z
 current_task:
-  title: "fix: stop active-project drift and canonical-main runtime persistence
-    pollution"
-  status: completed
-  updated: 2026-04-10T08:55:46.474Z
+  title: "Implement #262 concurrent runtime project resolution"
+  status: in_progress
+  updated: 2026-04-10T10:58:11.098Z
+  next_step: Review any remaining historical docs that should only get superseded
+    notes rather than body edits.
+loaded_context:
+  - .project.yaml
+  - standards/.context/quick-start.md
+  - tasks/issue-262-concurrent-runtime-project-resolution.md
+  - tasks/issue-263-legacy-project-migration-plan.md
+  - mcp-server/README.md
+  - standards/knowledge/complete-design.md
+entry_surface_refresh:
+  refreshed_at: 2026-04-10T10:58:11.098Z
+  issue_id: null
+  summary: "Issue #262 now removes runtime target resolution dependence on legacy
+    registry.active_project, standardizes session-local project semantics,
+    hardens registry patch writes, and refreshes normative docs to the
+    runtime-home/project model."
+  status: in_progress
+  current_focus: "Finish #262 residual review, then prepare the branch for issue/PR update."
+  report_paths:
+    - tasks/issue-262-concurrent-runtime-project-resolution.md
+    - tasks/issue-263-legacy-project-migration-plan.md
+  recommended_entry_documents:
+    - tasks/issue-262-concurrent-runtime-project-resolution.md
+    - tasks/issue-263-legacy-project-migration-plan.md
+    - mcp-server/README.md
+    - standards/knowledge/complete-design.md

@@ -19,6 +19,7 @@ vi.mock('../registry.js', () => ({
 
 import { readFile } from 'fs/promises';
 import { loadRegistry } from '../registry.js';
+import { bindSessionProject, clearSessionProjectBinding } from '../session-context.js';
 import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../project-target.js';
 
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
@@ -46,6 +47,12 @@ function buildRegistry(overrides: Record<string, unknown> = {}) {
 describe('resolveManagedProjectTarget', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'alpha',
+      projectName: 'Alpha Project',
+      projectPath: '/workspace/alpha',
+    });
     yamlMock.parse.mockImplementation((content: string) => {
       try {
         return JSON.parse(content);
@@ -71,10 +78,11 @@ describe('resolveManagedProjectTarget', () => {
   });
 
   afterEach(() => {
+    clearSessionProjectBinding();
     vi.restoreAllMocks();
   });
 
-  it('resolves the active project when identity is valid', async () => {
+  it('resolves the session-bound project when identity is valid', async () => {
     const result = await resolveManagedProjectTarget({
       commandName: 'agenticos_record',
     });
@@ -111,12 +119,13 @@ describe('resolveManagedProjectTarget', () => {
     expect(result.markerPath).toBe('/workspace/alpha/standards/.context/.last_record');
   });
 
-  it('fails when there is no active project and no explicit project', async () => {
+  it('fails when there is no explicit project and no session project', async () => {
+    clearSessionProjectBinding();
     loadRegistryMock.mockResolvedValue(buildRegistry({ active_project: null }));
 
     await expect(resolveManagedProjectTarget({
       commandName: 'agenticos_record',
-    })).rejects.toThrow('No active project. Use agenticos_switch first or pass project to agenticos_record.');
+    })).rejects.toThrow('No project provided and no session project is bound. Use agenticos_switch first or pass project to agenticos_record.');
   });
 
   it('fails when the requested project is missing', async () => {
@@ -155,7 +164,7 @@ describe('resolveManagedProjectTarget', () => {
     })).rejects.toThrow('Project "Shared Name" is ambiguous in registry.');
   });
 
-  it('fails when explicit project does not match the active project', async () => {
+  it('allows explicit project resolution even when legacy active_project differs', async () => {
     loadRegistryMock.mockResolvedValue(buildRegistry({
       active_project: 'alpha',
       projects: [
@@ -178,10 +187,100 @@ describe('resolveManagedProjectTarget', () => {
       ],
     }));
 
-    await expect(resolveManagedProjectTarget({
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/workspace/beta/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'beta',
+            name: 'Beta Project',
+          },
+          source_control: {
+            topology: 'local_directory_only',
+          },
+        });
+      }
+      if (path.endsWith('/workspace/alpha/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'alpha',
+            name: 'Alpha Project',
+          },
+          source_control: {
+            topology: 'local_directory_only',
+          },
+        });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const result = await resolveManagedProjectTarget({
       commandName: 'agenticos_record',
       project: 'beta',
-    })).rejects.toThrow('Requested project "beta" does not match active project "alpha".');
+    });
+
+    expect(result.projectId).toBe('beta');
+    expect(result.projectPath).toBe('/workspace/beta');
+  });
+
+  it('uses the session-local bound project even when legacy registry state has drifted elsewhere', async () => {
+    bindSessionProject({
+      projectId: 'beta',
+      projectName: 'Beta Project',
+      projectPath: '/workspace/beta',
+    });
+    loadRegistryMock.mockResolvedValue(buildRegistry({
+      active_project: 'alpha',
+      projects: [
+        {
+          id: 'alpha',
+          name: 'Alpha Project',
+          path: '/workspace/alpha',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'beta',
+          name: 'Beta Project',
+          path: '/workspace/beta',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/workspace/beta/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'beta',
+            name: 'Beta Project',
+          },
+          source_control: {
+            topology: 'local_directory_only',
+          },
+        });
+      }
+      if (path.endsWith('/workspace/alpha/.project.yaml')) {
+        return JSON.stringify({
+          meta: {
+            id: 'alpha',
+            name: 'Alpha Project',
+          },
+          source_control: {
+            topology: 'local_directory_only',
+          },
+        });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const result = await resolveManagedProjectTarget({
+      commandName: 'agenticos_status',
+    });
+
+    expect(result.projectId).toBe('beta');
+    expect(result.projectPath).toBe('/workspace/beta');
   });
 
   it('fails when registry id is duplicated', async () => {

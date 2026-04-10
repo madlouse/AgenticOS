@@ -343,7 +343,7 @@ brew install madlouse/agenticos/agenticos
 npm install -g agenticos-mcp
 
 ### Verify
-agenticos-list   # should output: No active project
+agenticos-list   # should list registered projects; no session project is highlighted until you switch
 ```
 
 **反面示例**：

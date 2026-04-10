@@ -50,6 +50,7 @@ import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as childProcess from 'child_process';
 import { updateClaudeMdState } from '../../utils/distill.js';
+import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -107,6 +108,12 @@ function mockProjectFiles(options?: {
 
 describe('saveState', () => {
   beforeEach(() => {
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
     // Clear specific mocks but preserve yaml mock implementation
     fsPromisesMock.readFile.mockReset();
     fsPromisesMock.writeFile.mockReset();
@@ -139,16 +146,19 @@ describe('saveState', () => {
   });
 
   afterEach(() => {
+    clearSessionProjectBinding();
     vi.restoreAllMocks();
   });
 
-  it('returns error when no active project', async () => {
+  it('returns error when no explicit project and no session project are available', async () => {
+    clearSessionProjectBinding();
     const result = await saveState({ message: 'test' });
-    expect(result).toContain('No active project');
+    expect(result).toContain('No project provided and no session project is bound');
     expect(result).toContain('agenticos_switch');
   });
 
-  it('returns error when active project not found in registry', async () => {
+  it('ignores a populated legacy registry active_project when no session project is bound', async () => {
+    clearSessionProjectBinding();
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -166,7 +176,7 @@ describe('saveState', () => {
     });
 
     const result = await saveState({ message: 'test' });
-    expect(result).toContain('Active project "non-existent" not found in registry');
+    expect(result).toContain('No project provided and no session project is bound');
   });
 
   it('saves state.yaml with backup timestamp when no git repo', async () => {
@@ -471,7 +481,7 @@ describe('saveState', () => {
     expect(result).toContain('Push failed (committed locally, not synced)');
   });
 
-  it('fails closed when explicit project does not match the active project', async () => {
+  it('allows an explicit project even when legacy active_project differs', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       ...buildRegistry(),
       projects: [
@@ -486,11 +496,87 @@ describe('saveState', () => {
         },
       ],
     });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/other/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'other-project', name: 'Other Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/other/path/.context/state.yaml') {
+        return JSON.stringify({ session: {}, working_memory: { pending: [], decisions: [], facts: [] } });
+      }
+      if (path === '/test/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/test/path/.context/state.yaml') {
+        return JSON.stringify({ session: {}, working_memory: { pending: [], decisions: [], facts: [] } });
+      }
+      return '';
+    });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(new Error('not a git repo'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
 
     const result = await saveState({ project: 'other-project', message: 'test' });
 
-    expect(result).toContain('does not match active project');
-    expect(childProcessMock.exec).not.toHaveBeenCalled();
+    expect(result).toContain('State saved but no git repo found at /other/path');
+  });
+
+  it('uses the session-local bound project when no explicit project is provided', async () => {
+    bindSessionProject({
+      projectId: 'other-project',
+      projectName: 'Other Project',
+      projectPath: '/other/path',
+    });
+    registryMock.loadRegistry.mockResolvedValue({
+      ...buildRegistry({ active_project: null }),
+      projects: [
+        ...buildRegistry().projects,
+        {
+          id: 'other-project',
+          name: 'Other Project',
+          path: '/other/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/other/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'other-project', name: 'Other Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/other/path/.context/state.yaml') {
+        return JSON.stringify({ session: {}, working_memory: { pending: [], decisions: [], facts: [] } });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(new Error('not a git repo'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'test' });
+
+    expect(result).toContain('State saved but no git repo found at /other/path');
   });
 
   it('fails closed when .project.yaml identity mismatches the registry project', async () => {

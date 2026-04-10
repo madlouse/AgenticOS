@@ -30,7 +30,7 @@ vi.mock('yaml', () => ({
 
 vi.mock('../../utils/registry.js', () => ({
   loadRegistry: vi.fn(),
-  saveRegistry: vi.fn(),
+  patchProjectMetadata: vi.fn(),
   getAgenticOSHome: vi.fn(() => '/home/testuser/AgenticOS'),
   resolvePath: vi.fn((p: string) => p),
 }));
@@ -48,6 +48,7 @@ import { switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as fs from 'fs';
+import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -55,13 +56,26 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
 };
 const registryMock = registry as typeof registry & {
   loadRegistry: ReturnType<typeof vi.fn>;
-  saveRegistry: ReturnType<typeof vi.fn>;
+  patchProjectMetadata: ReturnType<typeof vi.fn>;
 };
 const fsMock = fs as typeof fs & { existsSync: ReturnType<typeof vi.fn> };
+
+function mockStatusReads(projectYaml: unknown, state: unknown | Error = {}): void {
+  fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+    if (path.endsWith('/.project.yaml')) {
+      return JSON.stringify(projectYaml);
+    }
+    if (state instanceof Error) {
+      throw state;
+    }
+    return JSON.stringify(state);
+  });
+}
 
 describe('switchProject', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSessionProjectBinding();
     // By default, mock existsSync to return false (no CLAUDE.md/AGENTS.md)
     fsMock.existsSync.mockReturnValue(false);
     yamlMock.parse.mockImplementation((content: string) => {
@@ -74,6 +88,7 @@ describe('switchProject', () => {
   });
 
   afterEach(() => {
+    clearSessionProjectBinding();
     vi.restoreAllMocks();
   });
 
@@ -105,7 +120,7 @@ describe('switchProject', () => {
     expect(result).toContain('Switched to project');
     expect(result).toContain('My Project');
     expect(result).toContain('/test/path');
-    expect(registryMock.saveRegistry).toHaveBeenCalled();
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
   });
 
   it('finds project by name', async () => {
@@ -194,10 +209,12 @@ describe('switchProject', () => {
 
     await switchProject({ project: 'my-project' });
 
-    expect(registryMock.saveRegistry).toHaveBeenCalled();
-    const savedRegistry = registryMock.saveRegistry.mock.calls[0][0];
-    const switchedProject = savedRegistry.projects.find((p: any) => p.id === 'my-project');
-    expect(switchedProject.last_accessed).not.toBe('2020-01-01T00:00:00.000Z');
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalledWith(
+      'my-project',
+      expect.objectContaining({
+        last_accessed: expect.any(String),
+      }),
+    );
   });
 
   it('creates CLAUDE.md if missing', async () => {
@@ -509,7 +526,7 @@ describe('switchProject', () => {
 
     expect(result).toContain('archived reference content');
     expect(result).toContain('agenticos-standards');
-    expect(registryMock.saveRegistry).not.toHaveBeenCalled();
+    expect(registryMock.patchProjectMetadata).not.toHaveBeenCalled();
   });
 
   it('refuses to switch into a legacy project that has not completed topology initialization', async () => {
@@ -536,16 +553,18 @@ describe('switchProject', () => {
     const result = await switchProject({ project: 'legacy-project' });
 
     expect(result).toContain('has not completed source-control topology initialization');
-    expect(registryMock.saveRegistry).not.toHaveBeenCalled();
+    expect(registryMock.patchProjectMetadata).not.toHaveBeenCalled();
   });
 });
 
 describe('listProjects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSessionProjectBinding();
   });
 
   afterEach(() => {
+    clearSessionProjectBinding();
     vi.restoreAllMocks();
   });
 
@@ -564,6 +583,12 @@ describe('listProjects', () => {
   });
 
   it('formats registry with projects', async () => {
+    bindSessionProject({
+      projectId: 'project-a',
+      projectName: 'Project A',
+      projectPath: '/path/a',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -629,6 +654,7 @@ describe('listProjects', () => {
 describe('getStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSessionProjectBinding();
     // Set up yamlMock.parse to handle JSON.parse, fall back to undefined
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
@@ -636,10 +662,11 @@ describe('getStatus', () => {
   });
 
   afterEach(() => {
+    clearSessionProjectBinding();
     vi.restoreAllMocks();
   });
 
-  it('returns error when no active project', async () => {
+  it('returns error when no session project and no fallback project are available', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -649,11 +676,11 @@ describe('getStatus', () => {
 
     const result = await getStatus();
 
-    expect(result).toContain('No active project');
+    expect(result).toContain('No project provided and no session project is bound');
     expect(result).toContain('agenticos_switch');
   });
 
-  it('returns error when active project not found in registry', async () => {
+  it('ignores a populated legacy registry active_project when no session project is bound', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -663,10 +690,16 @@ describe('getStatus', () => {
 
     const result = await getStatus();
 
-    expect(result).toContain('not found in registry');
+    expect(result).toContain('No project provided and no session project is bound');
   });
 
-  it('returns status for active project', async () => {
+  it('returns status for the resolved session project', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -684,8 +717,12 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         current_task: { title: 'Implement X', status: 'in_progress' },
@@ -693,7 +730,7 @@ describe('getStatus', () => {
           pending: ['task 1', 'task 2', 'task 3'],
           decisions: ['decision 1', 'decision 2'],
         },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -706,6 +743,12 @@ describe('getStatus', () => {
   });
 
   it('uses configured canonical state paths for self-hosting status output', async () => {
+    bindSessionProject({
+      projectId: 'agenticos',
+      projectName: 'AgenticOS',
+      projectPath: '/workspace/projects/agenticos',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -722,16 +765,17 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({
+    mockStatusReads(
+      {
         meta: { id: 'agenticos', name: 'AgenticOS' },
         source_control: { topology: 'local_directory_only' },
         agent_context: { current_state: 'standards/.context/state.yaml' },
-      }))
-      .mockResolvedValueOnce(JSON.stringify({
+      },
+      {
         current_task: { title: 'Canonical status', status: 'active' },
         working_memory: { pending: [], decisions: [] },
-      }));
+      }
+    );
 
     const result = await getStatus();
 
@@ -740,6 +784,12 @@ describe('getStatus', () => {
   });
 
   it('handles project with no state.yaml', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -756,11 +806,13 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
         source_control: { topology: 'local_directory_only' },
-      }))
-      .mockRejectedValue(new Error('ENOENT'));
+      },
+      new Error('ENOENT')
+    );
 
     const result = await getStatus();
 
@@ -768,6 +820,12 @@ describe('getStatus', () => {
   });
 
   it('shows None for current task when not set', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -785,12 +843,16 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -800,6 +862,12 @@ describe('getStatus', () => {
   });
 
   it('shows a friendly guardrail placeholder when no guardrail evidence exists', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -816,12 +884,16 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -830,6 +902,12 @@ describe('getStatus', () => {
   });
 
   it('shows a friendly issue bootstrap placeholder when no issue bootstrap evidence exists', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -846,12 +924,16 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -860,6 +942,12 @@ describe('getStatus', () => {
   });
 
   it('shows the latest issue bootstrap summary in status output when evidence exists', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -876,8 +964,12 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
@@ -892,7 +984,7 @@ describe('getStatus', () => {
             additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
           },
         },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -902,6 +994,12 @@ describe('getStatus', () => {
   });
 
   it('shows the latest BLOCK guardrail summary and reason', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -918,8 +1016,12 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
@@ -936,7 +1038,7 @@ describe('getStatus', () => {
             },
           },
         },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -947,6 +1049,12 @@ describe('getStatus', () => {
   });
 
   it('shows the latest REDIRECT guardrail summary and redirect action', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -963,8 +1071,12 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
         source_control: { topology: 'local_directory_only' },
         session: { last_backup: '2025-01-02T12:00:00.000Z' },
         working_memory: { pending: [], decisions: [] },
@@ -981,7 +1093,7 @@ describe('getStatus', () => {
             },
           },
         },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -991,6 +1103,12 @@ describe('getStatus', () => {
   });
 
   it('refuses status for an archived active project', async () => {
+    bindSessionProject({
+      projectId: 'archived-project',
+      projectName: 'Archived Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',
@@ -1007,8 +1125,9 @@ describe('getStatus', () => {
       ],
     });
 
-    fsPromisesMock.readFile.mockResolvedValue(
-      JSON.stringify({
+    mockStatusReads(
+      {
+        meta: { id: 'archived-project', name: 'Archived Project' },
         archive_contract: {
           version: 1,
           kind: 'archived_reference',
@@ -1016,7 +1135,7 @@ describe('getStatus', () => {
           execution_mode: 'reference_only',
           replacement_project: 'agenticos-standards',
         },
-      })
+      }
     );
 
     const result = await getStatus();
@@ -1026,6 +1145,12 @@ describe('getStatus', () => {
   });
 
   it('refuses status for an active project that has not completed topology initialization', async () => {
+    bindSessionProject({
+      projectId: 'legacy-project',
+      projectName: 'Legacy Project',
+      projectPath: '/test/path',
+    });
+
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
       last_updated: '2025-01-01T00:00:00.000Z',

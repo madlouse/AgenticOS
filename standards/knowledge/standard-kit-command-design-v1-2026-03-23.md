@@ -89,9 +89,10 @@ v1 should not:
 Target resolution should support:
 
 1. explicit `project_path`
-2. fallback to the active project in the registry
+2. explicit `project`
+3. session-local project binding established by `agenticos_switch`
 
-This keeps the command usable both for registered AgenticOS projects and for directed adoption flows.
+This keeps the command usable both for directed adoption flows and for already-bound AgenticOS sessions without reintroducing a home-global active-project truth model.
 
 ## Verification
 

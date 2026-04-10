@@ -3,6 +3,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, type Project, type Registry } from './registry.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from './project-contract.js';
+import { getSessionProjectBinding } from './session-context.js';
 import {
   type ManagedProjectContextPaths,
   resolveManagedProjectContextPaths,
@@ -61,12 +62,13 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
   const requestedProject = typeof args.project === 'string' && args.project.trim().length > 0
     ? args.project.trim()
     : null;
+  const sessionProject = getSessionProjectBinding();
 
-  if (!requestedProject && !registry.active_project) {
-    throw new Error(`No active project. Use agenticos_switch first or pass project to ${args.commandName}.`);
+  if (!requestedProject && !sessionProject) {
+    throw new Error(`No project provided and no session project is bound. Use agenticos_switch first or pass project to ${args.commandName}.`);
   }
 
-  let project: Project;
+  let project: Project | null = null;
   if (requestedProject) {
     const matches = registry.projects.filter((candidate) =>
       candidate.id === requestedProject ||
@@ -78,18 +80,18 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
       `Project "${requestedProject}" not found in registry.`,
       `Project "${requestedProject}" is ambiguous in registry.`
     );
-
-    if (registry.active_project && registry.active_project !== project.id) {
-      throw new Error(
-        `Requested project "${requestedProject}" does not match active project "${registry.active_project}". Switch first or pass the active project explicitly.`
-      );
-    }
-  } else {
+  } else if (sessionProject) {
     project = uniqueMatch(
-      registry.projects.filter((candidate) => candidate.id === registry.active_project),
-      `Active project "${registry.active_project}" not found in registry.`,
-      `Active project "${registry.active_project}" is ambiguous in registry.`
+      registry.projects.filter((candidate) =>
+        candidate.id === sessionProject.projectId || candidate.path === sessionProject.projectPath
+      ),
+      `Session project "${sessionProject.projectId}" not found in registry.`,
+      `Session project "${sessionProject.projectId}" is ambiguous in registry.`,
     );
+  }
+
+  if (!project) {
+    throw new Error(`No project provided and no session project is bound. Use agenticos_switch first or pass project to ${args.commandName}.`);
   }
 
   assertRegistryUniqueness(registry, project, requestedProject || undefined);

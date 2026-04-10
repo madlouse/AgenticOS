@@ -47,7 +47,7 @@ describe('runEditGuard', () => {
     });
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos-standards',
-      resolutionSource: 'active_project',
+      resolutionSource: 'repo_path_match',
       resolutionErrors: [],
       targetProject: {
         id: 'agenticos-standards',
@@ -118,11 +118,11 @@ describe('runEditGuard', () => {
     expect(result.scope_ok).toBe(true);
   });
 
-  it('blocks when active project does not match the intended target project', async () => {
+  it('blocks when the target project cannot be resolved and asks for an explicit managed project path', async () => {
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'cc-switch',
       resolutionSource: null,
-      resolutionErrors: ['Requested project "beta" does not match active project "cc-switch".'],
+      resolutionErrors: ['target project could not be resolved from repo_path or session binding; pass project_path explicitly'],
       targetProject: null,
     });
 
@@ -130,14 +130,14 @@ describe('runEditGuard', () => {
       issue_id: '113',
       task_type: 'implementation',
       repo_path: '/workspace/source',
-      project_path: '/workspace/projects/agenticos/standards',
       declared_target_files: [
         'projects/agenticos/mcp-server/src/index.ts',
       ],
-    })) as { status: string; block_reasons: string[] };
+    })) as { status: string; block_reasons: string[]; recovery_actions: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('does not match active project');
+    expect(result.block_reasons.join(' ')).toContain('pass project_path explicitly');
+    expect(result.recovery_actions.join(' ')).toContain('pass project_path');
   });
 
   it('blocks when no preflight evidence is recorded', async () => {

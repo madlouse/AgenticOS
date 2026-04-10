@@ -1,4 +1,4 @@
-<!-- agenticos-template: v8 -->
+<!-- agenticos-template: v11 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -23,7 +23,7 @@ It must expose the same canonical policy as other agent adapters while allowing 
 - Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
 ## Guardrail Protocol (MANDATORY)
 
-Before implementation edits, confirm project alignment with `agenticos_status`; if the active project is missing or wrong, call `agenticos_switch`.
+Before implementation edits, confirm session/project alignment with `agenticos_status`; if no session project is bound or the bound project is not the intended one, call `agenticos_switch`.
 
 For implementation-affecting work:
 
@@ -69,8 +69,8 @@ When the user signals session end (says goodbye, thanks, done, or stops respondi
 
 When you open this project in a new session, **immediately do the following**:
 
-1. Call `agenticos_status` to confirm the active project, current task, pending work, and latest recorded state
-2. If the active project is missing or not `AgenticOS`, call `agenticos_switch`
+1. Call `agenticos_status` to confirm the current session project, current task, pending work, and latest recorded state
+2. If no session project is bound or the bound project is not `AgenticOS`, call `agenticos_switch`
 3. Read `.project.yaml`, the "Current State" section below, `standards/.context/quick-start.md`, and `standards/.context/conversations/`
 4. Review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
 5. Greet the user with a brief status report:
@@ -101,18 +101,18 @@ When you open this project in a new session, **immediately do the following**:
 <!-- AGENT_CONTEXT_START -->
 **Last Updated**: 2026-04-10T08:55:55.177Z
 
-**Current Task**: fix: stop active-project drift and canonical-main runtime persistence pollution (status: completed)
+**Current Task**: design/implement #262 concurrent runtime project resolution and legacy fallback downgrade (status: in_progress)
 
 **Active Items**:
-- Review and merge PR #261.
-- After #260 lands, continue remaining backlog in priority order: #245 public github_versioned raw conversation isolation, then #244 private github_versioned full continuity persistence.
+- Finish #262 runtime semantic unification across MCP tools, templates, and docs.
+- Verify remaining normative references versus historical records, then split any migration-only work into #263.
 
 **Recent Decisions**:
-- Guardrail commands should honor an explicit `project_path` even when global `active_project` has drifted to another managed project.
-- Canonical `main` write protection must apply to `agenticos_issue_bootstrap` persistence exactly as it already applies to other guardrail evidence writes.
-- Keep strict active-project matching in general managed-project resolution; loosen only the guardrail-side explicit-project path.
+- Treat session-local project binding, explicit project selection, and repo-path proof as authoritative; runtime target resolution no longer falls back through legacy registry state.
+- Keep `registry.active_project` as compatibility-only state rather than a home-global enforcement primitive.
+- Handle legacy project migration separately in #263 with compatibility-on-read and targeted repair, not a one-shot mutate-first rewrite.
 
-**Next Action**: Review and merge PR #261.
+**Next Action**: Complete #262 residual runtime/doc cleanup, rerun verification, then record and save the landed design state.
 <!-- AGENT_CONTEXT_END -->
 
 ---
