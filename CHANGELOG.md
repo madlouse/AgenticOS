@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.3] — 2026-04-10
+
+### Fixed
+- Homebrew-installed runtime now includes the merged `#260` and `#262`
+  project-resolution fixes, so runtime command resolution no longer depends on
+  a home-global authoritative `registry.active_project`
+- explicit project selection, session-bound project tools, and guardrail
+  `repo_path` proof are no longer vetoed by unrelated cross-project current
+  selection drift in the installed runtime
+- registry business-path writes now use patch-based locked atomic updates on
+  the shipped runtime paths, which reduces cross-session metadata replay and
+  stale full-registry overwrite risk
+
+### Changed
+- `agenticos_switch` now binds the current MCP session instead of mutating a
+  home-global runtime current-project selector
+- generated `AGENTS.md` and `CLAUDE.md` guidance now describes session-local
+  project alignment instead of a shared active-project model
+
 ## [0.4.2] — 2026-04-09
 
 ### Fixed
