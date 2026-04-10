@@ -1,4 +1,4 @@
-<!-- agenticos-template: v10 -->
+<!-- agenticos-template: v8 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -99,19 +99,20 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-09T11:07:14.948Z
+**Last Updated**: 2026-04-10T08:55:55.177Z
 
-**Current Task**: Align canonical context paths with configured agent_context (#250) (status: completed)
+**Current Task**: fix: stop active-project drift and canonical-main runtime persistence pollution (status: completed)
 
 **Active Items**:
-- Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
+- Review and merge PR #261.
+- After #260 lands, continue remaining backlog in priority order: #245 public github_versioned raw conversation isolation, then #244 private github_versioned full continuity persistence.
 
 **Recent Decisions**:
-- Treat configured agent_context paths as the source of truth for entry surfaces and generated adapter navigation.
-- Use root .context paths only as defaults or compatibility shims when a project does not declare alternate canonical paths.
-- Keep generated adapter templates versioned so canonical path contract changes force truthful regeneration.
+- Guardrail commands should honor an explicit `project_path` even when global `active_project` has drifted to another managed project.
+- Canonical `main` write protection must apply to `agenticos_issue_bootstrap` persistence exactly as it already applies to other guardrail evidence writes.
+- Keep strict active-project matching in general managed-project resolution; loosen only the guardrail-side explicit-project path.
 
-**Next Action**: Use the workspace-home/project-source model from #235 as the default assumption for future project creation, audits, and runtime recovery work.
+**Next Action**: Review and merge PR #261.
 <!-- AGENT_CONTEXT_END -->
 
 ---

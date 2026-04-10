@@ -1,300 +1,59 @@
-session:
-  id: standards-main-2026-03-23-001
-  started: 2026-03-23T09:30:00.000Z
-  agent: codex
-  last_backup: 2026-04-09T03:17:46Z
-current_task:
-  title: normalize workspace-home and project-source truth surfaces
-  status: in_progress
-  updated: 2026-04-09T03:17:46Z
+issue_bootstrap:
+  updated_at: 2026-04-10T08:45:19.949Z
+  latest:
+    issue_id: "260"
+    issue_title: "fix: stop active-project drift and canonical-main runtime
+      persistence pollution"
+    issue_body: Harden runtime reliability so active project alignment does not
+      drift across issue work and canonical main state surfaces do not get
+      dirtied by runtime persistence.
+    labels: []
+    linked_artifacts: []
+    startup_context_paths:
+      - /Users/jeking/dev/AgenticOS/projects/agenticos/.project.yaml
+      - /Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/quick-start.md
+      - /Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/state.yaml
+      - /Users/jeking/dev/AgenticOS/projects/agenticos/AGENTS.md
+      - /Users/jeking/dev/AgenticOS/projects/agenticos/CLAUDE.md
+    additional_context: []
+    repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-260-stop-active-project-drift-and-main-state-pollution
+    project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
+    current_branch: fix/260-stop-active-project-drift-and-main-state-pollution
+    workspace_type: isolated_worktree
+    stages:
+      context_reset_performed: true
+      project_hot_load_performed: true
+      issue_payload_attached: true
+    recorded_at: 2026-04-10T08:45:19.949Z
 working_memory:
   facts:
-    - projects/agenticos/standards is now the only canonical location for
-      ongoing AgenticOS standards work
-    - the standalone repo projects/agentic-os-development is now a retired
-      archive-only snapshot, not an active canonical repo
-    - issue
-    - issue
-    - the first consolidation wave backfilled missing high-signal standards
-      knowledge documents into the main standards knowledge area
-    - the retired standalone raw context, conversations, entry files, and local
-      issue drafts are archived under
-      archive/standalone-agentic-os-development-2026-03-23/
-    - active standards entry files must point only to the main standards area,
-      not to the retired standalone repo
-    - reusable downstream templates are canonically surfaced under
-      projects/agenticos/.meta/templates/
-    - reusable downstream packaging rules are canonically surfaced under
-      projects/agenticos/.meta/standard-kit/
-    - non-code-evaluation-rubric.yaml has been restored into the main template
-      surface as part of issue
-    - runtime-project-extraction-closure-report-2026-03-23.md is the last
-      remaining high-signal standalone-only report worth canonical merge
-    - the remaining standalone-only runtime extraction reports are superseded by
-      canonical main-repo planning and execution documents
-    - self-hosting-migration-resolution-draft-2026-03-23.md is superseded by
-      self-hosting-migration-resolution-v1-2026-03-23.md
-    - issue
-    - standard-kit v1 now has a design document at
-      knowledge/standard-kit-command-design-v1-2026-03-23.md
-    - the implementation slice adds agenticos_standard_kit_adopt and
-      agenticos_standard_kit_upgrade_check to the MCP tool surface
-    - standard-kit v1 now restores generated navigation consistency by listing
-      tasks/templates/non-code-evaluation-rubric.yaml
-    - issue
-    - agenticos_status now summarizes the latest guardrail command, result,
-      timestamp, and the most relevant detail when guardrail evidence exists
-    - status output now explicitly shows a no-evidence placeholder when
-      guardrail_evidence is absent
-    - issue
-    - switch output now shows the latest guardrail command, result, timestamp,
-      issue id, and a compact detail when evidence exists
-    - switch output now explicitly shows a no-evidence placeholder when
-      guardrail_evidence is absent
-    - issue
-    - issues
-    - issues
-    - the remaining substantive open backlog is now concentrated in
-    - issue
-    - the old local dirty state was preserved under
-      /Users/jeking/worktrees/agenticos-working-copy-78-backup/2026-03-24/
-    - the previous local-only main commits for
-    - retired standalone standards residue and runtime-project leftovers were
-      removed from the product-source project after backup
-    - issue
-    - agenticos_record now accepts JSON-stringified arrays for decisions,
-      outcomes, and pending in addition to native arrays
-    - issue
-    - issue
-    - agenticos_switch now returns inline project context including current
-      task, pending items, recent decisions, project summary, and suggested next
-      step
-    - switch context summary prefers .project.yaml description and falls back to
-      the first meaningful quick-start paragraph when structured description is
-      empty
-    - issue
-    - issue
-    - agenticos_record and agenticos_save now accept optional explicit project
-      proof and fail closed when it disagrees with the active project
-    - agenticos://context/current now identifies the loaded project by id and
-      path after the same boundary proof logic
-    - targeted coverage for the changed
-    - issue
-    - issue
-    - the downstream standard kit and default templates now carry the
-      memory-layer contract by default
-    - the mcp-server project structure docs now describe quick-start as
-      orientation, state as mutable operational state, and conversations as
-      append-only history
-    - issue
-    - issue
-    - the downstream standard kit now includes
-      tasks/templates/sub-agent-handoff.md and surfaces delegated-work
-      expectations in the adoption checklist
-    - issue-design-brief.md and submission-evidence.md now contain explicit
-      sub-agent inheritance and verification sections
-    - issue
-    - bootstrap docs now distinguish MCP transport registration from
-      project-intent routing behavior
-    - the machine-readable bootstrap source of truth now lives at
-      projects/agenticos/.meta/bootstrap/agent-bootstrap-matrix.yaml
-    - issue
-    - Homebrew-facing docs now say installation does not edit agent configs,
-      restart tools, or prove activation
-    - a docs consistency test now checks root README, tap README, formula, and
-      MCP README against the official supported agent set
-    - issue
-    - the product now distinguishes MCP plus Skills Assist as a supported
-      fallback, CLI Wrapper as a limited fallback, and Skills-only Guidance as
-      experimental
-    - README, MCP README, and ROADMAP now reflect the same primary/fallback
-      decision
-    - issue
-    - the project-boundary runtime surface now has explicit targeted 100 percent
-      statements, branches, functions, and lines coverage across project-target,
-      context, record, and save
-    - issue
-    - issue
-    - issue
-    - issue
-    - the refresh command writes bounded entry-surface metadata into state
-      instead of attempting freeform summarization
-    - issue
-    - issue
-    - targeted coverage for the
-    - issue
-    - the canonical workspace home at /Users/jeking/dev/AgenticOS now again
-      contains preserved sibling projects 2026okr, 360teams, agentic-devops,
-      agentic-os-development, and ghostty-optimization under projects/
-    - the legacy top-level compatibility hook path tools/record-reminder.sh has
-      been restored because existing Claude Code hooks still call it directly
-    - preserved history only contains orphaned gitlinks for projects/t5t and
-      projects/okr-management, so neither could be claimed as a normal
-      Git-directory restoration
-    - the next higher-order backlog remains
-    - issue
-    - t5t was confirmed as a previously registered managed project path and has
-      enough verified local evidence to support a reconstructed project snapshot
-    - okr-management was confirmed as a previously registered managed project
-      path but currently lacks enough project-local evidence to be honestly
-      restored as a complete AgenticOS project snapshot
-    - the strongest verified t5t sources are ~/.claude/skills/t5t/SKILL.md,
-      ~/.opencli/clis/360teams/t5t.js, Claude file-history snapshots,
-      /Users/jeking/dev/code/T5T/项目进展总结(1).md, and
-      /Users/jeking/work/02.目标绩效/00.OKR管理/2025/T5T.md
-    - the strongest verified okr-management source is the external document
-      corpus under /Users/jeking/work/02.目标绩效/00.OKR管理/, not a preserved
-      project-local AgenticOS directory
-    - issue
-    - projects/t5t is now present again in the canonical workspace home under
-      /Users/jeking/dev/AgenticOS/projects/t5t
-    - issue
-    - projects/okr-management is now present again in the canonical workspace
-      home with project metadata, entry surfaces, provenance docs, and verified
-      2026 OKR snapshots
-    - the canonical external content source for okr-management currently points
-      to /Users/jeking/work/02.目标绩效/00.OKR管理/
+    - Fixed `resolveGuardrailProjectTarget()` so explicit `project_path` no
+      longer routes through active-project mismatch enforcement.
+    - Fixed `persistIssueBootstrapEvidence()` so canonical `main` checkouts are
+      not dirtied by runtime persistence.
+    - Added regression coverage for explicit-project resolution drift and
+      issue-bootstrap write protection.
+    - "Ran targeted tests, full `npm test`, and `npm run lint` successfully in
+      the #260 worktree."
+    - "Pushed branch fix/260-stop-active-project-drift-and-main-state-pollution
+      and opened PR #261."
   decisions:
-    - keep one main AgenticOS product repository and one canonical standards
-      area inside it
-    - merge durable standards knowledge into the main repo, but archive raw
-      standalone context/history instead of treating it as live state
-    - keep the archive read-only and use it only for provenance or later
-      selective recovery
-    - preserve the live .context/.last_record marker because current tooling
-      still uses it
-    - no second broad merge wave is needed for the retired standalone standards
-      repo
-    - standard-kit v1 should ship adopt plus upgrade-check before any
-      destructive copied-template upgrade flow
-    - status surfaces should prefer compact human-readable guardrail summaries
-      over raw persisted JSON blobs
-    - switch should reuse the same compact guardrail-summary formatter as status
-      instead of maintaining a second formatting path
-    - backlog cleanup should prefer closing or rewriting historical issues over
-      leaving architecture-era ambiguity in the open queue
-    - the local canonical checkout should be kept clean and used only as the
-      trusted base, with implementation work moving to isolated issue worktrees
-    - agenticos_record should normalize JSON-stringified array inputs at the
-      tool boundary rather than expecting every MCP caller to submit native
-      arrays
-    - agenticos_switch should treat its return string as a first-class
-      mid-conversation handoff surface instead of only listing context file
-      paths
-    - project-boundary enforcement should centralize identity proof in one
-      shared resolver rather than duplicate weaker checks in record/save/context
-    - memory-layer enforcement should start by freezing canonical contracts in
-      standards and templates before attempting broader runtime linting
-    - sub-agent inheritance should land first as a standard-kit-backed protocol
-      and template contract before any deeper runtime automation
-    - per-agent bootstrap should land as one canonical matrix plus aligned docs,
-      while Homebrew caveats and fallback-mode strategy remain separate
-      follow-up issues
-    - Homebrew post-install should remain reminder-only until an explicit opt-in
-      bootstrap helper exists
-    - fallback integration modes must be documented as narrower than MCP-native,
-      not as equal parallel runtime modes
-    - strict coverage follow-up issues should add the smallest fallback-path
-      regression tests needed to prove the existing design rather than reopening
-      already-correct runtime behavior
-    - canonical local sync should be treated as a repeatable contract with
-      executable verification, not as an occasional operator cleanup task
-    - entry-surface refresh should be deterministic and bounded, not an
-      unconstrained summarizer over arbitrary merged documents
-    - health should be a compact pre-work gate with high-signal PASS/WARN/BLOCK
-      semantics, not a broad dashboard
-    - non-code evaluation should be a deterministic validator and persistence
-      surface around the canonical rubric, not an embedded opaque scoring system
-    - self-hosting and product-source cleanup must not remove preserved sibling
-      projects or legacy operator paths unless each removal is explicitly
-      intended and recoverable
-    - recovery claims for missing projects must distinguish exact Git
-      restoration from reconstruction from verified local sources
-    - when evidence is sufficient for one missing project but not another,
-      restore only the honest subset and leave the remaining gap explicit
-    - when the strongest verified content source is external to the repo, prefer
-      an external-source wrapper project over a false claim of full in-repo
-      restoration
-    - `AGENTICOS_HOME` should be described as the workspace home, while
-      `projects/<id>` remains the project-source boundary for source-managed
-      projects
-    - `/opt/homebrew/var/agenticos` is a valid Homebrew example workspace path,
-      not the normative target when a self-hosting machine already uses
-      /Users/jeking/dev/AgenticOS as its workspace home
+    - Guardrail commands should honor an explicit `project_path` even when
+      global `active_project` has drifted to another managed project.
+    - Canonical `main` write protection must apply to
+      `agenticos_issue_bootstrap` persistence exactly as it already applies to
+      other guardrail evidence writes.
+    - Keep strict active-project matching in general managed-project resolution;
+      loosen only the guardrail-side explicit-project path.
   pending:
-    - land the issue #235 terminology and audit-surface corrections
-    - verify that projects/agenticos now carries truthful topology metadata
-loaded_context:
-  - .project.yaml
-  - .context/quick-start.md
-  - knowledge/standalone-standards-repo-consolidation-audit-2026-03-23.md
-  - knowledge/standalone-standards-first-consolidation-wave-2026-03-23.md
-  - knowledge/standalone-standards-retirement-resolution-2026-03-23.md
-  - knowledge/product-positioning-and-design-review-2026-03-22.md
-  - knowledge/agent-preflight-and-execution-protocol-2026-03-23.md
-  - knowledge/guardrail-flow-wiring-report-2026-03-23.md
-  - knowledge/downstream-standard-kit-implementation-report-2026-03-23.md
-  - knowledge/standard-kit-command-design-v1-2026-03-23.md
-  - knowledge/standard-kit-command-implementation-report-2026-03-23.md
-  - knowledge/status-guardrail-evidence-implementation-report-2026-03-24.md
-  - knowledge/switch-guardrail-evidence-implementation-report-2026-03-24.md
-  - knowledge/backlog-reconciliation-matrix-2026-03-24.md
-  - knowledge/canonical-working-copy-cleanup-report-2026-03-24.md
-  - knowledge/runtime-project-extraction-closure-report-2026-03-23.md
-  - knowledge/record-array-parsing-fix-report-2026-03-24.md
-  - knowledge/switch-inline-context-implementation-report-2026-03-24.md
-  - knowledge/project-boundary-isolation-implementation-report-2026-03-25.md
-  - knowledge/memory-layer-contract-spec-2026-03-25.md
-  - knowledge/memory-layer-contract-implementation-report-2026-03-25.md
-  - knowledge/sub-agent-inheritance-protocol-2026-03-25.md
-  - knowledge/sub-agent-inheritance-implementation-report-2026-03-25.md
-  - knowledge/per-agent-bootstrap-standard-2026-03-25.md
-  - knowledge/per-agent-bootstrap-standard-implementation-report-2026-03-25.md
-  - knowledge/homebrew-post-install-contract-2026-03-25.md
-  - knowledge/homebrew-post-install-implementation-report-2026-03-25.md
-  - knowledge/integration-mode-matrix-2026-03-25.md
-  - knowledge/integration-mode-matrix-implementation-report-2026-03-25.md
-  - knowledge/non-code-evaluation-command-design-2026-03-25.md
-  - knowledge/non-code-evaluation-command-implementation-report-2026-03-25.md
-  - knowledge/project-layout-restoration-report-2026-03-25.md
-  - knowledge/missing-project-source-audit-2026-03-25.md
-guardrail_evidence:
-  updated_at: 2026-04-09T02:39:45.587Z
-  last_command: agenticos_preflight
-  preflight:
-    command: agenticos_preflight
-    recorded_at: 2026-04-09T02:39:45.587Z
-    repo_path: /Users/jeking/dev/AgenticOS/projects/agenticos
-    issue_id: "236"
-    project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
-    task_type: bug_fix
-    declared_target_files:
-      - homebrew-tap/Formula/agenticos.rb
-    structural_move: false
-    worktree_required: true
-    root_scoped_exceptions:
-      - .github/
-    clean_reproducibility_gate:
-      - cd mcp-server && npm install
-      - cd mcp-server && npm test
-      - cd mcp-server && npm pack
-    result:
-      status: REDIRECT
-      summary: create an isolated issue branch/worktree before implementation
-      repo_identity_confirmed: true
-      branch_ancestry_verified: true
-      branch_based_on_intended_remote: true
-      worktree_ok: false
-      scope_ok: true
-      reproducibility_gate_defined: true
-      block_reasons: []
-      redirect_actions:
-        - create an isolated issue branch/worktree before implementation
-      evidence:
-        current_branch: main
-        current_head: 3ffc00baa6ba86f736ac037fab403db8136c3c3e
-        remote_base_branch: origin/main
-        remote_base_head: 468f7eba69ca6bab36c92e81e63928d13326190a
-        branch_fork_point: 3ffc00baa6ba86f736ac037fab403db8136c3c3e
-        workspace_type: main
-        commit_subjects_since_base: []
+    - "Review and merge PR #261."
+    - "After #260 lands, continue remaining backlog in priority order: #245
+      public github_versioned raw conversation isolation, then #244 private
+      github_versioned full continuity persistence."
+session:
+  last_backup: 2026-04-10T08:55:55.177Z
+current_task:
+  title: "fix: stop active-project drift and canonical-main runtime persistence
+    pollution"
+  status: completed
+  updated: 2026-04-10T08:55:46.474Z
