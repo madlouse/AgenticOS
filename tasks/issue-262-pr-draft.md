@@ -1,5 +1,7 @@
 # PR Draft for #262
 
+Closes #262.
+
 ## Title
 
 `redesign: make project resolution session-local and remove runtime fallback to global active_project`
