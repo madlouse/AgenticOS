@@ -118,18 +118,10 @@ export async function resolveGuardrailProjectTarget(args: {
 
   if (projectPath) {
     try {
-      const resolved = await resolveManagedProjectTarget({
-        commandName,
-        project: projectPath,
-      });
-      const targetProject = await buildTargetFromProjectPath(
-        resolved.projectPath,
-        resolved.projectId,
-        resolved.projectName,
-      );
+      const targetProject = await buildTargetFromProjectPath(projectPath);
       return {
         activeProjectId,
-        resolutionSource: 'explicit_project_path',
+        resolutionSource: targetProject ? 'explicit_project_path' : null,
         targetProject,
         resolutionErrors: targetProject ? [] : [`project_path is not a resolvable managed project: ${projectPath}`],
       };
