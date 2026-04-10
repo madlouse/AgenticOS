@@ -7,6 +7,7 @@ meta:
 
 source_control:
   topology: github_versioned
+  context_publication_policy: public_distilled
   github_repo: madlouse/AgenticOS
   branch_strategy: github_flow
 

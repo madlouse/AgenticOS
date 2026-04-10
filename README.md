@@ -133,3 +133,15 @@ codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 - `projects/agenticos/` is the only canonical AgenticOS product-source project under `projects/`
 - the enclosing `AgenticOS/` path is the workspace home; product source lives under `projects/agenticos/`
 - root-level `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` currently remain as compatibility entrypoints during that migration
+
+## Managed Project Contract
+
+Managed projects now distinguish three separate questions:
+
+- workflow topology: `local_directory_only` vs `github_versioned`
+- canonical source inclusion: whether the project root is tracked in the canonical AgenticOS source tree
+- context publication policy: `local_private`, `private_continuity`, or `public_distilled`
+
+The canonical field location is `source_control.context_publication_policy` in `.project.yaml`.
+
+The canonical rationale for context publication policy lives in [standards/knowledge/context-publication-policy-2026-04-10.md](standards/knowledge/context-publication-policy-2026-04-10.md).

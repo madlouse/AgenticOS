@@ -37,6 +37,11 @@ The goal here is to define the contract first and encode it into the default pro
 
 Later validation and linting can build on it.
 
+This memory-layer contract defines what each surface is for.
+
+It does not decide whether those surfaces belong in tracked Git source for a given project.
+That question is handled separately by the context publication policy contract.
+
 ## Canonical Layer Matrix
 
 | Layer | Purpose | Source of Truth | Mutability | What Belongs Here | What Must Not Be Written Here |
@@ -154,3 +159,8 @@ It does three concrete things:
 ## Outcome
 
 After this issue, later work can reference one canonical memory contract instead of restating the same distinctions from scratch.
+
+Context publication remains a separate contract:
+
+- the memory-layer contract says what belongs in `conversations/`, `state.yaml`, `knowledge/`, and related surfaces
+- the context publication policy says whether those surfaces may remain tracked for that project class

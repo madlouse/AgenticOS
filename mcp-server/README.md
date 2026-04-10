@@ -209,6 +209,7 @@ Create new project with standard structure.
 **Parameters**:
 - `name` (required) - Project name
 - `topology` (required) - `local_directory_only` or `github_versioned`
+- `context_publication_policy` (required for `github_versioned`, optional for `local_directory_only`) - `local_private`, `private_continuity`, or `public_distilled`
 - `description` (optional) - What this project is about
 - `path` (optional) - Custom location (otherwise uses $AGENTICOS_HOME/projects/{id})
 - `github_repo` (required when `topology=github_versioned`) - `OWNER/REPO`
@@ -221,9 +222,16 @@ Create new project with standard structure.
 - choose `github_versioned` for reusable capabilities that should evolve through issue/PR/release flow
 - if the boundary is unclear, require explicit confirmation instead of guessing
 
+**Context publication rubric**:
+- `local_directory_only` projects default to `context_publication_policy=local_private`
+- `github_versioned + private_continuity` means full AI continuity surfaces may live in the repo because the repo is private
+- `github_versioned + public_distilled` means distilled context may ship, but raw session history and other non-publishable runtime surfaces must be isolated from the public source tree
+
+Publication policy is not the same as workflow topology or canonical source inclusion. A project can be `github_versioned` and still require `public_distilled`.
+
 **Upgrade path**:
 - a project may start as `local_directory_only`
-- later, re-run `agenticos_init` with `normalize_existing=true`, `topology=github_versioned`, and `github_repo=OWNER/REPO`
+- later, re-run `agenticos_init` with `normalize_existing=true`, `topology=github_versioned`, `context_publication_policy=private_continuity|public_distilled`, and `github_repo=OWNER/REPO`
 - only do that when the project has clearly become a reusable capability surface
 
 ### agenticos_switch

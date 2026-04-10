@@ -7,11 +7,53 @@ interface ArchiveContract {
 }
 
 export type ProjectTopology = 'local_directory_only' | 'github_versioned';
+export type ContextPublicationPolicy = 'local_private' | 'private_continuity' | 'public_distilled';
 
 interface SourceControlContract {
   topology?: ProjectTopology;
+  context_publication_policy?: ContextPublicationPolicy;
   github_repo?: string;
   branch_strategy?: string;
+}
+
+export function isValidContextPublicationPolicy(value: unknown): value is ContextPublicationPolicy {
+  return value === 'local_private' || value === 'private_continuity' || value === 'public_distilled';
+}
+
+export function validateContextPublicationPolicy(projectName: string, projectYaml: any): { ok: true; policy: ContextPublicationPolicy } | { ok: false; message: string } {
+  const contract = getSourceControlContract(projectYaml);
+  const topology = contract?.topology;
+  const policy = contract?.context_publication_policy;
+
+  if (topology !== 'local_directory_only' && topology !== 'github_versioned') {
+    return {
+      ok: false,
+      message: `Project "${projectName}" must declare source_control.topology before validating source_control.context_publication_policy.`,
+    };
+  }
+
+  if (!isValidContextPublicationPolicy(policy)) {
+    return {
+      ok: false,
+      message: `Project "${projectName}" is missing source_control.context_publication_policy. Use "local_private", "private_continuity", or "public_distilled".`,
+    };
+  }
+
+  if (topology === 'local_directory_only' && policy !== 'local_private') {
+    return {
+      ok: false,
+      message: `Project "${projectName}" uses topology="local_directory_only" and must use source_control.context_publication_policy="local_private".`,
+    };
+  }
+
+  if (topology === 'github_versioned' && policy === 'local_private') {
+    return {
+      ok: false,
+      message: `Project "${projectName}" uses topology="github_versioned" and must use source_control.context_publication_policy="private_continuity" or "public_distilled".`,
+    };
+  }
+
+  return { ok: true, policy };
 }
 
 export function getArchiveContract(projectYaml: any): ArchiveContract | null {

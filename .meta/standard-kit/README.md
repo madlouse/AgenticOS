@@ -14,6 +14,7 @@ This kit covers:
 - project-scoped agent instructions
 - execution templates
 - memory layer contracts
+- context publication policy
 - generated project files
 - versioning and upgrade rules
 
@@ -68,10 +69,20 @@ The contract distinguishes:
 - mutable vs append-only layers
 - operational state vs durable synthesis
 - project orientation vs raw session history
+- topology/source inclusion vs publication visibility
+
+`.project.yaml` also carries the canonical context publication policy field:
+
+- `local_private`
+- `private_continuity`
+- `public_distilled`
+
+That field determines whether raw session history is allowed in tracked source for the project class, rather than forcing later tools to guess from topology alone.
 
 The canonical rationale lives in:
 
 - `projects/agenticos/standards/knowledge/memory-layer-contract-spec-2026-03-25.md`
+- `projects/agenticos/standards/knowledge/context-publication-policy-2026-04-10.md`
 
 ## Sub-Agent Protocol
 

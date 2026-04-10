@@ -6,6 +6,7 @@ import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapter-matrix.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
+import { validateContextPublicationPolicy } from './project-contract.js';
 import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
 
@@ -499,6 +500,22 @@ export async function checkStandardKitConformance(args: { project_path?: string;
             ? 'Project metadata and state preserve the memory-layer contract.'
             : 'Project metadata or state is missing required memory-layer contract fields.',
           evidence_paths: ['.project.yaml', '.context/state.yaml'],
+        });
+        break;
+      }
+      case 'context_publication_policy_contract': {
+        const publicationValidation = validateContextPublicationPolicy(project.projectName, projectYaml);
+        const pass = publicationValidation.ok
+          && fileContainsAll(JSON.stringify(projectYaml?.source_control || {}), ['context_publication_policy']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'The managed project declares a valid context publication policy in .project.yaml.'
+            : publicationValidation.ok
+              ? 'The managed project is missing source_control.context_publication_policy in .project.yaml.'
+              : publicationValidation.message,
+          evidence_paths: ['.project.yaml'],
         });
         break;
       }
