@@ -162,7 +162,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_edit_guard',
-      description: 'Fail closed before implementation-affecting edits unless active-project alignment and matching PASS preflight evidence already exist.',
+      description: 'Fail closed before implementation-affecting edits unless active-project alignment, matching issue bootstrap evidence, and matching PASS preflight evidence already exist.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -185,7 +185,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_issue_bootstrap',
-      description: 'Record explicit issue-start bootstrap evidence for the current issue after a clear-equivalent reset and normal project hot-load.',
+      description: 'Record canonical issue-start evidence for the current issue after entering the intended branch/worktree, performing a clear-equivalent reset, and loading normal startup context.',
       inputSchema: {
         type: 'object',
         properties: {

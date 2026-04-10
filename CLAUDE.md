@@ -1,4 +1,4 @@
-<!-- agenticos-template: v7 -->
+<!-- agenticos-template: v9 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -25,9 +25,11 @@ It must expose the same canonical policy as other agent adapters while allowing 
 
 For implementation-affecting work:
 
-1. call `agenticos_preflight` before editing
-2. if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
-3. before PR creation or merge, call `agenticos_pr_scope_check`
+1. call `agenticos_preflight`; if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+2. after the issue worktree is active, perform the normal startup load and record `agenticos_issue_bootstrap`
+3. rerun `agenticos_preflight` in that worktree before editing
+4. call `agenticos_edit_guard` immediately before implementation edits
+5. before PR creation or merge, call `agenticos_pr_scope_check`
 
 If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
 

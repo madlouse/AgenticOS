@@ -1,4 +1,4 @@
-<!-- agenticos-template: v8 -->
+<!-- agenticos-template: v9 -->
 # AGENTS.md — AgenticOS
 
 ## Adapter Role
@@ -25,9 +25,11 @@ It must expose the same canonical policy as other agent adapters rather than def
 
 Implementation work must use the executable guardrail flow:
 
-1. call `agenticos_preflight` before editing
-2. if preflight returns `REDIRECT`, call `agenticos_branch_bootstrap`
-3. do not submit a PR before running `agenticos_pr_scope_check`
+1. call `agenticos_preflight`; if it returns `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+2. after the issue worktree is active, perform the normal startup load and record `agenticos_issue_bootstrap`
+3. rerun `agenticos_preflight` in that worktree before editing
+4. use `agenticos_edit_guard` immediately before implementation edits
+5. do not submit a PR before running `agenticos_pr_scope_check`
 
 If any guardrail returns `BLOCK`, stop and resolve the blocking reason first.
 

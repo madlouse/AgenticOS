@@ -6,7 +6,7 @@ import { joinDisplayPath, type ManagedProjectContextDisplayPaths } from './agent
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 8;
+export const CURRENT_TEMPLATE_VERSION = 9;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -125,9 +125,11 @@ ${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUID
 
 Implementation work must use the executable guardrail flow:
 
-1. call \`agenticos_preflight\` before editing
-2. if preflight returns \`REDIRECT\`, call \`agenticos_branch_bootstrap\`
-3. do not submit a PR before running \`agenticos_pr_scope_check\`
+1. call \`agenticos_preflight\`; if it returns \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
+2. after the issue worktree is active, perform the normal startup load and record \`agenticos_issue_bootstrap\`
+3. rerun \`agenticos_preflight\` in that worktree before editing
+4. use \`agenticos_edit_guard\` immediately before implementation edits
+5. do not submit a PR before running \`agenticos_pr_scope_check\`
 
 If any guardrail returns \`BLOCK\`, stop and resolve the blocking reason first.
 
@@ -275,9 +277,11 @@ ${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUID
 
 For implementation-affecting work:
 
-1. call \`agenticos_preflight\` before editing
-2. if the result is \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
-3. before PR creation or merge, call \`agenticos_pr_scope_check\`
+1. call \`agenticos_preflight\`; if the result is \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
+2. after the issue worktree is active, perform the normal startup load and record \`agenticos_issue_bootstrap\`
+3. rerun \`agenticos_preflight\` in that worktree before editing
+4. call \`agenticos_edit_guard\` immediately before implementation edits
+5. before PR creation or merge, call \`agenticos_pr_scope_check\`
 
 If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.
 

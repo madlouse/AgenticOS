@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
 import yaml from 'yaml';
+import { extractLatestIssueBootstrap } from '../utils/guardrail-evidence.js';
 import {
   isImplementationAffectingTask,
   resolveGuardrailProjectTarget,
@@ -41,6 +42,10 @@ interface EditGuardResult {
     active_project: string | null;
     git_worktree_root: string | null;
     git_common_repo_root: string | null;
+    current_branch: string | null;
+    issue_bootstrap_issue_id: string | null;
+    issue_bootstrap_repo_path: string | null;
+    issue_bootstrap_branch: string | null;
     preflight_issue_id: string | null;
     preflight_repo_path: string | null;
     preflight_status: string | null;
@@ -83,6 +88,10 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
       active_project: null,
       git_worktree_root: null,
       git_common_repo_root: null,
+      current_branch: null,
+      issue_bootstrap_issue_id: null,
+      issue_bootstrap_repo_path: null,
+      issue_bootstrap_branch: null,
       preflight_issue_id: null,
       preflight_repo_path: null,
       preflight_status: null,
@@ -139,6 +148,7 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
       const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
       const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
       const gitCommonRepoRoot = dirname(gitCommonDir);
+      result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
       result.evidence.git_worktree_root = gitWorktreeRoot;
       result.evidence.git_common_repo_root = gitCommonRepoRoot;
 
@@ -174,10 +184,39 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
     }
   }
 
+  const latestBootstrap = extractLatestIssueBootstrap(state);
+  if (!latestBootstrap) {
+    result.block_reasons.push('no issue bootstrap evidence is recorded for the target project');
+    result.recovery_actions.push('record agenticos_issue_bootstrap for the current issue before rerunning preflight');
+  } else {
+    result.evidence.issue_bootstrap_issue_id = typeof latestBootstrap.issue_id === 'string' ? latestBootstrap.issue_id : null;
+    result.evidence.issue_bootstrap_repo_path = typeof latestBootstrap.repo_path === 'string' ? latestBootstrap.repo_path : null;
+    result.evidence.issue_bootstrap_branch = typeof latestBootstrap.current_branch === 'string' ? latestBootstrap.current_branch : null;
+
+    if (issue_id && latestBootstrap.issue_id !== issue_id) {
+      result.block_reasons.push(
+        `latest issue bootstrap issue "${latestBootstrap.issue_id || 'unknown'}" does not match requested issue "${issue_id}"`,
+      );
+      result.recovery_actions.push(`record agenticos_issue_bootstrap for issue #${issue_id} before rerunning preflight`);
+    }
+
+    if (repo_path && resolve(latestBootstrap.repo_path || '') !== resolve(repo_path)) {
+      result.block_reasons.push('latest issue bootstrap was recorded for a different repo_path');
+      result.recovery_actions.push('record agenticos_issue_bootstrap for the current repo_path before rerunning preflight');
+    }
+
+    if (result.evidence.current_branch && latestBootstrap.current_branch && latestBootstrap.current_branch !== result.evidence.current_branch) {
+      result.block_reasons.push(
+        `latest issue bootstrap branch "${latestBootstrap.current_branch}" does not match current branch "${result.evidence.current_branch}"`,
+      );
+      result.recovery_actions.push('record agenticos_issue_bootstrap again after entering the current issue branch/worktree');
+    }
+  }
+
   const preflight = state?.guardrail_evidence?.preflight;
   if (!preflight) {
     result.block_reasons.push('no preflight evidence is recorded for the target project');
-    result.recovery_actions.push('run agenticos_preflight and get PASS before implementation edits');
+    result.recovery_actions.push('run agenticos_preflight and get PASS after issue bootstrap before implementation edits');
   } else {
     result.evidence.preflight_issue_id = typeof preflight.issue_id === 'string' ? preflight.issue_id : null;
     result.evidence.preflight_repo_path = typeof preflight.repo_path === 'string' ? preflight.repo_path : null;
@@ -200,7 +239,7 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
 
     if (preflight?.result?.status !== 'PASS') {
       result.block_reasons.push(`latest preflight status is ${preflight?.result?.status || 'unknown'} instead of PASS`);
-      result.recovery_actions.push('resolve the latest preflight outcome and rerun until it returns PASS');
+      result.recovery_actions.push('resolve the latest preflight outcome and rerun it after issue bootstrap until it returns PASS');
     } else {
       result.preflight_ok = true;
     }
