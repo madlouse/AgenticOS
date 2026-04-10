@@ -433,6 +433,10 @@ Operator migration guide is persisted in:
 
 - [issue-263-operator-migration-guide.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-operator-migration-guide.md)
 
+Remaining-scope review is persisted in:
+
+- [issue-263-remaining-items-review.md](/Users/jeking/dev/AgenticOS/worktrees/agenticos-263-legacy-project-migration-audit/tasks/issue-263-remaining-items-review.md)
+
 ## Suggested Issue Checklist
 
 - [x] Define the migration finding schema and severity model.
@@ -443,6 +447,14 @@ Operator migration guide is persisted in:
 - [x] Document safe lazy repair cases allowed during explicit project entry.
 - [x] Publish the upgrade guide and migration checklist.
 - [ ] Decide whether home-wide apply-safe-repairs is warranted after single-project migration is proven.
+
+Current judgment:
+
+- home-wide apply-safe-repairs remains deferred, not required for the core
+  `#263` target
+- broader structural apply should only continue for narrow deterministic cases
+- historical evidence rewrite and schema rename are not part of the current
+  issue target
 
 ## Decision
 
