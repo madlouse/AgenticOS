@@ -14,7 +14,7 @@ source_control:
 agent_context:
   quick_start: ".context/quick-start.md"
   current_state: ".context/state.yaml"
-  conversations: ".context/conversations/"
+  conversations: ".context/conversations/"  # configured conversation-history contract path; raw transcript routing may still differ by publication policy
   knowledge: "knowledge/"
   tasks: "tasks/"
   artifacts: "artifacts/"
@@ -23,7 +23,7 @@ memory_contract:
   version: 1
   quick_start_role: "project_orientation"
   state_role: "operational_working_state"
-  conversations_role: "append_only_session_history"
+  conversations_role: "append_only_session_history"  # tracked continuity contract input; public policies may route raw transcripts elsewhere
   knowledge_role: "durable_synthesis"
   tasks_role: "execution_artifacts"
   artifacts_role: "deliverables"
