@@ -227,6 +227,11 @@ Create new project with standard structure.
 - `github_versioned + private_continuity` means full AI continuity surfaces may live in the repo because the repo is private
 - `github_versioned + public_distilled` means distilled context may ship, but raw session history and other non-publishable runtime surfaces must be isolated from the public source tree
 
+**Current recovery contract**:
+- `local_private`: Git is not the continuity recovery mechanism; `agenticos_save` keeps the existing narrow runtime-managed backup behavior
+- `private_continuity`: `agenticos_save` stages the tracked continuity core for Git-backed recovery, including `.project.yaml`, quick-start, state, conversations, `knowledge/`, `tasks/`, and mirrored guidance such as `CLAUDE.md` / `AGENTS.md` when present and repo-local
+- `public_distilled`: save behavior remains narrower in this issue; raw transcript isolation belongs to `#245`
+
 Publication policy is not the same as workflow topology or canonical source inclusion. A project can be `github_versioned` and still require `public_distilled`.
 
 **Upgrade path**:
@@ -261,6 +266,12 @@ Save state and backup to Git.
 - `message` (optional) - Commit message
 
 **Returns**: Backup confirmation with timestamp
+
+**Policy-aware behavior**:
+- `private_continuity` validates the tracked continuity plan before mutating `state.yaml` or staging files
+- if a required continuity path escapes the repo root, or no Git repo root can be proven, `agenticos_save` fails closed instead of writing a partial tracked state
+- successful `private_continuity` saves stage the tracked continuity core rather than only the legacy runtime review subset
+- other publication policies currently keep the narrower runtime-managed save surface until their dedicated follow-up issues land
 
 ### agenticos_status
 Show the status of the current session project, or an explicit project when provided.

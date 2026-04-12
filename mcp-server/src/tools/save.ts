@@ -1,9 +1,13 @@
 import { exec } from 'child_process';
 import { updateClaudeMdState } from '../utils/distill.js';
 import { readFile, writeFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import yaml from 'yaml';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
+import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
+import { resolveContinuitySurfacePlan } from '../utils/continuity-surface.js';
 
 async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
@@ -31,6 +35,14 @@ async function findGitRoot(fromDir: string): Promise<string | null> {
   }
 }
 
+function toRepoAbsolutePath(repoRoot: string, trackedPath: string): string {
+  return join(repoRoot, trackedPath.replace(/\/$/, ''));
+}
+
+function buildContinuityFailureMessage(projectName: string, reasons: string[]): string {
+  return `❌ agenticos_save could not persist tracked continuity for "${projectName}"\n\n${reasons.map((reason) => `- ${reason}`).join('\n')}`;
+}
+
 export async function saveState(args: any): Promise<string> {
   const now = new Date();
   const timestamp = now.toISOString().replace('T', ' ').substring(0, 16);
@@ -49,7 +61,33 @@ export async function saveState(args: any): Promise<string> {
   const { project, projectPath, projectYaml, statePath } = resolved;
 
   try {
-    // Update state.yaml with backup timestamp
+    // Find git root from the project path (works regardless of AGENTICOS_HOME)
+    const gitRoot = await findGitRoot(projectPath);
+
+    let contextPolicyPlan;
+    try {
+      contextPolicyPlan = resolveContextPolicyPlan({
+        projectName: project.name,
+        projectPath,
+        projectYaml,
+        repoRoot: gitRoot,
+      });
+    } catch (error: any) {
+      return `❌ ${error.message}`;
+    }
+
+    const continuityPlan = contextPolicyPlan.policy === 'private_continuity'
+      ? resolveContinuitySurfacePlan(contextPolicyPlan, {
+        include_claude_state_mirror: true,
+        include_agents_guidance: existsSync(`${projectPath}/AGENTS.md`),
+      })
+      : null;
+
+    if (continuityPlan && continuityPlan.unsupported_reasons.length > 0) {
+      return buildContinuityFailureMessage(project.name, continuityPlan.unsupported_reasons);
+    }
+
+    // Update state.yaml only after the continuity plan is known to be supported.
     const stateContent = await readFile(statePath, 'utf-8');
     const state = yaml.parse(stateContent);
 
@@ -65,19 +103,24 @@ export async function saveState(args: any): Promise<string> {
       ? '\n📝 CLAUDE.md was auto-generated (Project DNA section needs manual enrichment)'
       : '';
 
-    // Find git root from the project path (works regardless of AGENTICOS_HOME)
-    const gitRoot = await findGitRoot(projectPath);
     if (!gitRoot) {
       return `⚠️ State saved but no git repo found at ${projectPath}\n\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
     }
 
-    // Project-scoped git: stage only runtime-managed paths plus the CLAUDE state mirror.
+    // Project-scoped git: stage policy-aware continuity paths for private repos, otherwise keep runtime-managed paths.
     const gitCmd = `git -C "${gitRoot}"`;
-    const runtimePaths = resolveRuntimeReviewSurfacePaths(projectPath, projectYaml, {
-      include_claude_state_mirror: true,
-    }).tracked_review_excluded_paths;
-    const stageTargets = runtimePaths
-      .map((trackedPath) => `"${toProjectAbsoluteRuntimePath(projectPath, trackedPath)}"`)
+    const stagePaths = continuityPlan
+      ? [
+        ...continuityPlan.tracked_continuity_paths,
+        ...continuityPlan.optional_guidance_paths,
+      ]
+      : resolveRuntimeReviewSurfacePaths(projectPath, projectYaml, {
+        include_claude_state_mirror: true,
+      }).tracked_review_excluded_paths;
+    const stageTargets = stagePaths
+      .map((trackedPath) => continuityPlan
+        ? `"${toRepoAbsolutePath(gitRoot, trackedPath)}"`
+        : `"${toProjectAbsoluteRuntimePath(projectPath, trackedPath)}"`)
       .join(' ');
 
     // Phase 1: git add
@@ -114,7 +157,11 @@ export async function saveState(args: any): Promise<string> {
     if (pushed) phases.push('☁️ Pushed to remote');
     else if (committed) phases.push('⚠️ Push failed (committed locally, not synced)');
 
-    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}`;
+    const recoveryNote = continuityPlan
+      ? '\nRecovery: full tracked continuity staged for Git-backed restore'
+      : '';
+
+    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}${recoveryNote}`;
   } catch (error: any) {
     return `⚠️ Partial save completed\n\nError: ${error.message}`;
   }

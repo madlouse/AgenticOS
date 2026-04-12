@@ -91,6 +91,7 @@ function mockProjectFiles(options?: {
     },
     source_control: {
       topology: 'local_directory_only',
+      context_publication_policy: 'local_private',
     },
   };
   const state = options?.state || { session: {}, working_memory: { pending: [], decisions: [], facts: [] } };
@@ -282,6 +283,7 @@ describe('saveState', () => {
           },
           source_control: {
             topology: 'local_directory_only',
+            context_publication_policy: 'local_private',
           },
         });
       }
@@ -500,7 +502,7 @@ describe('saveState', () => {
       if (path === '/other/path/.project.yaml') {
         return JSON.stringify({
           meta: { id: 'other-project', name: 'Other Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path === '/other/path/.context/state.yaml') {
@@ -509,7 +511,7 @@ describe('saveState', () => {
       if (path === '/test/path/.project.yaml') {
         return JSON.stringify({
           meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path === '/test/path/.context/state.yaml') {
@@ -556,7 +558,7 @@ describe('saveState', () => {
       if (path === '/other/path/.project.yaml') {
         return JSON.stringify({
           meta: { id: 'other-project', name: 'Other Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path === '/other/path/.context/state.yaml') {
@@ -589,6 +591,7 @@ describe('saveState', () => {
         },
         source_control: {
           topology: 'local_directory_only',
+          context_publication_policy: 'local_private',
         },
       },
     });
@@ -597,5 +600,92 @@ describe('saveState', () => {
 
     expect(result).toContain('does not match .project.yaml meta.id');
     expect(childProcessMock.exec).not.toHaveBeenCalled();
+  });
+
+  it('stages the full tracked continuity surface for private_continuity projects', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'full continuity save' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('/test/path/.project.yaml');
+    expect(addCommand).toContain('/test/path/.context/quick-start.md');
+    expect(addCommand).toContain('/test/path/.context/state.yaml');
+    expect(addCommand).toContain('/test/path/.context/conversations');
+    expect(addCommand).toContain('/test/path/knowledge');
+    expect(addCommand).toContain('/test/path/tasks');
+    expect(addCommand).toContain('/test/path/CLAUDE.md');
+    expect(addCommand).not.toContain('/test/path/.context/.last_record');
+    expect(result).toContain('Recovery: full tracked continuity staged for Git-backed restore');
+  });
+
+  it('fails closed before state mutation when private_continuity cannot prove a git repo', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (_cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        cb(new Error('not a git repo'), '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'should fail closed' });
+
+    expect(result).toContain('could not persist tracked continuity');
+    expect(result).toContain('git repo root');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
   });
 });
