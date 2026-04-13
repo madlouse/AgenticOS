@@ -165,6 +165,35 @@ describe('initProject', () => {
     expect(parsed.execution.source_repo_roots).toEqual(['.']);
   });
 
+  it('creates a private transcript sidecar directory for public_distilled github_versioned projects', async () => {
+    await initProject({
+      name: 'Public Project',
+      description: 'A public distilled project',
+      topology: 'github_versioned',
+      context_publication_policy: 'public_distilled',
+      github_repo: 'madlouse/public-project',
+    });
+
+    const mkdirCalls = fsPromisesMock.mkdir.mock.calls.map((c) => String(c[0]).replace(/\/$/, ''));
+    expect(mkdirCalls).toContain('/home/testuser/AgenticOS/projects/public-project/.private/conversations');
+  });
+
+  it('writes gitignore entries for public_distilled private transcript sidecars', async () => {
+    await initProject({
+      name: 'Public Project',
+      description: 'A public distilled project',
+      topology: 'github_versioned',
+      context_publication_policy: 'public_distilled',
+      github_repo: 'madlouse/public-project',
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const gitignoreCall = writeCalls.find((c) => c[0].endsWith('/.gitignore'));
+    expect(gitignoreCall).toBeDefined();
+    expect(String(gitignoreCall![1])).toContain('.private/');
+    expect(String(gitignoreCall![1])).toContain('.meta/transcripts/');
+  });
+
   it('writes state.yaml with correct structure', async () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));

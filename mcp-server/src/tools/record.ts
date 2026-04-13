@@ -3,6 +3,12 @@ import yaml from 'yaml';
 import { patchProjectMetadata } from '../utils/registry.js';
 import { updateClaudeMdState } from '../utils/distill.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
+import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
+import {
+  buildConversationRoutingStatusLines,
+  detectLegacyTrackedTranscriptStatus,
+  resolveConversationRoutingPlan,
+} from '../utils/conversation-routing.js';
 
 function parseArray(val: unknown): string[] {
   if (Array.isArray(val)) return val as string[];
@@ -35,7 +41,18 @@ export async function recordSession(args: any): Promise<string> {
     return `❌ ${error.message}`;
   }
 
-  const { project, projectPath, statePath, conversationsDir: convDir, markerPath } = resolved;
+  const { project, projectPath, projectYaml, statePath, markerPath } = resolved;
+  const contextPolicyPlan = resolveContextPolicyPlan({
+    projectName: project.name,
+    projectPath,
+    projectYaml,
+  });
+  const conversationRoutingPlan = resolveConversationRoutingPlan(contextPolicyPlan);
+  const legacyTranscriptStatus = await detectLegacyTrackedTranscriptStatus(contextPolicyPlan);
+  if (legacyTranscriptStatus === 'misconfigured_public_raw_target') {
+    return `❌ agenticos_record blocked for "${project.name}" because public transcript routing is misconfigured. Raw transcript destination must remain sidecar-only for public_distilled projects.`;
+  }
+  const convDir = conversationRoutingPlan.raw_conversations_dir;
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const time = now.toISOString().substring(11, 16);
@@ -119,8 +136,10 @@ export async function recordSession(args: any): Promise<string> {
     last_recorded: now.toISOString(),
   });
 
+  const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
   return `✅ Session recorded for "${project.name}"\n\n` +
-    `📝 Conversation: .context/conversations/${today}.md\n` +
-    `📊 State: .context/state.yaml (updated)\n` +
-    `📋 CLAUDE.md: Current State synced\n`;
+    `📝 Raw conversation: ${conversationRoutingPlan.raw_conversations_display_dir}${today}.md\n` +
+    `📊 State: ${contextPolicyPlan.trackedContextDisplayPaths.state} (updated)\n` +
+    `📋 CLAUDE.md: Current State synced\n` +
+    (routingNotes.length > 0 ? `\n${routingNotes.join('\n')}\n` : '');
 }

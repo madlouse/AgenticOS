@@ -1088,4 +1088,197 @@ describe('saveState', () => {
     expect(addCommand).toContain('"projects/app/tasks/"');
     expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
   });
+
+  it('stages the distilled tracked continuity surface for public_distilled projects', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes('status --porcelain')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'public continuity save' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('".project.yaml"');
+    expect(addCommand).toContain('".context/quick-start.md"');
+    expect(addCommand).toContain('".context/state.yaml"');
+    expect(addCommand).toContain('"knowledge/"');
+    expect(addCommand).toContain('"tasks/"');
+    expect(addCommand).toContain('"CLAUDE.md"');
+    expect(addCommand).not.toContain('.context/conversations');
+    expect(result).toContain('Recovery: distilled continuity contract evaluated; no new continuity changes were committed');
+    expect(result).toContain('.private/conversations/');
+  });
+
+  it('blocks save when a public_distilled project has tracked raw transcript diffs', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes('status --porcelain')) {
+          cb(null, ' M .context/conversations/2026-04-13.md\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'should block' });
+
+    expect(result).toContain('agenticos_save blocked');
+    expect(result).toContain('.context/conversations/');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
+  });
+
+  it('checks tracked public transcript diffs using repo-relative paths for nested projects', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/app',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/projects/app',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/repo/projects/app/.project.yaml') {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'public_distilled',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['../..'],
+          },
+          agent_context: {
+            conversations: 'runtime/conversations/',
+          },
+        });
+      }
+      if (path === '/repo/projects/app/.context/state.yaml') {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/repo\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes('status --porcelain')) {
+          cb(null, ' M projects/app/runtime/conversations/2026-04-13.md\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'should block nested project public transcript leak' });
+
+    const statusCommand = commands.find((cmd) => cmd.includes('status --porcelain'));
+    expect(statusCommand).toContain('"projects/app/runtime/conversations/"');
+    expect(result).toContain('agenticos_save blocked');
+    expect(result).toContain('runtime/conversations/');
+  });
 });

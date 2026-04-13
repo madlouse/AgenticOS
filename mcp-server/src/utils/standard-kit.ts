@@ -10,6 +10,8 @@ import { validateContextPublicationPolicy } from './project-contract.js';
 import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
 import { getSessionProjectBinding } from './session-context.js';
+import { resolveConversationRoutingPlan } from './conversation-routing.js';
+import { resolveContextPolicyPlan } from './context-policy-plan.js';
 
 interface StandardKitEntry {
   path: string;
@@ -232,6 +234,9 @@ async function ensureParentDir(path: string): Promise<void> {
 async function ensureStandardDirectories(project: ResolvedProjectTarget): Promise<void> {
   const contextPaths = resolveManagedProjectContextPaths(project.projectPath, project.projectYaml);
   await mkdir(contextPaths.conversationsDir, { recursive: true });
+  if (project.projectYaml?.source_control?.context_publication_policy === 'public_distilled') {
+    await mkdir(join(project.projectPath, '.private', 'conversations'), { recursive: true });
+  }
   await mkdir(contextPaths.knowledgeDir, { recursive: true });
   await mkdir(join(contextPaths.tasksDir, 'templates'), { recursive: true });
   await mkdir(contextPaths.artifactsDir, { recursive: true });
@@ -553,6 +558,44 @@ export async function checkStandardKitConformance(args: { project_path?: string;
               ? 'The managed project is missing source_control.context_publication_policy in .project.yaml.'
               : publicationValidation.message,
           evidence_paths: ['.project.yaml'],
+        });
+        break;
+      }
+      case 'public_transcript_isolation_contract': {
+        const publicationValidation = validateContextPublicationPolicy(project.projectName, projectYaml);
+        let pass = publicationValidation.ok
+          && fileContainsAll(agentsMd, ['Configured conversation history surface (tracked or policy-routed)'])
+          && fileContainsAll(claudeMd, ['会话历史入口（tracked 或按 policy 路由）']);
+
+        if (pass && publicationValidation.ok && publicationValidation.policy === 'public_distilled') {
+          const quickStartPath = resolveManagedProjectContextPaths(project.projectPath, projectYaml).quickStartPath;
+          let quickStart = '';
+          try {
+            quickStart = readFileSync(quickStartPath, 'utf-8');
+          } catch {}
+          let routingPlan;
+          try {
+            routingPlan = resolveConversationRoutingPlan(resolveContextPolicyPlan({
+              projectName: project.projectName,
+              projectPath: project.projectPath,
+              projectYaml,
+            }));
+          } catch {
+            routingPlan = null;
+          }
+          pass = pass
+            && !!routingPlan
+            && quickStart.includes('raw transcripts route to')
+            && quickStart.includes(routingPlan.raw_conversations_display_dir);
+        }
+
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Generated adapter surfaces and quick-start guidance preserve the public transcript isolation contract.'
+            : 'Public transcript isolation truth is missing from generated adapter surfaces or quick-start guidance.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md', '.context/quick-start.md'],
         });
         break;
       }

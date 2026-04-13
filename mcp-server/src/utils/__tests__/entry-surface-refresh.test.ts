@@ -212,6 +212,40 @@ describe('entry surface refresh', () => {
     expect(state.loaded_context).toEqual(['.project.yaml', 'standards/.context/quick-start.md']);
   });
 
+  it('describes tracked and raw transcript paths separately for public_distilled projects', async () => {
+    const projectRoot = await setupProjectRoot();
+    await writeFile(
+      join(projectRoot, '.project.yaml'),
+      yaml.stringify({
+        meta: {
+          name: 'Public Project',
+          description: 'Public distilled project.',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/public-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(join(projectRoot, '.context', 'state.yaml'), yaml.stringify({}), 'utf-8');
+
+    await refreshEntrySurfaces({
+      project_path: projectRoot,
+      summary: 'Refreshed public entry surfaces.',
+      status: 'active',
+      current_focus: 'Keep public continuity distilled',
+    });
+
+    const quickStart = await readFile(join(projectRoot, '.context', 'quick-start.md'), 'utf-8');
+    expect(quickStart).toContain('tracked surface `.context/conversations/`; raw transcripts route to `.private/conversations/`');
+  });
+
   it('falls back to basename inside the readable project-yaml path when metadata fields are empty', async () => {
     const projectRoot = await setupProjectRoot();
     await writeFile(join(projectRoot, '.project.yaml'), yaml.stringify({ meta: {} }), 'utf-8');

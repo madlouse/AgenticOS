@@ -5,6 +5,8 @@ import {
   resolveManagedProjectContextDisplayPaths,
   resolveManagedProjectContextPaths,
 } from './agent-context-paths.js';
+import { resolveConversationRoutingPlan } from './conversation-routing.js';
+import { resolveContextPolicyPlan } from './context-policy-plan.js';
 
 export interface EntrySurfaceRefreshArgs {
   project_path: string;
@@ -92,6 +94,7 @@ function buildQuickStart(
   args: EntrySurfaceRefreshArgs,
   identity: ResolvedProjectIdentity,
   refreshedAt: string,
+  projectPath: string,
   contextPaths: ReturnType<typeof resolveManagedProjectContextDisplayPaths>,
 ): string {
   const pending = normalizeList(args.pending);
@@ -144,11 +147,23 @@ function buildQuickStart(
     });
   }
 
+  let conversationLayerLine = `- Conversation history surface: \`${contextPaths.conversationsDir}\``;
+  try {
+    const routingPlan = resolveConversationRoutingPlan(resolveContextPolicyPlan({
+      projectName: identity.projectName,
+      projectPath,
+      projectYaml: identity.projectYaml,
+    }));
+    if (routingPlan.policy === 'public_distilled') {
+      conversationLayerLine = `- Conversation history contract: tracked surface \`${contextPaths.conversationsDir}\`; raw transcripts route to \`${routingPlan.raw_conversations_display_dir}\``;
+    }
+  } catch {}
+
   lines.push(
     '',
     '## Canonical Layers',
     `- Operational state: \`${contextPaths.statePath}\``,
-    `- Session history: \`${contextPaths.conversationsDir}\``,
+    conversationLayerLine,
     `- Durable knowledge: \`${contextPaths.knowledgeDir}\``,
     `- Execution plans: \`${contextPaths.tasksDir}\``,
     `- Deliverables: \`${contextPaths.artifactsDir}\``,
@@ -243,7 +258,7 @@ export async function refreshEntrySurfaces(args: EntrySurfaceRefreshArgs): Promi
 
   const existingState = await readState(statePath);
   const nextState = buildState(args, existingState, refreshedAt, displayPaths);
-  const nextQuickStart = buildQuickStart(args, identity, refreshedAt, displayPaths);
+  const nextQuickStart = buildQuickStart(args, identity, refreshedAt, projectPath, displayPaths);
 
   await writeFile(quickStartPath, nextQuickStart, 'utf-8');
   await writeFile(statePath, yaml.stringify(nextState), 'utf-8');
