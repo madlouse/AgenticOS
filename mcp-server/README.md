@@ -66,6 +66,10 @@ If the user installed AgenticOS with Homebrew:
 
 So post-install success only means the package landed. It does not mean the agent is already bootstrapped.
 
+On Apple Silicon macOS, Homebrew caveats commonly use `/opt/homebrew/var/agenticos`
+as the default runtime-home example for `AGENTICOS_HOME`.
+That is a runtime home, not a source checkout path.
+
 ### When to Use
 
 AgenticOS is ideal for:
@@ -110,6 +114,7 @@ Transport bootstrap and project-intent routing are different concerns.
 ### Claude Code
 
 - canonical bootstrap: `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
+- canonical config location: `~/.claude/settings.json`
 - verify:
   - `claude mcp list`
   - `/mcp`
@@ -159,7 +164,7 @@ These are currently experimental. Do not describe them as first-class supported 
 ### Repairing Stale Registrations
 
 The supported runtime entrypoint is `agenticos-mcp`.
-Do not keep legacy source-checkout registrations such as `node /Users/jeking/dev/AgenticOS/mcp-server/build/index.js`.
+Do not keep legacy source-checkout registrations such as `node /path/to/mcp-server/build/index.js`.
 
 Claude Code repair flow:
 
