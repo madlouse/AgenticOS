@@ -49,7 +49,7 @@ Meaning:
 
 - distilled context may be tracked in source
 - raw session history and other non-publishable runtime surfaces must be isolated from the public source tree
-- `.context/conversations/` must not remain a tracked public-tree path once enforcement work lands
+- `.context/conversations/` remains the tracked/display continuity contract path, while raw transcripts route to a private sidecar such as `.private/conversations/`
 
 ## Interaction With Other Contracts
 
@@ -74,15 +74,14 @@ Examples:
 
 ## Current Enforcement Boundary
 
-This issue defines the contract and pushes it into templates, initialization flow, and conformance checks.
+This issue defined the contract and pushed it into templates, initialization flow, and conformance checks.
 
-It does not yet implement all publication-aware routing behavior.
+Implementation now exists across the managed-project lifecycle:
 
-Follow-up work:
-
-- `#244` private continuity persistence behavior
-- `#245` raw conversation isolation for public `github_versioned` projects
+- `#244` completed private continuity persistence behavior
+- `#245` completed raw conversation isolation for public `github_versioned` projects
+- `record`, `save`, runtime review surfaces, and conformance checks now resolve transcript behavior from the explicit publication-policy contract
 
 ## Outcome
 
-After this policy lands, later implementation issues can route `save`, `record`, and runtime sidecars against one explicit contract instead of inventing topology-based heuristics.
+`save`, `record`, and runtime sidecars now route against one explicit contract instead of inventing topology-based heuristics.

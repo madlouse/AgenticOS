@@ -49,7 +49,7 @@ That question is handled separately by the context publication policy contract.
 | `.project.yaml` | stable project identity and layer map | canonical | rare change | project id, name, description, path roles | session logs, pending items, derived summaries |
 | `.context/quick-start.md` | concise entry orientation | canonical | mutable | project goal, current focus, resume pointer, key facts | full conversation history, detailed task decomposition, exhaustive decision logs |
 | `.context/state.yaml` | mutable operational working state | canonical | mutable | current task, working memory, loaded context, latest guardrail evidence | append-only transcripts, long-form research, durable architecture docs |
-| `.context/conversations/` | raw session history | canonical | append-only | timestamped session records | synthesized architecture, canonical project overview |
+| `.context/conversations/` | conversation-history contract surface | canonical | append-only or tracked-display depending on publication policy | timestamped session records for raw/tracked-continuity projects, or the tracked continuity contract path for `public_distilled` projects | synthesized architecture, canonical project overview, public raw transcript dumps for `public_distilled` |
 | `knowledge/` | durable synthesized understanding | canonical | mutable but review-oriented | architecture, product judgments, research, decision syntheses | raw transcript dumps, scratch task checklists |
 | `tasks/` | future-facing execution artifacts | canonical | mutable | issue briefs, plans, checklists, templates | session narrative, long-term architecture rationale |
 | `artifacts/` | concrete outputs and deliverables | canonical for outputs | mutable | generated outputs, deliverables, exported files | memory/state/history by default |
@@ -68,6 +68,8 @@ Default session-entry read order is:
 `conversations/` is not a first-pass entry surface.
 
 It is a recovery and audit layer.
+
+For `public_distilled` projects, the tracked contract path may remain `.context/conversations/` while raw recovery records live in a private sidecar such as `.private/conversations/`.
 
 ## Write Rules
 
@@ -94,8 +96,9 @@ It is a recovery and audit layer.
 
 ### `.context/conversations/`
 
-- Append-only session history
-- One session record may be appended or created, but earlier entries should not be silently rewritten as summary
+- Conversation-history contract surface
+- For raw/tracked-continuity projects, one session record may be appended or created, but earlier entries should not be silently rewritten as summary
+- For `public_distilled` projects, this path remains the tracked continuity contract surface and must not receive public raw transcript dumps; raw session history belongs in the private sidecar path selected by publication policy
 
 ### `knowledge/`
 

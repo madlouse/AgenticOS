@@ -71,7 +71,7 @@ When you open this project in a new session, **immediately do the following**:
 
 1. Call `agenticos_status` to confirm the current session project, current task, pending work, and latest recorded state
 2. If no session project is bound or the bound project is not `AgenticOS`, call `agenticos_switch`
-3. Read `.project.yaml`, the "Current State" section below, `standards/.context/quick-start.md`, and `standards/.context/conversations/`
+3. Read `.project.yaml`, the "Current State" section below, `standards/.context/quick-start.md`, and `standards/.context/state.yaml`; use the conversation-history contract surface for recovery when needed (`standards/.context/conversations/` for tracked continuity, or the publication-policy raw sidecar such as `.private/conversations/` when applicable)
 4. Review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
 5. Greet the user with a brief status report:
 
@@ -124,7 +124,7 @@ When you open this project in a new session, **immediately do the following**:
 | `.project.yaml` | 项目元信息 |
 | `standards/.context/quick-start.md` | 快速项目概览 |
 | `standards/.context/state.yaml` | 当前会话状态及工作记忆 |
-| `standards/.context/conversations/` | 会话记录（自动生成） |
+| `standards/.context/conversations/` | 会话历史契约层；tracked continuity surface，raw transcript 路径受 publication policy 约束 |
 | `knowledge/` | 持久化知识文档 |
 | `tasks/` | 任务追踪 |
 | `tasks/templates/agent-preflight-checklist.yaml` | preflight 模板 |

@@ -61,7 +61,7 @@ After recording, call `agenticos_save` to commit to Git.
 On session start, align the runtime before meaningful work:
 1. call `agenticos_status` to confirm the current session project, current task, pending work, and latest recorded state
 2. if no session project is bound or the bound project is not `AgenticOS`, call `agenticos_switch`
-3. read `.project.yaml`, `standards/.context/quick-start.md`, `standards/.context/state.yaml`, and `standards/.context/conversations/`
+3. read `.project.yaml`, `standards/.context/quick-start.md`, and `standards/.context/state.yaml`; use the conversation-history contract surface for recovery when needed (`standards/.context/conversations/` for tracked continuity, or the publication-policy raw sidecar such as `.private/conversations/` when applicable)
 4. review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
 5. if implementation work is requested, follow the Guardrail Protocol above exactly before editing
 
@@ -79,7 +79,7 @@ Then greet the user with: project name, last progress, current pending items, su
 | `.project.yaml` | Project metadata |
 | `standards/.context/quick-start.md` | Quick project summary |
 | `standards/.context/state.yaml` | Session state and working memory |
-| `standards/.context/conversations/` | Session records (auto-generated) |
+| `standards/.context/conversations/` | Conversation-history contract surface; tracked continuity path, while raw transcript routing depends on publication policy |
 | `knowledge/` | Persistent knowledge documents |
 | `tasks/` | Task tracking |
 | `tasks/templates/agent-preflight-checklist.yaml` | Preflight checklist template |
