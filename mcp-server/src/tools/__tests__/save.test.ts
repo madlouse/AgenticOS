@@ -1258,6 +1258,14 @@ describe('saveState', () => {
           cb(null, '/repo\n', '');
           return;
         }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
         if (cmd.includes('status --porcelain')) {
           cb(null, ' M projects/app/runtime/conversations/2026-04-13.md\n', '');
           return;

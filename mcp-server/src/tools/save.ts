@@ -106,7 +106,7 @@ function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
 
 async function validateGitBackedContinuityRepoBinding(args: {
   projectName: string;
-  policy: 'private_continuity' | 'public_distilled';
+  policy: 'private_continuity' | 'public_distilled' | 'local_private';
   projectPath: string;
   projectYaml: any;
   gitWorktreeRoot: string | null;
