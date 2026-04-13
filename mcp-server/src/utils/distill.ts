@@ -1,12 +1,13 @@
 import { readFile, writeFile } from 'fs/promises';
 import { readFileSync } from 'fs';
 import { joinDisplayPath, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
+import { renderOptionalStopHookSection, STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
 
 /**
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 12;
+export const CURRENT_TEMPLATE_VERSION = 13;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -50,6 +51,7 @@ export const AGENTS_RUNTIME_GUIDANCE_TITLE = 'Codex / Generic Runtime Notes';
 export const AGENTS_RUNTIME_GUIDANCE_BULLETS = [
   'If natural-language routing is weak, use explicit `agenticos_*` tool calls before treating the issue as transport failure.',
   'Bootstrap differences are runtime concerns rather than policy changes.',
+  ...STOP_HOOK_MIGRATION_BULLETS,
 ] as const;
 
 export const CLAUDE_ADAPTER_LINES = [
@@ -61,6 +63,7 @@ export const CLAUDE_RUNTIME_GUIDANCE_TITLE = 'Claude Runtime Notes';
 export const CLAUDE_RUNTIME_GUIDANCE_BULLETS = [
   'Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.',
   'Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.',
+  ...STOP_HOOK_MIGRATION_BULLETS,
 ] as const;
 
 export const TASK_INTAKE_RULE_TITLE = 'Task Intake Rule';
@@ -137,7 +140,7 @@ export function generateAgentsMd(
 ${AGENTS_ADAPTER_LINES[0]}
 ${AGENTS_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderOptionalStopHookSection()}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
@@ -292,7 +295,7 @@ function buildClaudeMdContent(
 ${CLAUDE_ADAPTER_LINES[0]}
 ${CLAUDE_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderOptionalStopHookSection()}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
