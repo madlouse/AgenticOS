@@ -7,7 +7,7 @@ Downstream projects inherit not just files, but the role boundaries between:
 - `.project.yaml`
 - `.context/quick-start.md`
 - `.context/state.yaml`
-- `.context/conversations/`
+- `.context/conversations/` (tracked/display conversation surface)
 - `knowledge/`
 - `tasks/`
 - `artifacts/`
@@ -15,7 +15,7 @@ Downstream projects inherit not just files, but the role boundaries between:
 Implication:
 - quick-start stays concise and project-level
 - state stays mutable and operational
-- conversations stay append-only
+- the conversations field stays a tracked/display contract path, while raw transcript routing may still move to a private sidecar for public projects
 - knowledge stays synthesized
 - tasks stay future-facing
 - `.project.yaml` must also declare the context publication policy that governs whether raw conversation history is allowed in tracked source for the project class

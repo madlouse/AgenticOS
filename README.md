@@ -150,4 +150,4 @@ Current save/recovery contract:
 
 - `local_private`: Git is not the continuity recovery mechanism
 - `private_continuity`: `agenticos_save` is expected to persist the tracked continuity core for Git-backed restore
-- `public_distilled`: tracked recovery stays distilled; raw transcript isolation remains a separate contract
+- `public_distilled`: `agenticos_save` persists a distilled tracked continuity core for Git-backed restore, while raw transcripts route to a private sidecar such as `.private/conversations/`

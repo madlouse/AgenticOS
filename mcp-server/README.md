@@ -61,7 +61,9 @@ my-project/
 ├── .context/
 │   ├── quick-start.md     # Concise orientation for fast resume
 │   ├── state.yaml         # Mutable operational working state
-│   └── conversations/     # Append-only raw session history
+│   └── conversations/     # Tracked/display conversation contract surface
+├── .private/
+│   └── conversations/     # Raw transcript sidecar for public_distilled projects
 ├── knowledge/             # Durable synthesized insights, architecture, research
 ├── tasks/                 # Execution plans, briefs, and task decomposition
 └── artifacts/             # Deliverables and concrete outputs
@@ -230,7 +232,7 @@ Create new project with standard structure.
 **Current recovery contract**:
 - `local_private`: Git is not the continuity recovery mechanism; `agenticos_save` keeps the existing narrow runtime-managed backup behavior
 - `private_continuity`: `agenticos_save` stages the tracked continuity core for Git-backed recovery, including `.project.yaml`, quick-start, state, conversations, `knowledge/`, `tasks/`, and mirrored guidance such as `CLAUDE.md` / `AGENTS.md` when present and repo-local
-- `public_distilled`: save behavior remains narrower in this issue; raw transcript isolation belongs to `#245`
+- `public_distilled`: `agenticos_save` stages a distilled tracked continuity core for Git-backed recovery (`.project.yaml`, quick-start, state, `knowledge/`, `tasks/`, and mirrored guidance when present), while raw transcripts route to `.private/conversations/`
 
 Publication policy is not the same as workflow topology or canonical source inclusion. A project can be `github_versioned` and still require `public_distilled`.
 
@@ -252,7 +254,7 @@ Use this when `agenticos_status` shows that no session project is bound or the b
 The quick-start/state split is intentional:
 - `quick-start.md` is a concise entry surface
 - `state.yaml` is mutable operational state
-- `conversations/` is append-only history, not the default inline resume surface
+- `conversations/` is the tracked/display conversation contract surface, not the default inline resume surface
 
 ### agenticos_list
 List all projects with status.
@@ -271,7 +273,8 @@ Save state and backup to Git.
 - `private_continuity` validates the tracked continuity plan before mutating `state.yaml` or staging files
 - if a required continuity path escapes the repo root, or no Git repo root can be proven, `agenticos_save` fails closed instead of writing a partial tracked state
 - successful `private_continuity` saves stage the tracked continuity core rather than only the legacy runtime review subset
-- other publication policies currently keep the narrower runtime-managed save surface until their dedicated follow-up issues land
+- `public_distilled` stages the distilled tracked continuity core and keeps raw transcripts in `.private/conversations/`
+- if a `public_distilled` project has tracked raw transcript diffs under `.context/conversations/`, `agenticos_save` blocks instead of silently publishing them
 
 ### agenticos_status
 Show the status of the current session project, or an explicit project when provided.

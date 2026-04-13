@@ -492,6 +492,47 @@ describe('switchProject', () => {
     expect(result).toContain('📖 Project summary: Fallback project summary from quick-start.');
   });
 
+  it('surfaces the public_distilled transcript contract in switch output', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'public-project',
+          name: 'Public Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: 'Public distilled project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/public-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nPublic distilled summary');
+
+    const result = await switchProject({ project: 'public-project' });
+
+    expect(result).toContain('🔒 Raw transcripts: `.private/conversations/`');
+    expect(result).toContain('Git recovery is distilled-only');
+  });
+
   it('refuses to switch into archived reference content', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -991,6 +1032,54 @@ describe('getStatus', () => {
 
     expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
     expect(result).toContain('Title: Implement bootstrap evidence');
+  });
+
+  it('surfaces the public_distilled transcript contract in status output', async () => {
+    bindSessionProject({
+      projectId: 'public-project',
+      projectName: 'Public Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'public-project',
+      projects: [
+        {
+          id: 'public-project',
+          name: 'Public Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'public-project', name: 'Public Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/public-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+      }
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('🔒 Raw transcripts: `.private/conversations/`');
+    expect(result).toContain('Git recovery is distilled-only');
   });
 
   it('shows the latest BLOCK guardrail summary and reason', async () => {

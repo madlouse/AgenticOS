@@ -86,6 +86,7 @@ function mockProjectFiles(options?: {
     },
     source_control: {
       topology: 'local_directory_only',
+      context_publication_policy: 'local_private',
     },
   };
   const state = options?.state || {
@@ -441,13 +442,40 @@ describe('recordSession', () => {
     expect(result).toContain('✅ Session recorded');
   });
 
+  it('routes raw transcripts to a private sidecar path for public_distilled projects', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } },
+    });
+
+    const result = await recordSession({ summary: 'test session' });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const convCall = writeCalls.find((c) => String(c[0]).includes('/.private/conversations/') && String(c[0]).endsWith('.md'));
+    expect(convCall).toBeDefined();
+    expect(result).toContain('Raw conversation: .private/conversations/');
+    expect(result).toContain('Git recovery is distilled-only');
+  });
+
   it('continues when quick-start.md is missing during enrichment', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {
       if (path.endsWith('/.project.yaml')) {
         return JSON.stringify({
           meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path.endsWith('/state.yaml')) {
@@ -480,7 +508,7 @@ describe('recordSession', () => {
       if (path.endsWith('/.project.yaml')) {
         return JSON.stringify({
           meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path.endsWith('/state.yaml')) {
@@ -519,7 +547,7 @@ describe('recordSession', () => {
       if (path.endsWith('/.project.yaml')) {
         return JSON.stringify({
           meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path.endsWith('/state.yaml')) {
@@ -550,7 +578,7 @@ describe('recordSession', () => {
       if (path.endsWith('/.project.yaml')) {
         return JSON.stringify({
           meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path.endsWith('/state.yaml')) {
@@ -618,7 +646,7 @@ describe('recordSession', () => {
       if (path === '/other/path/.project.yaml') {
         return JSON.stringify({
           meta: { id: 'other-project', name: 'Other Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path === '/other/path/.context/state.yaml') {
@@ -636,7 +664,7 @@ describe('recordSession', () => {
       if (path === '/test/path/.project.yaml') {
         return JSON.stringify({
           meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path === '/test/path/.context/state.yaml') {
@@ -692,7 +720,7 @@ describe('recordSession', () => {
       if (path === '/other/path/.project.yaml') {
         return JSON.stringify({
           meta: { id: 'other-project', name: 'Other Project' },
-          source_control: { topology: 'local_directory_only' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
         });
       }
       if (path === '/other/path/.context/state.yaml') {
@@ -725,6 +753,7 @@ describe('recordSession', () => {
         },
         source_control: {
           topology: 'local_directory_only',
+          context_publication_policy: 'local_private',
         },
       },
     });

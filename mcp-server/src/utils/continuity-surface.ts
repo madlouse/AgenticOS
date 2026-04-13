@@ -58,7 +58,7 @@ export function resolveContinuitySurfacePlan(
 ): ContinuitySurfacePlan {
   const unsupportedReasons: string[] = [];
 
-  if (plan.policy !== 'private_continuity') {
+  if (plan.policy === 'local_private') {
     return {
       policy: plan.policy,
       tracked_continuity_paths: [],
@@ -70,7 +70,7 @@ export function resolveContinuitySurfacePlan(
   }
 
   if (!plan.repoRoot) {
-    unsupportedReasons.push('private_continuity requires a git repo root for tracked continuity persistence.');
+    unsupportedReasons.push(`${plan.policy} requires a git repo root for tracked continuity persistence.`);
   }
 
   const trackedContinuity = new Set<string>();
@@ -90,9 +90,11 @@ export function resolveContinuitySurfacePlan(
   addTrackedPath('.project.yaml', plan.trackedContextPaths.projectFile);
   addTrackedPath('quick-start', plan.trackedContextPaths.quickStart);
   addTrackedPath('state', plan.trackedContextPaths.state);
-  addTrackedPath('conversations', plan.trackedContextPaths.conversations, true);
   addTrackedPath('knowledge', plan.trackedContextPaths.knowledge, true);
   addTrackedPath('tasks', plan.trackedContextPaths.tasks, true);
+  if (plan.policy === 'private_continuity') {
+    addTrackedPath('conversations', plan.trackedContextPaths.conversations, true);
+  }
 
   if (options.include_claude_state_mirror !== false) {
     const claudePath = join(plan.projectRoot, 'CLAUDE.md');
@@ -124,10 +126,13 @@ export function resolveContinuitySurfacePlan(
     const isRequiredViolation = violation.startsWith('.project.yaml')
       || violation.startsWith('quick-start')
       || violation.startsWith('state')
-      || violation.startsWith('conversations')
       || violation.startsWith('knowledge')
       || violation.startsWith('tasks');
+    const isPrivateConversationViolation = plan.policy === 'private_continuity'
+      && violation.startsWith('conversations');
     if (isRequiredViolation) {
+      unsupportedReasons.push(violation);
+    } else if (isPrivateConversationViolation) {
       unsupportedReasons.push(violation);
     }
   }
