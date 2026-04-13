@@ -253,7 +253,21 @@ describe('runPrScopeCheck', () => {
     expect(result.block_reasons[0]).toContain('not comparable');
   });
 
-  it('returns BLOCK when the git common repo root is not declared for the target project', async () => {
+  it('returns PASS when the worktree root is declared even if the common repo root differs', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-160',
+        statePath: '/repo/worktrees/issue-160/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-160/.project.yaml',
+        sourceRepoRoots: ['/repo/worktrees/issue-160'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo/worktrees/issue-160\n',
       'rev-parse --git-common-dir': '/external/.git\n',
@@ -270,7 +284,28 @@ describe('runPrScopeCheck', () => {
       expected_issue_scope: 'repo_boundary_enforcement',
     })) as { status: string; block_reasons: string[] };
 
+    expect(result.status).toBe('PASS');
+    expect(result.block_reasons).toEqual([]);
+  });
+
+  it('returns BLOCK when neither the worktree root nor the common repo root is declared for the target project', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/wrong/worktrees/issue-160\n',
+      'rev-parse --git-common-dir': '/external/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'fix(mcp-server): enforce source repo bindings (#160)\n',
+      'diff --name-only origin/main...HEAD': 'projects/agenticos/mcp-server/src/tools/preflight.ts\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '160',
+      repo_path: '/wrong/worktrees/issue-160',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/**'],
+      expected_issue_scope: 'repo_boundary_enforcement',
+    })) as { status: string; block_reasons: string[] };
+
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
+    expect(result.block_reasons.join(' ')).toContain('neither git worktree root');
   });
 });

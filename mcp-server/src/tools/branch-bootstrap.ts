@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from 'path';
 import { promisify } from 'util';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
+import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 
 const execAsync = promisify(exec);
 
@@ -162,14 +163,16 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     result.base_commit = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
 
     if (projectResolution.targetProject) {
-      if (!projectResolution.targetProject.sourceRepoRootsDeclared || projectResolution.targetProject.sourceRepoRoots.length === 0) {
-        result.block_reasons.push(
-          `target project "${projectResolution.targetProject.id}" is missing execution.source_repo_roots in ${projectResolution.targetProject.projectYamlPath}`,
-        );
-      } else if (!projectResolution.targetProject.sourceRepoRoots.includes(gitCommonRepoRoot)) {
-        result.block_reasons.push(
-          `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject.id}"`,
-        );
+      const repoIdentity = validateGuardrailRepoIdentity({
+        projectId: projectResolution.targetProject.id,
+        projectYamlPath: projectResolution.targetProject.projectYamlPath,
+        declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
+        sourceRepoRootsDeclared: projectResolution.targetProject.sourceRepoRootsDeclared,
+        gitWorktreeRoot,
+        gitCommonRepoRoot,
+      });
+      if (!repoIdentity.ok && repoIdentity.message) {
+        result.block_reasons.push(repoIdentity.message);
         result.notes.push(`declared source repo roots: ${projectResolution.targetProject.sourceRepoRoots.join(', ')}`);
       }
     }

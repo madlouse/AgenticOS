@@ -9,6 +9,7 @@ import {
   resolveGuardrailProjectTarget,
   type GuardrailTaskType,
 } from '../utils/repo-boundary.js';
+import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 type GuardStatus = 'PASS' | 'BLOCK';
 const execAsync = promisify(exec);
 
@@ -153,16 +154,18 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
       result.evidence.git_common_repo_root = gitCommonRepoRoot;
 
       if (result.target_project) {
-        if (result.target_project.declared_source_repo_roots.length === 0) {
-          result.block_reasons.push(
-            `target project "${result.target_project.id}" is missing execution.source_repo_roots in ${result.target_project.project_yaml_path}`,
-          );
+        const repoIdentity = validateGuardrailRepoIdentity({
+          projectId: result.target_project.id,
+          projectYamlPath: result.target_project.project_yaml_path,
+          declaredSourceRepoRoots: result.target_project.declared_source_repo_roots,
+          sourceRepoRootsDeclared: result.target_project.declared_source_repo_roots.length > 0,
+          gitWorktreeRoot,
+          gitCommonRepoRoot,
+        });
+        if (!repoIdentity.ok && repoIdentity.message) {
+          result.block_reasons.push(repoIdentity.message);
           result.recovery_actions.push(
             `declare execution.source_repo_roots in ${result.target_project.project_yaml_path} before ${task_type} edits`,
-          );
-        } else if (!result.target_project.declared_source_repo_roots.includes(gitCommonRepoRoot)) {
-          result.block_reasons.push(
-            `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${result.target_project.id}"`,
           );
           result.recovery_actions.push(
             `rerun in a declared source repo root: ${result.target_project.declared_source_repo_roots.join(', ')}`,

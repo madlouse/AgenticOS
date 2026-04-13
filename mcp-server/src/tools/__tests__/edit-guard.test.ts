@@ -266,7 +266,75 @@ describe('runEditGuard', () => {
     expect(result.block_reasons.join(' ')).toContain('exceed the latest preflight scope');
   });
 
-  it('blocks bugfix edits when the git common repo root is not declared for the target project', async () => {
+  it('passes bugfix edits when the worktree root is declared even if the common repo root differs', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos-standards',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos-standards',
+        name: 'agenticos-standards',
+        path: '/workspace/worktrees/issue-268',
+        statePath: '/workspace/worktrees/issue-268/.context/state.yaml',
+        projectYamlPath: '/workspace/worktrees/issue-268/.project.yaml',
+        sourceRepoRoots: ['/workspace/worktrees/issue-268'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/worktrees/issue-268\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/workspace/projects/agenticos/.git\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --abbrev-ref HEAD')) {
+        return { stdout: 'fix/268-fix-guardrail-worktree-repo-identity\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+    readFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          issue_bootstrap: {
+            latest: {
+              issue_id: '268',
+              repo_path: '/workspace/worktrees/issue-268',
+              current_branch: 'fix/268-fix-guardrail-worktree-repo-identity',
+            },
+          },
+          guardrail_evidence: {
+            preflight: {
+              issue_id: '268',
+              repo_path: '/workspace/worktrees/issue-268',
+              declared_target_files: [
+                'projects/agenticos/mcp-server/src/tools/preflight.ts',
+              ],
+              result: {
+                status: 'PASS',
+              },
+            },
+          },
+        });
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = JSON.parse(await runEditGuard({
+      issue_id: '268',
+      task_type: 'bugfix',
+      repo_path: '/workspace/worktrees/issue-268',
+      project_path: '/workspace/worktrees/issue-268',
+      declared_target_files: [
+        'projects/agenticos/mcp-server/src/tools/preflight.ts',
+      ],
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('PASS');
+    expect(result.block_reasons).toEqual([]);
+  });
+
+  it('blocks bugfix edits when neither the worktree root nor the common repo root is declared for the target project', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
       if (cmd.includes('rev-parse --show-toplevel')) {
         return { stdout: '/workspace/wrong-repo\n', stderr: '' };
@@ -291,6 +359,6 @@ describe('runEditGuard', () => {
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
+    expect(result.block_reasons.join(' ')).toContain('neither git worktree root');
   });
 });

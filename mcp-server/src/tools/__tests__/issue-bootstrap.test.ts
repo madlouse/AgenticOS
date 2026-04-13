@@ -141,4 +141,47 @@ describe('runIssueBootstrap', () => {
     expect(result.block_reasons.join(' ')).toContain('context_reset_performed');
     expect(persistIssueBootstrapEvidenceMock).not.toHaveBeenCalled();
   });
+
+  it('records issue bootstrap evidence when the worktree root is declared even if the common repo root differs', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/workspace/worktrees/issue-268',
+        statePath: '/workspace/worktrees/issue-268/.context/state.yaml',
+        projectYamlPath: '/workspace/worktrees/issue-268/.project.yaml',
+        sourceRepoRoots: ['/workspace/worktrees/issue-268'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: { id: 'agenticos' },
+      agent_context: {
+        quick_start: '.context/quick-start.md',
+        current_state: '.context/state.yaml',
+      },
+    }));
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/workspace/worktrees/issue-268\n',
+      'rev-parse --git-common-dir': '/workspace/projects/agenticos/.git\n',
+      'rev-parse --abbrev-ref HEAD': 'fix/268-fix-guardrail-worktree-repo-identity\n',
+      'worktree list --porcelain': 'worktree /workspace/projects/agenticos\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /workspace/worktrees/issue-268\nHEAD abc123\nbranch refs/heads/fix/268-fix-guardrail-worktree-repo-identity\n',
+    });
+
+    const result = JSON.parse(await runIssueBootstrap({
+      issue_id: '268',
+      issue_title: 'Fix guardrail worktree false-block',
+      context_reset_performed: true,
+      project_hot_load_performed: true,
+      issue_payload_attached: true,
+      repo_path: '/workspace/worktrees/issue-268',
+      project_path: '/workspace/worktrees/issue-268',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('RECORDED');
+    expect(result.block_reasons).toEqual([]);
+  });
 });
