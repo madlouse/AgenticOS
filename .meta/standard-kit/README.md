@@ -58,7 +58,7 @@ The downstream kit now carries a canonical contract for:
 - `.project.yaml`
 - `.context/quick-start.md`
 - `.context/state.yaml`
-- `.context/conversations/`
+- `.context/conversations/` (tracked/display conversation contract path)
 - `knowledge/`
 - `tasks/`
 - `artifacts/`
@@ -78,6 +78,12 @@ The contract distinguishes:
 - `public_distilled`
 
 That field determines whether raw session history is allowed in tracked source for the project class, rather than forcing later tools to guess from topology alone.
+
+For `public_distilled`, the downstream contract is split:
+
+- `.context/conversations/` remains the tracked/display conversation contract path
+- raw transcript writes should route to a private sidecar such as `.private/conversations/`
+- quick-start and generated adapter surfaces should describe that split truthfully
 
 The canonical rationale lives in:
 

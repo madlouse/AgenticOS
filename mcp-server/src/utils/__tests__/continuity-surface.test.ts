@@ -26,9 +26,9 @@ describe('resolveContinuitySurfacePlan', () => {
       '.project.yaml',
       '.context/quick-start.md',
       '.context/state.yaml',
-      '.context/conversations/',
       'knowledge/',
       'tasks/',
+      '.context/conversations/',
     ]);
     expect(plan.optional_guidance_paths).toEqual(['CLAUDE.md', 'AGENTS.md']);
     expect(plan.excluded_paths).toContain('.context/.last_record');
@@ -36,7 +36,7 @@ describe('resolveContinuitySurfacePlan', () => {
     expect(plan.unsupported_reasons).toEqual([]);
   });
 
-  it('does not widen public_distilled to full continuity', () => {
+  it('returns the distilled tracked continuity set for public_distilled', () => {
     const contextPlan = resolveContextPolicyPlan({
       projectName: 'Public Project',
       projectPath: '/workspace/public-project',
@@ -52,8 +52,15 @@ describe('resolveContinuitySurfacePlan', () => {
     const plan = resolveContinuitySurfacePlan(contextPlan);
 
     expect(plan.policy).toBe('public_distilled');
-    expect(plan.tracked_continuity_paths).toEqual([]);
-    expect(plan.optional_guidance_paths).toEqual([]);
+    expect(plan.tracked_continuity_paths).toEqual([
+      '.project.yaml',
+      '.context/quick-start.md',
+      '.context/state.yaml',
+      'knowledge/',
+      'tasks/',
+    ]);
+    expect(plan.optional_guidance_paths).toEqual(['CLAUDE.md']);
+    expect(plan.tracked_continuity_paths).not.toContain('.context/conversations/');
   });
 
   it('fails closed when a required tracked continuity path escapes the repo root', () => {

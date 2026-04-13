@@ -194,6 +194,9 @@ export async function initProject(args: any): Promise<string> {
   const contextDisplayPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
 
   await mkdir(contextPaths.conversationsDir, { recursive: true });
+  if (contextPublicationPolicy === 'public_distilled') {
+    await mkdir(join(projectPath, '.private', 'conversations'), { recursive: true });
+  }
   await mkdir(contextPaths.knowledgeDir, { recursive: true });
   await mkdir(contextPaths.tasksDir, { recursive: true });
   await mkdir(contextPaths.artifactsDir, { recursive: true });

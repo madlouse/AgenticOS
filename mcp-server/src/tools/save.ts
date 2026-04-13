@@ -8,6 +8,11 @@ import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
 import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
 import { resolveContinuitySurfacePlan } from '../utils/continuity-surface.js';
+import {
+  buildConversationRoutingStatusLines,
+  detectLegacyTrackedTranscriptStatus,
+  resolveConversationRoutingPlan,
+} from '../utils/conversation-routing.js';
 
 async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
@@ -43,6 +48,13 @@ function buildContinuityFailureMessage(projectName: string, reasons: string[]): 
   return `❌ agenticos_save could not persist tracked continuity for "${projectName}"\n\n${reasons.map((reason) => `- ${reason}`).join('\n')}`;
 }
 
+async function hasTrackedPublicTranscriptDiffs(gitRoot: string, trackedConversationPath: string): Promise<boolean> {
+  const { stdout } = await execCommand(
+    `git -C "${gitRoot}" status --porcelain --untracked-files=all -- "${trackedConversationPath}"`,
+  );
+  return stdout.trim().length > 0;
+}
+
 export async function saveState(args: any): Promise<string> {
   const now = new Date();
   const timestamp = now.toISOString().replace('T', ' ').substring(0, 16);
@@ -76,7 +88,7 @@ export async function saveState(args: any): Promise<string> {
       return `❌ ${error.message}`;
     }
 
-    const continuityPlan = contextPolicyPlan.policy === 'private_continuity'
+    const continuityPlan = contextPolicyPlan.policy !== 'local_private'
       ? resolveContinuitySurfacePlan(contextPolicyPlan, {
         include_claude_state_mirror: true,
         include_agents_guidance: existsSync(`${projectPath}/AGENTS.md`),
@@ -85,6 +97,24 @@ export async function saveState(args: any): Promise<string> {
 
     if (continuityPlan && continuityPlan.unsupported_reasons.length > 0) {
       return buildContinuityFailureMessage(project.name, continuityPlan.unsupported_reasons);
+    }
+
+    const conversationRoutingPlan = resolveConversationRoutingPlan(contextPolicyPlan);
+    const trackedConversationReviewPath = contextPolicyPlan.trackedContextDisplayPaths.conversations;
+    const legacyTranscriptStatus = contextPolicyPlan.policy === 'public_distilled' && gitRoot
+      ? await detectLegacyTrackedTranscriptStatus(contextPolicyPlan, {
+        tracked_transcript_dirty: await hasTrackedPublicTranscriptDiffs(
+          gitRoot,
+          trackedConversationReviewPath,
+        ),
+      })
+      : await detectLegacyTrackedTranscriptStatus(contextPolicyPlan);
+
+    if (legacyTranscriptStatus === 'tracked_legacy_dirty') {
+      return `❌ agenticos_save blocked for "${project.name}"\n\n- tracked raw transcript changes are present under ${contextPolicyPlan.trackedContextDisplayPaths.conversations}\n- public_distilled projects must not publish new raw transcript history from tracked paths`;
+    }
+    if (legacyTranscriptStatus === 'misconfigured_public_raw_target') {
+      return `❌ agenticos_save blocked for "${project.name}"\n\n- public transcript routing is misconfigured\n- raw transcript destination must remain sidecar-only for public_distilled projects`;
     }
 
     // Update state.yaml only after the continuity plan is known to be supported.
@@ -158,10 +188,14 @@ export async function saveState(args: any): Promise<string> {
     else if (committed) phases.push('⚠️ Push failed (committed locally, not synced)');
 
     const recoveryNote = continuityPlan
-      ? '\nRecovery: full tracked continuity staged for Git-backed restore'
+      ? continuityPlan.policy === 'private_continuity'
+        ? '\nRecovery: full tracked continuity staged for Git-backed restore'
+        : `\nRecovery: distilled continuity staged for Git-backed restore; raw transcripts remain in ${conversationRoutingPlan.raw_conversations_display_dir}`
       : '';
+    const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
+    const routingSuffix = routingNotes.length > 0 ? `\n${routingNotes.join('\n')}` : '';
 
-    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}${recoveryNote}`;
+    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}${recoveryNote}${routingSuffix}`;
   } catch (error: any) {
     return `⚠️ Partial save completed\n\nError: ${error.message}`;
   }

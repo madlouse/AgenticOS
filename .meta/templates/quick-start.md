@@ -17,7 +17,7 @@
 
 ## Canonical Layers
 - Operational state: `.context/state.yaml`
-- Conversation history surface: `.context/conversations/` (tracked contract path; raw transcript routing may vary by publication policy)
+- Conversation history surface: `.context/conversations/` (tracked/display contract path; raw transcript routing may vary by publication policy)
 - Durable knowledge: `knowledge/`
 - Execution plans: `tasks/`
 - Deliverables: `artifacts/`

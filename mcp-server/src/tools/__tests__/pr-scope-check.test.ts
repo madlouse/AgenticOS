@@ -238,6 +238,41 @@ describe('runPrScopeCheck', () => {
     expect(result.block_reasons.join(' ')).toContain('runtime-managed files are mixed');
   });
 
+  it('returns BLOCK when private raw transcript paths appear in tracked review scope for public_distilled projects', async () => {
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: { id: 'agenticos', name: 'AgenticOS' },
+      source_control: {
+        topology: 'github_versioned',
+        context_publication_policy: 'public_distilled',
+      },
+      agent_context: {
+        current_state: 'standards/.context/state.yaml',
+        conversations: 'standards/.context/conversations/',
+        last_record_marker: 'standards/.context/.last_record',
+      },
+    }));
+
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-245\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'feat(mcp-server): isolate public raw transcripts (#245)\n',
+      'diff --name-only origin/main...HEAD': '.private/conversations/2026-04-13.md\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '245',
+      repo_path: '/repo/worktrees/issue-245',
+      declared_target_files: ['projects/agenticos/mcp-server/src/**'],
+      expected_issue_scope: 'public_distilled_transcript_isolation',
+    })) as { status: string; private_raw_transcript_files: string[]; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.private_raw_transcript_files).toEqual(['.private/conversations/2026-04-13.md']);
+    expect(result.block_reasons.join(' ')).toContain('private raw transcript paths appear in tracked review scope');
+  });
+
   it('returns BLOCK when the branch is not comparable to the intended remote base', async () => {
     execAsyncMock.mockRejectedValue(new Error('bad ref'));
 

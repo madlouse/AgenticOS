@@ -1,9 +1,11 @@
-import { join, relative } from 'path';
+import { basename, join, relative } from 'path';
+import { resolveContextPolicyPlan } from './context-policy-plan.js';
 import { resolveManagedProjectContextPaths } from './project-target.js';
 
 export interface RuntimeReviewSurfacePaths {
   tracked_review_excluded_paths: string[];
   sidecar_only_paths: string[];
+  private_transcript_blocked_paths: string[];
 }
 
 interface ResolveRuntimeReviewSurfaceOptions {
@@ -27,12 +29,53 @@ export function resolveRuntimeReviewSurfacePaths(
   projectYaml: any,
   options: ResolveRuntimeReviewSurfaceOptions = {},
 ): RuntimeReviewSurfacePaths {
-  const contextPaths = resolveManagedProjectContextPaths(projectPath, projectYaml);
+  let contextPolicyPlan;
+  try {
+    contextPolicyPlan = resolveContextPolicyPlan({
+      projectName: projectYaml?.meta?.name || basename(projectPath),
+      projectPath,
+      projectYaml,
+    });
+  } catch {
+    const contextPaths = resolveManagedProjectContextPaths(projectPath, projectYaml);
+    const tracked = new Set<string>([
+      normalizeRepoRelativePath(projectPath, contextPaths.statePath),
+      normalizeRepoRelativePath(projectPath, contextPaths.markerPath),
+      normalizeRepoRelativePath(projectPath, contextPaths.conversationsDir, true),
+    ]);
+
+    if (options.include_claude_state_mirror) {
+      tracked.add('CLAUDE.md');
+    }
+
+    return {
+      tracked_review_excluded_paths: Array.from(tracked),
+      sidecar_only_paths: [
+        '.private/conversations/',
+        '.meta/transcripts/',
+      ],
+      private_transcript_blocked_paths: [
+        '.private/conversations/',
+        '.meta/transcripts/',
+      ],
+    };
+  }
   const tracked = new Set<string>([
-    normalizeRepoRelativePath(projectPath, contextPaths.statePath),
-    normalizeRepoRelativePath(projectPath, contextPaths.markerPath),
-    normalizeRepoRelativePath(projectPath, contextPaths.conversationsDir, true),
+    normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.state),
+    normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.lastRecord),
   ]);
+  const sidecarOnlyPaths = contextPolicyPlan.sidecarOnlyPaths.map((path) =>
+    normalizeRepoRelativePath(projectPath, path, true),
+  );
+  const privateTranscriptBlockedPaths = new Set<string>(sidecarOnlyPaths);
+
+  if (contextPolicyPlan.policy === 'private_continuity' || contextPolicyPlan.policy === 'local_private') {
+    tracked.add(normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.conversations, true));
+  } else {
+    privateTranscriptBlockedPaths.add(
+      normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.conversations, true),
+    );
+  }
 
   if (options.include_claude_state_mirror) {
     tracked.add('CLAUDE.md');
@@ -40,10 +83,8 @@ export function resolveRuntimeReviewSurfacePaths(
 
   return {
     tracked_review_excluded_paths: Array.from(tracked),
-    sidecar_only_paths: [
-      '.private/conversations/',
-      '.meta/transcripts/',
-    ],
+    sidecar_only_paths: sidecarOnlyPaths,
+    private_transcript_blocked_paths: Array.from(privateTranscriptBlockedPaths),
   };
 }
 

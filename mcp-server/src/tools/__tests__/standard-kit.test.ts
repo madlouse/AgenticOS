@@ -75,6 +75,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         'operator_intent_resolution',
         'memory_layer_contracts',
         'context_publication_policy_contract',
+        'public_transcript_isolation_contract',
         'cross_agent_policy_contract',
         'session_start_alignment',
         'implementation_preflight',
@@ -90,7 +91,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
 
   await writeFile(join(kitRoot, 'manifest.yaml'), yaml.stringify(manifest), 'utf-8');
   await writeFile(join(templateRoot, '.project.yaml'), `meta:\n  name: "Project Name"\n  id: "project-id"\n  version: "1.0.0"\n  created: "YYYY-MM-DD"\n  description: "Project description"\nsource_control:\n  topology: "local_directory_only"\n  context_publication_policy: "local_private"\nagent_context:\n  quick_start: ".context/quick-start.md"\n  current_state: ".context/state.yaml"\n  conversations: ".context/conversations/"\n  knowledge: "knowledge/"\n  tasks: "tasks/"\n  artifacts: "artifacts/"\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\n  artifacts_role: "deliverables"\nstatus:\n  phase: "planning"\n  last_updated: "YYYY-MM-DD"\n`, 'utf-8');
-  await writeFile(join(templateRoot, 'quick-start.md'), '# Quick Start\n\n> Contract: concise project-level orientation for fast resume.\n> Do not store full session history, exhaustive decision logs, or issue-by-issue execution details here.\n\n## Project Snapshot\n- **Project**: [Project Name]\n- **Goal**: [Main objective]\n- **Status**: [Current phase]\n- **Last Action**: [What was done last]\n- **Current Focus**: [What to do next]\n- **Resume Here**: [What to do next]\n\n## Key Facts\n- [Important fact 1]\n- [Important fact 2]\n\n## Canonical Layers\n- Operational state: `.context/state.yaml`\n- Session history: `.context/conversations/`\n- Durable knowledge: `knowledge/`\n- Execution plans: `tasks/`\n- Deliverables: `artifacts/`\n', 'utf-8');
+  await writeFile(join(templateRoot, 'quick-start.md'), '# Quick Start\n\n> Contract: concise project-level orientation for fast resume.\n> Do not store full session history, exhaustive decision logs, or issue-by-issue execution details here.\n\n## Project Snapshot\n- **Project**: [Project Name]\n- **Goal**: [Main objective]\n- **Status**: [Current phase]\n- **Last Action**: [What was done last]\n- **Current Focus**: [What to do next]\n- **Resume Here**: [What to do next]\n\n## Key Facts\n- [Important fact 1]\n- [Important fact 2]\n\n## Canonical Layers\n- Operational state: `.context/state.yaml`\n- Conversation history surface: `.context/conversations/` (tracked/display contract path; raw transcript routing may vary by publication policy)\n- Durable knowledge: `knowledge/`\n- Execution plans: `tasks/`\n- Deliverables: `artifacts/`\n', 'utf-8');
   await writeFile(join(templateRoot, 'state.yaml'), '# Contract:\n# - Mutable operational working state only\n# - Keep current task, working memory, and latest guardrail evidence here\n# - Do not append raw conversation transcripts here\n# - Durable synthesis belongs in knowledge/\nsession:\n  id: "session-001"\n  started: "YYYY-MM-DDTHH:MM:SSZ"\n  agent: "claude-sonnet-4.6"\ncurrent_task:\n  id: null\n  title: null\n  status: "pending"\n  next_step: null\nworking_memory:\n  facts: []\n  decisions: []\n  pending: []\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\nloaded_context:\n  - ".project.yaml"\n', 'utf-8');
   await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.2\n', 'utf-8');
   await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n\n## Objective Synthesis\n- User-stated request:\n- Inferred end goal:\n- Operator signals / partial methods:\n- Constraints:\n- Contradictions or weak assumptions to resolve:\n- Non-goals:\n', 'utf-8');
@@ -468,6 +469,60 @@ describe('standard kit commands', () => {
     expect(result.status).toBe('FAIL');
     expect(result.adapter_checks.find((item) => item.agent_id === 'claude-code')).toMatchObject({ status: 'FAIL' });
     expect(result.adapter_checks.find((item) => item.agent_id === 'codex')).toMatchObject({ status: 'PASS' });
+  });
+
+  it('conformance check passes the public transcript isolation contract for public_distilled projects', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeFile(join(projectRoot, '.project.yaml'), yaml.stringify({
+      meta: {
+        name: 'Public Project',
+        id: 'public-project',
+        description: 'Public distilled project',
+      },
+      source_control: {
+        topology: 'github_versioned',
+        context_publication_policy: 'public_distilled',
+        github_repo: 'example/public-project',
+        branch_strategy: 'github_flow',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+      agent_context: {
+        quick_start: '.context/quick-start.md',
+        current_state: '.context/state.yaml',
+        conversations: '.context/conversations/',
+        knowledge: 'knowledge/',
+        tasks: 'tasks/',
+        artifacts: 'artifacts/',
+      },
+      memory_contract: {
+        version: 1,
+      },
+    }), 'utf-8');
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Public Project',
+      project_description: 'Public distilled project',
+    });
+    await writeFile(
+      join(projectRoot, '.context', 'quick-start.md'),
+      '# Quick Start\n\n## Canonical Layers\n- Conversation history contract: tracked surface `.context/conversations/`; raw transcripts route to `.private/conversations/`\n',
+      'utf-8',
+    );
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Public Project',
+    })) as {
+      status: string;
+      behavior_checks: Array<{ behavior: string; status: string }>;
+    };
+
+    expect(result.status).toBe('PASS');
+    expect(result.behavior_checks.find((item) => item.behavior === 'public_transcript_isolation_contract')).toMatchObject({ status: 'PASS' });
   });
 
   it('conformance check skips archived reference projects', async () => {

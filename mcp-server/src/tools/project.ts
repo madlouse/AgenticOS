@@ -9,6 +9,12 @@ import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateMana
 import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../utils/project-target.js';
 import { type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
 import { resolveManagedProjectContextDisplayPaths } from '../utils/agent-context-paths.js';
+import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
+import {
+  buildConversationRoutingStatusLines,
+  detectLegacyTrackedTranscriptStatus,
+  resolveConversationRoutingPlan,
+} from '../utils/conversation-routing.js';
 import { bindSessionProject, getSessionProjectBinding } from '../utils/session-context.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
@@ -272,6 +278,18 @@ export async function switchProject(args: any): Promise<string> {
   try {
     quickStart = await readFile(contextPaths.quickStartPath, 'utf-8');
   } catch {}
+  let transcriptRoutingSummary: string[] = [];
+  try {
+    const contextPolicyPlan = resolveContextPolicyPlan({
+      projectName: found.name,
+      projectPath: found.path,
+      projectYaml,
+    });
+    transcriptRoutingSummary = buildConversationRoutingStatusLines(
+      resolveConversationRoutingPlan(contextPolicyPlan),
+      await detectLegacyTrackedTranscriptStatus(contextPolicyPlan),
+    );
+  } catch {}
 
   // CLAUDE.md: create if missing, upgrade if stale template version
   if (!existsSync(claudeMdPath)) {
@@ -311,7 +329,7 @@ export async function switchProject(args: any): Promise<string> {
     lastRecorded: found.last_recorded,
   });
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n\nContext loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
@@ -375,6 +393,18 @@ export async function getStatus(args: any = {}): Promise<string> {
     const backupDate = new Date(state.session.last_backup).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
     lines.push(`💾 Last saved: ${backupDate}`);
   }
+
+  try {
+    const contextPolicyPlan = resolveContextPolicyPlan({
+      projectName: project.name,
+      projectPath: resolved.projectPath,
+      projectYaml: resolved.projectYaml,
+    });
+    lines.push(...buildConversationRoutingStatusLines(
+      resolveConversationRoutingPlan(contextPolicyPlan),
+      await detectLegacyTrackedTranscriptStatus(contextPolicyPlan),
+    ));
+  } catch {}
 
   lines.push(...buildGuardrailSummaryLines(state.guardrail_evidence as GuardrailEvidenceState | undefined));
   lines.push(...buildIssueBootstrapSummaryLines({
