@@ -6,7 +6,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
-import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
+import { resolveContextPolicyPlan, toRepoRelativePath } from '../utils/context-policy-plan.js';
 import { resolveContinuitySurfacePlan } from '../utils/continuity-surface.js';
 import {
   buildConversationRoutingStatusLines,
@@ -100,7 +100,9 @@ export async function saveState(args: any): Promise<string> {
     }
 
     const conversationRoutingPlan = resolveConversationRoutingPlan(contextPolicyPlan);
-    const trackedConversationReviewPath = contextPolicyPlan.trackedContextDisplayPaths.conversations;
+    const trackedConversationReviewPath = gitRoot
+      ? toRepoRelativePath(gitRoot, contextPolicyPlan.trackedContextPaths.conversations, { directory: true })
+      : contextPolicyPlan.trackedContextDisplayPaths.conversations;
     const legacyTranscriptStatus = contextPolicyPlan.policy === 'public_distilled' && gitRoot
       ? await detectLegacyTrackedTranscriptStatus(contextPolicyPlan, {
         tracked_transcript_dirty: await hasTrackedPublicTranscriptDiffs(

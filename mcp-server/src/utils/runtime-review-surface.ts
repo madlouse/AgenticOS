@@ -10,12 +10,14 @@ export interface RuntimeReviewSurfacePaths {
 
 interface ResolveRuntimeReviewSurfaceOptions {
   include_claude_state_mirror?: boolean;
+  repo_root?: string | null;
+  fail_closed_on_context_policy_error?: boolean;
 }
 
-function normalizeRepoRelativePath(projectPath: string, absolutePath: string, treatAsDirectory = false): string {
-  const relativePath = relative(projectPath, absolutePath).replace(/\\/g, '/');
+function normalizeRelativePathFromBase(basePath: string, absolutePath: string, treatAsDirectory = false): string {
+  const relativePath = relative(basePath, absolutePath).replace(/\\/g, '/');
   if (!relativePath || relativePath.startsWith('..')) {
-    throw new Error(`Runtime review surface path escapes project root: ${absolutePath}`);
+    throw new Error(`Runtime review surface path escapes comparison root: ${absolutePath}`);
   }
   return treatAsDirectory && !relativePath.endsWith('/') ? `${relativePath}/` : relativePath;
 }
@@ -29,19 +31,24 @@ export function resolveRuntimeReviewSurfacePaths(
   projectYaml: any,
   options: ResolveRuntimeReviewSurfaceOptions = {},
 ): RuntimeReviewSurfacePaths {
+  const comparisonRoot = options.repo_root || projectPath;
   let contextPolicyPlan;
   try {
     contextPolicyPlan = resolveContextPolicyPlan({
       projectName: projectYaml?.meta?.name || basename(projectPath),
       projectPath,
       projectYaml,
+      repoRoot: options.repo_root || null,
     });
-  } catch {
+  } catch (error) {
+    if (options.fail_closed_on_context_policy_error) {
+      throw error;
+    }
     const contextPaths = resolveManagedProjectContextPaths(projectPath, projectYaml);
     const tracked = new Set<string>([
-      normalizeRepoRelativePath(projectPath, contextPaths.statePath),
-      normalizeRepoRelativePath(projectPath, contextPaths.markerPath),
-      normalizeRepoRelativePath(projectPath, contextPaths.conversationsDir, true),
+      normalizeRelativePathFromBase(comparisonRoot, contextPaths.statePath),
+      normalizeRelativePathFromBase(comparisonRoot, contextPaths.markerPath),
+      normalizeRelativePathFromBase(comparisonRoot, contextPaths.conversationsDir, true),
     ]);
 
     if (options.include_claude_state_mirror) {
@@ -61,19 +68,19 @@ export function resolveRuntimeReviewSurfacePaths(
     };
   }
   const tracked = new Set<string>([
-    normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.state),
-    normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.lastRecord),
+    normalizeRelativePathFromBase(comparisonRoot, contextPolicyPlan.trackedContextPaths.state),
+    normalizeRelativePathFromBase(comparisonRoot, contextPolicyPlan.trackedContextPaths.lastRecord),
   ]);
   const sidecarOnlyPaths = contextPolicyPlan.sidecarOnlyPaths.map((path) =>
-    normalizeRepoRelativePath(projectPath, path, true),
+    normalizeRelativePathFromBase(comparisonRoot, path, true),
   );
   const privateTranscriptBlockedPaths = new Set<string>(sidecarOnlyPaths);
 
   if (contextPolicyPlan.policy === 'private_continuity' || contextPolicyPlan.policy === 'local_private') {
-    tracked.add(normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.conversations, true));
+    tracked.add(normalizeRelativePathFromBase(comparisonRoot, contextPolicyPlan.trackedContextPaths.conversations, true));
   } else {
     privateTranscriptBlockedPaths.add(
-      normalizeRepoRelativePath(projectPath, contextPolicyPlan.trackedContextPaths.conversations, true),
+      normalizeRelativePathFromBase(comparisonRoot, contextPolicyPlan.trackedContextPaths.conversations, true),
     );
   }
 

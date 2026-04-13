@@ -174,9 +174,10 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
 
   let gitCommonRepoRoot: string | null = null;
   let gitRemoteOrigin: string | null = null;
+  let gitWorktreeRoot: string | null = null;
 
   try {
-    const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
+    gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
     const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
     gitCommonRepoRoot = dirname(gitCommonDir);
     gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
@@ -237,11 +238,52 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     await runGit(repo_path, `diff --name-only ${remote_base_branch}...HEAD`).catch(() => ''),
   );
   const projectYaml = await loadProjectYaml(projectResolution.targetProject!.projectYamlPath);
-  const runtimeSurfacePaths = resolveRuntimeReviewSurfacePaths(
-    projectResolution.targetProject!.path,
-    projectYaml,
-    { include_claude_state_mirror: true },
-  );
+  let runtimeSurfacePaths;
+  try {
+    runtimeSurfacePaths = resolveRuntimeReviewSurfacePaths(
+      projectResolution.targetProject!.path,
+      projectYaml,
+      {
+        include_claude_state_mirror: true,
+        repo_root: gitWorktreeRoot,
+        fail_closed_on_context_policy_error: true,
+      },
+    );
+  } catch (error: any) {
+    result.block_reasons.push(error?.message || 'failed to resolve runtime review surface paths');
+    result.summary = result.block_reasons.join('; ');
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_pr_scope_check',
+      repo_path,
+      project_path: projectResolution.targetProject?.path || project_path,
+      payload: {
+        issue_id,
+        target_project_id: projectResolution.targetProject?.id || null,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
+        remote_base_branch,
+        declared_target_files,
+        expected_issue_scope,
+        result: {
+          status: result.status,
+          summary: result.summary,
+          commit_count: result.commit_count,
+          changed_files: result.changed_files,
+          runtime_managed_files: result.runtime_managed_files,
+          private_raw_transcript_files: result.private_raw_transcript_files,
+          unexpected_files: result.unexpected_files,
+          unrelated_commit_subjects: result.unrelated_commit_subjects,
+          branch_ancestry_verified: result.branch_ancestry_verified,
+          remote_base_branch: result.remote_base_branch,
+          branch_fork_point: result.branch_fork_point,
+          expected_issue_scope: result.expected_issue_scope,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
+    return JSON.stringify(result, null, 2);
+  }
   const runtimeTrackedPaths = runtimeSurfacePaths.tracked_review_excluded_paths;
   const privateTranscriptPaths = runtimeSurfacePaths.private_transcript_blocked_paths;
 

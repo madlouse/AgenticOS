@@ -51,9 +51,7 @@ async function directoryContainsTranscriptFiles(path: string): Promise<boolean> 
 
 export function resolveConversationRoutingPlan(plan: ContextPolicyPlan): ConversationRoutingPlan {
   const rawDisplayDir = toProjectRelativePath(plan.projectRoot, plan.rawConversationsDir, true);
-  const trackedDisplayDir = plan.trackedConversationsDir
-    ? toProjectRelativePath(plan.projectRoot, plan.trackedConversationsDir, true)
-    : null;
+  const trackedDisplayDir = plan.trackedContextDisplayPaths.conversations;
   const trackedRecoveryContract: TrackedRecoveryContract = plan.policy === 'private_continuity'
     ? 'git_full'
     : plan.policy === 'public_distilled'
@@ -90,7 +88,6 @@ export async function detectLegacyTrackedTranscriptStatus(
 
   const rawRelative = relative(plan.projectRoot, plan.rawConversationsDir).replace(/\\/g, '/');
   if (!rawRelative || rawRelative.startsWith('..')
-    || plan.trackedConversationsDir !== null
     || plan.rawConversationsDir === plan.trackedContextPaths.conversations) {
     return 'misconfigured_public_raw_target';
   }
