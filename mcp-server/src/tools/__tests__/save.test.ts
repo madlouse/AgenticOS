@@ -631,6 +631,14 @@ describe('saveState', () => {
           cb(null, '/test/path\n', '');
           return;
         }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
         if (cmd.includes(' commit ')) {
           cb(new Error('nothing to commit'), '', 'nothing to commit');
           return;
@@ -643,14 +651,14 @@ describe('saveState', () => {
 
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(addCommand).toBeDefined();
-    expect(addCommand).toContain('/test/path/.project.yaml');
-    expect(addCommand).toContain('/test/path/.context/quick-start.md');
-    expect(addCommand).toContain('/test/path/.context/state.yaml');
-    expect(addCommand).toContain('/test/path/.context/conversations');
-    expect(addCommand).toContain('/test/path/knowledge');
-    expect(addCommand).toContain('/test/path/tasks');
-    expect(addCommand).toContain('/test/path/CLAUDE.md');
-    expect(addCommand).not.toContain('/test/path/.context/.last_record');
+    expect(addCommand).toContain('".project.yaml"');
+    expect(addCommand).toContain('".context/quick-start.md"');
+    expect(addCommand).toContain('".context/state.yaml"');
+    expect(addCommand).toContain('".context/conversations/"');
+    expect(addCommand).toContain('"knowledge/"');
+    expect(addCommand).toContain('"tasks/"');
+    expect(addCommand).toContain('"CLAUDE.md"');
+    expect(addCommand).not.toContain('.context/.last_record');
     expect(result).toContain('Recovery: tracked continuity contract evaluated; no new continuity changes were committed');
   });
 
@@ -740,6 +748,10 @@ describe('saveState', () => {
           cb(null, '/test/repo\n', '');
           return;
         }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
         cb(null, '', '');
       }
     );
@@ -779,6 +791,14 @@ describe('saveState', () => {
           cb(null, '/test/path\n', '');
           return;
         }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
         if (cmd.includes(' commit ')) {
           cb(null, '', '');
           return;
@@ -796,5 +816,276 @@ describe('saveState', () => {
     expect(result).toContain('Push failed');
     expect(result).toContain('tracked continuity committed locally; remote sync is still pending');
     expect(result).not.toContain('Git-backed restore');
+  });
+
+  it('fails closed when the discovered git repo root is not a declared source repo root', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/runtime/project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/runtime/project',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/test/runtime/project/.project.yaml') {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'private_continuity',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['.'],
+          },
+        });
+      }
+      if (path === '/test/runtime/project/.context/state.yaml') {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/runtime/project\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '../.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'wrong repo root' });
+
+    expect(result).toContain('could not persist tracked continuity');
+    expect(result).toContain('git common repo root');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when git remote origin does not match the declared github repo', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/other-project.git\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'wrong remote' });
+
+    expect(result).toContain('could not persist tracked continuity');
+    expect(result).toContain('does not match declared source_control.github_repo');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
+  });
+
+  it('allows private_continuity saves from a nested worktree when the declared source repo root matches the git common repo root', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/worktrees/issue-244',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/worktrees/issue-244',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/repo/worktrees/issue-244/.project.yaml') {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'private_continuity',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['../..'],
+          },
+        });
+      }
+      if (path === '/repo/worktrees/issue-244/.context/state.yaml') {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/repo/worktrees/issue-244\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '/repo/.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'nested worktree continuity save' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('git -C "/repo/worktrees/issue-244" add -A --');
+    expect(addCommand).toContain('".project.yaml"');
+    expect(addCommand).toContain('".context/state.yaml"');
+    expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
+  });
+
+  it('stages worktree-relative continuity paths when the project lives under a repo subdirectory', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/app',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/projects/app',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/repo/projects/app/.project.yaml') {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'private_continuity',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['../..'],
+          },
+        });
+      }
+      if (path === '/repo/projects/app/.context/state.yaml') {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/repo\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'nested project continuity save' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('git -C "/repo" add -A --');
+    expect(addCommand).toContain('"projects/app/.project.yaml"');
+    expect(addCommand).toContain('"projects/app/.context/state.yaml"');
+    expect(addCommand).toContain('"projects/app/tasks/"');
+    expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
   });
 });
