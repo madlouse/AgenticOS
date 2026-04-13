@@ -13,6 +13,7 @@ export function buildHelpLines(version: string): string[] {
     '',
     'Recommended setup:',
     '  agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run',
+    '  agenticos-config --validate',
     '  agenticos-bootstrap --help',
     '',
     'Manual registration examples:',

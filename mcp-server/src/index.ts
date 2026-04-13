@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -100,6 +100,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
           message: { type: 'string', description: 'Optional commit message' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_config',
+      description: 'Audit AgenticOS workspace configuration sources and validate drift across runtime, MCP, and Homebrew-related surfaces.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['show', 'validate'], description: 'Show detected configuration sources or validate that they agree.' },
+          scope: { type: 'string', enum: ['all', 'runtime', 'mcp', 'homebrew'], description: 'Limit the audit to runtime env, MCP config surfaces, or Homebrew hints.' },
         },
       },
     },
@@ -367,6 +378,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await saveState(args) }] };
     case 'agenticos_status':
       return { content: [{ type: 'text', text: await getStatus(args ?? {}) }] };
+    case 'agenticos_config':
+      return { content: [{ type: 'text', text: await runConfig(args ?? {}) }] };
     case 'agenticos_preflight':
       return { content: [{ type: 'text', text: await runPreflight(args ?? {}) }] };
     case 'agenticos_issue_bootstrap':
