@@ -17,6 +17,7 @@ export interface GuardrailProjectTarget {
   path: string;
   statePath: string;
   projectYamlPath: string;
+  githubRepo: string | null;
   sourceRepoRoots: string[];
   sourceRepoRootsDeclared: boolean;
 }
@@ -98,6 +99,9 @@ async function buildTargetFromProjectPath(
     path: normalizedProjectPath,
     statePath: resolveProjectStatePath(normalizedProjectPath, projectYaml),
     projectYamlPath,
+    githubRepo: typeof projectYaml?.source_control?.github_repo === 'string' && projectYaml.source_control.github_repo.trim().length > 0
+      ? projectYaml.source_control.github_repo.trim()
+      : null,
     sourceRepoRoots: sourceRepoRoots.roots,
     sourceRepoRootsDeclared: sourceRepoRoots.declared,
   };

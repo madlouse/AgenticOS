@@ -166,10 +166,12 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
       const repoIdentity = validateGuardrailRepoIdentity({
         projectId: projectResolution.targetProject.id,
         projectYamlPath: projectResolution.targetProject.projectYamlPath,
+        declaredGithubRepo: projectResolution.targetProject.githubRepo,
         declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
         sourceRepoRootsDeclared: projectResolution.targetProject.sourceRepoRootsDeclared,
         gitWorktreeRoot,
         gitCommonRepoRoot,
+        gitRemoteOrigin,
       });
       if (!repoIdentity.ok && repoIdentity.message) {
         result.block_reasons.push(repoIdentity.message);

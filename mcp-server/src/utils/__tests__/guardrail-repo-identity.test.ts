@@ -6,10 +6,12 @@ describe('validateGuardrailRepoIdentity', () => {
     const result = validateGuardrailRepoIdentity({
       projectId: 'agenticos',
       projectYamlPath: '/workspace/worktrees/issue/.project.yaml',
+      declaredGithubRepo: 'madlouse/AgenticOS',
       declaredSourceRepoRoots: ['/workspace/worktrees/issue'],
       sourceRepoRootsDeclared: true,
       gitWorktreeRoot: '/workspace/worktrees/issue',
       gitCommonRepoRoot: '/workspace/projects/agenticos',
+      gitRemoteOrigin: 'git@github.com:madlouse/AgenticOS.git',
     });
 
     expect(result.ok).toBe(true);
@@ -29,6 +31,39 @@ describe('validateGuardrailRepoIdentity', () => {
     expect(result.ok).toBe(true);
     expect(result.matchedBy).toBe('git_worktree_root');
     expect(result.matchedDeclaredRoot).toBe('/workspace/source');
+  });
+
+  it('passes when only the git common repo root is declared and the remote matches', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'agenticos',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredGithubRepo: 'madlouse/AgenticOS',
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source/worktrees/issue-268',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'https://github.com/madlouse/AgenticOS.git',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.matchedBy).toBe('git_common_repo_root');
+    expect(result.matchedDeclaredRoot).toBe('/workspace/source');
+  });
+
+  it('fails when the worktree root matches but the remote points at a different github repo', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'agenticos',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredGithubRepo: 'madlouse/AgenticOS',
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source/worktrees/issue-268',
+      gitCommonRepoRoot: '/external/shared-git-root',
+      gitRemoteOrigin: 'git@github.com:wrong/repo.git',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('does not match declared source_control.github_repo');
   });
 
   it('fails when neither the worktree root nor the common repo root is declared', () => {

@@ -188,14 +188,17 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
       const gitCommonRepoRoot = dirname(gitCommonDir);
       result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
       result.evidence.workspace_type = await detectWorkspaceType(repo_path);
+      const gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
 
       const repoIdentity = validateGuardrailRepoIdentity({
         projectId: projectResolution.targetProject!.id,
         projectYamlPath: projectResolution.targetProject!.projectYamlPath,
+        declaredGithubRepo: projectResolution.targetProject!.githubRepo,
         declaredSourceRepoRoots: projectResolution.targetProject!.sourceRepoRoots,
         sourceRepoRootsDeclared: projectResolution.targetProject!.sourceRepoRootsDeclared,
         gitWorktreeRoot,
         gitCommonRepoRoot,
+        gitRemoteOrigin,
       });
       if (!repoIdentity.ok && repoIdentity.message) {
         result.block_reasons.push(repoIdentity.message);

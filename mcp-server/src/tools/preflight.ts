@@ -221,10 +221,12 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
       const repoIdentity = validateGuardrailRepoIdentity({
         projectId: projectResolution.targetProject.id,
         projectYamlPath: projectResolution.targetProject.projectYamlPath,
+        declaredGithubRepo: projectResolution.targetProject.githubRepo,
         declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
         sourceRepoRootsDeclared: projectResolution.targetProject.sourceRepoRootsDeclared,
         gitWorktreeRoot,
         gitCommonRepoRoot,
+        gitRemoteOrigin: result.evidence.git_remote_origin,
       });
       if (!repoIdentity.ok && repoIdentity.message) {
         result.block_reasons.push(repoIdentity.message);
