@@ -9,6 +9,7 @@ import {
   resolveGuardrailProjectTarget,
   type GuardrailTaskType,
 } from '../utils/repo-boundary.js';
+import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 
 const execAsync = promisify(exec);
 
@@ -217,16 +218,20 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     result.evidence.workspace_type = await detectWorkspaceType(repo_path);
 
     if (projectResolution.targetProject) {
-      if (!projectResolution.targetProject.sourceRepoRootsDeclared || projectResolution.targetProject.sourceRepoRoots.length === 0) {
-        result.block_reasons.push(
-          `target project "${projectResolution.targetProject.id}" is missing execution.source_repo_roots in ${projectResolution.targetProject.projectYamlPath}`,
-        );
+      const repoIdentity = validateGuardrailRepoIdentity({
+        projectId: projectResolution.targetProject.id,
+        projectYamlPath: projectResolution.targetProject.projectYamlPath,
+        declaredGithubRepo: projectResolution.targetProject.githubRepo,
+        declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
+        sourceRepoRootsDeclared: projectResolution.targetProject.sourceRepoRootsDeclared,
+        gitWorktreeRoot,
+        gitCommonRepoRoot,
+        gitRemoteOrigin: result.evidence.git_remote_origin,
+      });
+      if (!repoIdentity.ok && repoIdentity.message) {
+        result.block_reasons.push(repoIdentity.message);
         result.redirect_actions.push(
           `declare execution.source_repo_roots in ${projectResolution.targetProject.projectYamlPath} before ${task_type} work`,
-        );
-      } else if (!projectResolution.targetProject.sourceRepoRoots.includes(gitCommonRepoRoot)) {
-        result.block_reasons.push(
-          `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject.id}"`,
         );
         result.redirect_actions.push(
           `rerun in a declared source repo root: ${projectResolution.targetProject.sourceRepoRoots.join(', ')}`,

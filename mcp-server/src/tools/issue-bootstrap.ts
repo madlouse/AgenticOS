@@ -7,6 +7,7 @@ import yaml from 'yaml';
 import { persistIssueBootstrapEvidence, type GuardrailPersistenceResult, type IssueBootstrapAdditionalContextEntry } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
+import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 
 const execAsync = promisify(exec);
 
@@ -187,17 +188,20 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
       const gitCommonRepoRoot = dirname(gitCommonDir);
       result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
       result.evidence.workspace_type = await detectWorkspaceType(repo_path);
+      const gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
 
-      const declaredSourceRepoRoots = projectResolution.targetProject?.sourceRepoRoots || [];
-      const sourceRootsDeclared = projectResolution.targetProject?.sourceRepoRootsDeclared || false;
-      if (!sourceRootsDeclared || declaredSourceRepoRoots.length === 0) {
-        result.block_reasons.push(
-          `target project "${projectResolution.targetProject?.id}" is missing execution.source_repo_roots in ${projectResolution.targetProject?.projectYamlPath}`,
-        );
-      } else if (!declaredSourceRepoRoots.includes(gitCommonRepoRoot)) {
-        result.block_reasons.push(
-          `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject?.id}"`,
-        );
+      const repoIdentity = validateGuardrailRepoIdentity({
+        projectId: projectResolution.targetProject!.id,
+        projectYamlPath: projectResolution.targetProject!.projectYamlPath,
+        declaredGithubRepo: projectResolution.targetProject!.githubRepo,
+        declaredSourceRepoRoots: projectResolution.targetProject!.sourceRepoRoots,
+        sourceRepoRootsDeclared: projectResolution.targetProject!.sourceRepoRootsDeclared,
+        gitWorktreeRoot,
+        gitCommonRepoRoot,
+        gitRemoteOrigin,
+      });
+      if (!repoIdentity.ok && repoIdentity.message) {
+        result.block_reasons.push(repoIdentity.message);
       }
 
       const projectYaml = yaml.parse(await readFile(result.target_project.project_yaml_path, 'utf-8')) || {};

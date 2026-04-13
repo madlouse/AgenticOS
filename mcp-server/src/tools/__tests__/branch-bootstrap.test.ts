@@ -179,10 +179,57 @@ describe('runBranchBootstrap', () => {
     expect(result.block_reasons[0]).toContain('failed to resolve remote base');
   });
 
-  it('returns BLOCK when the git common repo root is not declared for the target project', async () => {
+  it('returns CREATED when the worktree root is declared even if the common repo root differs', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-160',
+        statePath: '/repo/worktrees/issue-160/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-160/.project.yaml',
+        sourceRepoRoots: ['/repo/worktrees/issue-160'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
     execAsyncMock.mockImplementation(async (cmd: string) => {
       if (cmd.includes('rev-parse --show-toplevel')) {
         return { stdout: '/repo/worktrees/issue-160\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/external/.git\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse origin/main')) {
+        return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('show-ref --verify --quiet refs/heads/fix/160-boundary')) {
+        throw new Error('branch missing');
+      }
+      if (cmd.includes('worktree add "/tmp/worktrees/external-160-boundary" -b fix/160-boundary base123')) {
+        return { stdout: 'Preparing worktree\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '160',
+      branch_type: 'fix',
+      slug: 'boundary',
+      repo_path: '/repo/worktrees/issue-160',
+      worktree_root: '/tmp/worktrees',
+    })) as { status: string; block_reasons: string[]; worktree_path: string };
+
+    expect(result.status).toBe('CREATED');
+    expect(result.worktree_path).toBe('/tmp/worktrees/external-160-boundary');
+    expect(result.block_reasons).toEqual([]);
+  });
+
+  it('returns BLOCK when neither the worktree root nor the common repo root is declared for the target project', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/wrong/worktrees/issue-160\n', stderr: '' };
       }
       if (cmd.includes('rev-parse --git-common-dir')) {
         return { stdout: '/external/.git\n', stderr: '' };
@@ -200,11 +247,11 @@ describe('runBranchBootstrap', () => {
       issue_id: '160',
       branch_type: 'fix',
       slug: 'boundary',
-      repo_path: '/repo/worktrees/issue-160',
+      repo_path: '/wrong/worktrees/issue-160',
       worktree_root: '/tmp/worktrees',
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
+    expect(result.block_reasons.join(' ')).toContain('neither git worktree root');
   });
 });

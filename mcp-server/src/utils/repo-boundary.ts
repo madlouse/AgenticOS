@@ -1,6 +1,7 @@
 import { access, readFile } from 'fs/promises';
 import { basename, isAbsolute, join, resolve, sep } from 'path';
 import yaml from 'yaml';
+import { validateManagedProjectTopology } from './project-contract.js';
 import { loadRegistry } from './registry.js';
 import { getSessionProjectBinding } from './session-context.js';
 
@@ -17,6 +18,7 @@ export interface GuardrailProjectTarget {
   path: string;
   statePath: string;
   projectYamlPath: string;
+  githubRepo: string | null;
   sourceRepoRoots: string[];
   sourceRepoRootsDeclared: boolean;
 }
@@ -78,11 +80,15 @@ function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: any): 
   };
 }
 
-async function buildTargetFromProjectPath(
+interface ProjectBoundaryMetadata extends GuardrailProjectTarget {
+  topologyValidationError: string | null;
+}
+
+async function loadProjectBoundaryMetadata(
   projectPath: string,
   fallbackId?: string,
   fallbackName?: string,
-): Promise<GuardrailProjectTarget | null> {
+): Promise<ProjectBoundaryMetadata | null> {
   const normalizedProjectPath = normalizePath(projectPath);
   const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
   if (!(await pathExists(projectYamlPath))) {
@@ -91,16 +97,40 @@ async function buildTargetFromProjectPath(
 
   const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
   const sourceRepoRoots = resolveDeclaredSourceRepoRoots(normalizedProjectPath, projectYaml);
+  const name = String(projectYaml?.meta?.name || fallbackName || fallbackId || basename(normalizedProjectPath));
+  const topologyValidation = validateManagedProjectTopology(name, projectYaml);
 
   return {
     id: String(projectYaml?.meta?.id || fallbackId || basename(normalizedProjectPath)),
-    name: String(projectYaml?.meta?.name || fallbackName || fallbackId || basename(normalizedProjectPath)),
+    name,
     path: normalizedProjectPath,
     statePath: resolveProjectStatePath(normalizedProjectPath, projectYaml),
     projectYamlPath,
+    githubRepo: typeof projectYaml?.source_control?.github_repo === 'string' && projectYaml.source_control.github_repo.trim().length > 0
+      ? projectYaml.source_control.github_repo.trim()
+      : null,
     sourceRepoRoots: sourceRepoRoots.roots,
     sourceRepoRootsDeclared: sourceRepoRoots.declared,
+    topologyValidationError: topologyValidation.ok ? null : topologyValidation.message,
   };
+}
+
+async function buildTargetFromProjectPath(
+  projectPath: string,
+  fallbackId?: string,
+  fallbackName?: string,
+): Promise<GuardrailProjectTarget | null> {
+  const metadata = await loadProjectBoundaryMetadata(projectPath, fallbackId, fallbackName);
+  if (!metadata) {
+    return null;
+  }
+
+  if (metadata.topologyValidationError) {
+    throw new Error(metadata.topologyValidationError);
+  }
+
+  const { topologyValidationError: _topologyValidationError, ...target } = metadata;
+  return target;
 }
 
 function uniqueRegistryProjectMatch<T>(matches: T[], notFound: string, ambiguous: string): T {
@@ -158,24 +188,27 @@ export async function resolveGuardrailProjectTarget(args: {
     try {
       const normalizedRepoPath = normalizePath(repoPath);
       const candidates: Array<{
-        targetProject: GuardrailProjectTarget;
+        targetProject: GuardrailProjectTarget | null;
         matchLength: number;
+        resolutionError: string | null;
       }> = [];
 
       for (const project of registry.projects) {
-        const targetProject = await resolveRegistryProjectTarget(project);
-        if (!targetProject) continue;
+        const projectMetadata = await loadProjectBoundaryMetadata(project.path, project.id, project.name);
+        if (!projectMetadata) continue;
 
         const matchedRoots = [
-          targetProject.path,
-          ...targetProject.sourceRepoRoots,
+          projectMetadata.path,
+          ...projectMetadata.sourceRepoRoots,
         ].filter((candidatePath) => isWithinProject(normalizedRepoPath, candidatePath));
 
         if (matchedRoots.length === 0) continue;
+        const { topologyValidationError, ...targetProject } = projectMetadata;
 
         candidates.push({
-          targetProject,
+          targetProject: topologyValidationError ? null : targetProject,
           matchLength: Math.max(...matchedRoots.map((candidatePath) => normalizePath(candidatePath).length)),
+          resolutionError: topologyValidationError,
         });
       }
 
@@ -190,6 +223,15 @@ export async function resolveGuardrailProjectTarget(args: {
             resolutionSource: null,
             targetProject: null,
             resolutionErrors: [`repo_path "${repoPath}" matches multiple managed projects; pass project_path explicitly`],
+          };
+        }
+
+        if (strongestMatches[0].resolutionError) {
+          return {
+            activeProjectId,
+            resolutionSource: null,
+            targetProject: null,
+            resolutionErrors: [strongestMatches[0].resolutionError],
           };
         }
 

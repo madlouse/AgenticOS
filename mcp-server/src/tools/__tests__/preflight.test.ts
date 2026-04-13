@@ -370,7 +370,93 @@ describe('runPreflight', () => {
     expect(result.block_reasons.join(' ')).toContain('clean_reproducibility_gate');
   });
 
-  it('returns BLOCK when the git common repo root is not declared for the active project', async () => {
+  it('returns PASS when the worktree root is declared and the remote matches the declared github repo', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-160',
+        statePath: '/repo/worktrees/issue-160/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-160/.project.yaml',
+        githubRepo: 'madlouse/AgenticOS',
+        sourceRepoRoots: ['/repo/worktrees/issue-160'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      issue_bootstrap: {
+        latest: {
+          issue_id: '160',
+          repo_path: '/repo/worktrees/issue-160',
+          current_branch: 'fix/160-source-repo-boundary-enforcement',
+          startup_context_paths: ['/repo/worktrees/issue-160/.project.yaml'],
+          stages: {
+            context_reset_performed: true,
+            project_hot_load_performed: true,
+            issue_payload_attached: true,
+          },
+        },
+      },
+    }));
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo/worktrees/issue-160\n',
+      'rev-parse --git-common-dir': '/external/.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
+      'rev-parse --abbrev-ref HEAD': 'fix/160-source-repo-boundary-enforcement\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo/worktrees/issue-160\nHEAD abc123\nbranch refs/heads/fix/160-source-repo-boundary-enforcement\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '160',
+      task_type: 'bugfix',
+      repo_path: '/repo/worktrees/issue-160',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    })) as { status: string; block_reasons: string[]; repo_identity_confirmed: boolean };
+
+    expect(result.status).toBe('PASS');
+    expect(result.repo_identity_confirmed).toBe(true);
+    expect(result.block_reasons).toEqual([]);
+  });
+
+  it('returns BLOCK when the worktree root is declared but the remote points at a different github repo', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-160',
+        statePath: '/repo/worktrees/issue-160/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-160/.project.yaml',
+        githubRepo: 'madlouse/AgenticOS',
+        sourceRepoRoots: ['/repo/worktrees/issue-160'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      issue_bootstrap: {
+        latest: {
+          issue_id: '160',
+          repo_path: '/repo/worktrees/issue-160',
+          current_branch: 'fix/160-source-repo-boundary-enforcement',
+          startup_context_paths: ['/repo/worktrees/issue-160/.project.yaml'],
+          stages: {
+            context_reset_performed: true,
+            project_hot_load_performed: true,
+            issue_payload_attached: true,
+          },
+        },
+      },
+    }));
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo/worktrees/issue-160\n',
       'rev-parse --git-common-dir': '/external/.git\n',
@@ -389,9 +475,35 @@ describe('runPreflight', () => {
       repo_path: '/repo/worktrees/issue-160',
       declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
       worktree_required: true,
+    })) as { status: string; block_reasons: string[]; repo_identity_confirmed: boolean };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.repo_identity_confirmed).toBe(false);
+    expect(result.block_reasons.join(' ')).toContain('does not match declared source_control.github_repo');
+  });
+
+  it('returns BLOCK when neither the worktree root nor the common repo root is declared for the active project', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/wrong/worktrees/issue-160\n',
+      'rev-parse --git-common-dir': '/external/.git\n',
+      'config --get remote.origin.url': 'git@github.com:wrong/repo.git\n',
+      'rev-parse --abbrev-ref HEAD': 'fix/160-source-repo-boundary-enforcement\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /wrong/worktrees/issue-160\nHEAD abc123\nbranch refs/heads/fix/160-source-repo-boundary-enforcement\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '160',
+      task_type: 'bugfix',
+      repo_path: '/wrong/worktrees/issue-160',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('not declared for target project');
+    expect(result.block_reasons.join(' ')).toContain('neither git worktree root');
   });
 });

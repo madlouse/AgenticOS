@@ -6,6 +6,7 @@ import yaml from 'yaml';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { matchesRuntimeReviewExcludedPath, resolveRuntimeReviewSurfacePaths } from '../utils/runtime-review-surface.js';
+import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 
 const execAsync = promisify(exec);
 
@@ -178,14 +179,18 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     gitCommonRepoRoot = dirname(gitCommonDir);
     gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
 
-    if (!projectResolution.targetProject?.sourceRepoRootsDeclared || projectResolution.targetProject.sourceRepoRoots.length === 0) {
-      result.block_reasons.push(
-        `target project "${projectResolution.targetProject?.id || 'unknown'}" is missing execution.source_repo_roots in ${projectResolution.targetProject?.projectYamlPath || 'unknown project metadata'}`,
-      );
-    } else if (!projectResolution.targetProject.sourceRepoRoots.includes(gitCommonRepoRoot)) {
-      result.block_reasons.push(
-        `git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectResolution.targetProject.id}"`,
-      );
+    const repoIdentity = validateGuardrailRepoIdentity({
+      projectId: projectResolution.targetProject!.id,
+      projectYamlPath: projectResolution.targetProject!.projectYamlPath,
+      declaredGithubRepo: projectResolution.targetProject!.githubRepo,
+      declaredSourceRepoRoots: projectResolution.targetProject!.sourceRepoRoots,
+      sourceRepoRootsDeclared: projectResolution.targetProject!.sourceRepoRootsDeclared,
+      gitWorktreeRoot,
+      gitCommonRepoRoot,
+      gitRemoteOrigin,
+    });
+    if (!repoIdentity.ok && repoIdentity.message) {
+      result.block_reasons.push(repoIdentity.message);
     }
 
     await runGit(repo_path, `rev-parse ${remote_base_branch}`);
