@@ -7,6 +7,17 @@ This directory is the canonical product-source project for AgenticOS. If you
 are changing AgenticOS itself, start here instead of treating the enclosing
 workspace root as the authoritative product repository.
 
+## Source Checkout vs Runtime Home
+
+AgenticOS now distinguishes two different paths:
+
+- `projects/agenticos/` is the canonical product-source checkout for developing AgenticOS itself
+- `AGENTICOS_HOME` is the runtime home used by installed binaries and managed projects
+
+Do not treat the runtime home as the product-source root.
+In the standard layout, the runtime home contains a `projects/` directory, and
+the AgenticOS source project lives at `"$AGENTICOS_HOME/projects/agenticos"`.
+
 ## Scope
 
 `projects/agenticos/` owns:
@@ -83,6 +94,17 @@ working.
 `AGENTICOS_HOME` may be any valid workspace home, including a long-term
 self-hosting AgenticOS workspace, as long as it is not the repo root of a
 project such as `projects/agenticos`.
+
+If you installed via Homebrew on Apple Silicon macOS, the default runtime-home
+example is:
+
+```bash
+export AGENTICOS_HOME=/opt/homebrew/var/agenticos
+```
+
+That path is a runtime home example, not the canonical product-source checkout.
+If you are developing AgenticOS itself, work in `projects/agenticos/` under the
+selected runtime home.
 
 Requires: Node.js >= 20.0.0 for local build and packaged runtime workflows.
 
