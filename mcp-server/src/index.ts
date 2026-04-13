@@ -8,24 +8,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')).version;
 
-// Handle --version and --help before starting the MCP server
-if (process.argv.includes('--version') || process.argv.includes('-v')) {
-  console.log(VERSION);
-  process.exit(0);
-}
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log(`agenticos-mcp — AgenticOS MCP Server v${VERSION}`);
-  console.log('');
-  console.log('Usage: agenticos-mcp [--version] [--help]');
-  console.log('');
-  console.log('Runs as a stdio MCP server. Configure in your AI tool\'s mcp.json:');
-  console.log('  { "command": "agenticos-mcp", "args": [] }');
-  console.log('');
-  console.log('Environment:');
-  console.log('  AGENTICOS_HOME  Workspace root (required)');
-  process.exit(0);
-}
-
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -36,6 +18,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
+import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
 const server = new Server(
   {
@@ -444,9 +427,31 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   throw new Error(`Unknown resource: ${uri}`);
 });
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+export async function main(
+  argv: string[] = process.argv,
+  writeLine: (line: string) => void = console.log,
+  connect: () => Promise<void> = async () => {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  },
+): Promise<number> {
+  const prelude = resolveCliPrelude(argv, VERSION);
+  if (prelude) {
+    for (const line of prelude.lines) {
+      writeLine(line);
+    }
+    return prelude.exitCode;
+  }
+
+  await connect();
+  return 0;
 }
 
-main().catch(console.error);
+if (isDirectExecution(process.argv, import.meta.url)) {
+  main().then((exitCode) => {
+    process.exit(exitCode);
+  }).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
