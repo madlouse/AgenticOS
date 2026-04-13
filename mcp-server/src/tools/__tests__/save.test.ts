@@ -651,7 +651,7 @@ describe('saveState', () => {
     expect(addCommand).toContain('/test/path/tasks');
     expect(addCommand).toContain('/test/path/CLAUDE.md');
     expect(addCommand).not.toContain('/test/path/.context/.last_record');
-    expect(result).toContain('Recovery: full tracked continuity staged for Git-backed restore');
+    expect(result).toContain('Recovery: tracked continuity contract evaluated; no new continuity changes were committed');
   });
 
   it('fails closed before state mutation when private_continuity cannot prove a git repo', async () => {
@@ -687,5 +687,114 @@ describe('saveState', () => {
     expect(result).toContain('git repo root');
     expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
     expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when private_continuity paths escape the project root even if they remain inside the repo', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/repo/projects/app',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/repo/projects/app',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/test/repo/projects/app/.project.yaml') {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'private_continuity',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['../..'],
+          },
+          agent_context: {
+            tasks: '../../shared-tasks/',
+          },
+        });
+      }
+      if (path === '/test/repo/projects/app/.context/state.yaml') {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/repo\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'should fail on project escape' });
+
+    expect(result).toContain('could not persist tracked continuity');
+    expect(result).toContain('tasks path escapes project root');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+    expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
+  });
+
+  it('does not claim git-backed restore sync when push fails for private_continuity', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' push')) {
+          cb(new Error('push failed'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'pending remote sync' });
+
+    expect(result).toContain('Push failed');
+    expect(result).toContain('tracked continuity committed locally; remote sync is still pending');
+    expect(result).not.toContain('Git-backed restore');
   });
 });

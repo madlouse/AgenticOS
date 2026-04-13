@@ -158,7 +158,11 @@ export async function saveState(args: any): Promise<string> {
     else if (committed) phases.push('⚠️ Push failed (committed locally, not synced)');
 
     const recoveryNote = continuityPlan
-      ? '\nRecovery: full tracked continuity staged for Git-backed restore'
+      ? pushed
+        ? '\nRecovery: full tracked continuity synced for Git-backed restore'
+        : committed
+          ? '\nRecovery: tracked continuity committed locally; remote sync is still pending'
+          : '\nRecovery: tracked continuity contract evaluated; no new continuity changes were committed'
       : '';
 
     return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}${recoveryNote}`;

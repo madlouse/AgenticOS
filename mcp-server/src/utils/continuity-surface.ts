@@ -132,6 +132,18 @@ export function resolveContinuitySurfacePlan(
     }
   }
 
+  for (const violation of plan.projectBoundaryViolations) {
+    const isRequiredViolation = violation.startsWith('.project.yaml')
+      || violation.startsWith('quick-start')
+      || violation.startsWith('state')
+      || violation.startsWith('conversations')
+      || violation.startsWith('knowledge')
+      || violation.startsWith('tasks');
+    if (isRequiredViolation) {
+      unsupportedReasons.push(violation);
+    }
+  }
+
   return {
     policy: plan.policy,
     tracked_continuity_paths: uniq(Array.from(trackedContinuity)),

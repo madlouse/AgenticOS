@@ -37,6 +37,7 @@ export interface ContextPolicyPlan {
   rawConversationsDir: string;
   trackedConversationsDir: string | null;
   sidecarOnlyPaths: string[];
+  projectBoundaryViolations: string[];
   repoBoundaryViolations: string[];
 }
 
@@ -83,6 +84,30 @@ function collectRepoBoundaryViolations(
   return candidates
     .filter(([, candidatePath]) => candidatePath && !isWithinRoot(repoRoot, candidatePath))
     .map(([label, candidatePath]) => `${label} path escapes repo root: ${candidatePath}`);
+}
+
+function collectProjectBoundaryViolations(
+  projectRoot: string,
+  trackedContextPaths: ContextPolicyPlan['trackedContextPaths'],
+  rawConversationsDir: string,
+  trackedConversationsDir: string | null,
+): string[] {
+  const candidates: Array<[string, string | null]> = [
+    ['.project.yaml', trackedContextPaths.projectFile],
+    ['quick-start', trackedContextPaths.quickStart],
+    ['state', trackedContextPaths.state],
+    ['conversations', trackedContextPaths.conversations],
+    ['knowledge', trackedContextPaths.knowledge],
+    ['tasks', trackedContextPaths.tasks],
+    ['last_record', trackedContextPaths.lastRecord],
+    ['artifacts', trackedContextPaths.artifacts],
+    ['raw_conversations', rawConversationsDir],
+    ['tracked_conversations', trackedConversationsDir],
+  ];
+
+  return candidates
+    .filter(([, candidatePath]) => candidatePath && !isWithinRoot(projectRoot, candidatePath))
+    .map(([label, candidatePath]) => `${label} path escapes project root: ${candidatePath}`);
 }
 
 export function toRepoRelativePath(repoRoot: string, absolutePath: string, options?: { directory?: boolean }): string {
@@ -151,6 +176,12 @@ export function resolveContextPolicyPlan(args: ResolveContextPolicyPlanArgs): Co
       join(projectRoot, '.private', 'conversations'),
       join(projectRoot, '.meta', 'transcripts'),
     ],
+    projectBoundaryViolations: collectProjectBoundaryViolations(
+      projectRoot,
+      trackedContextPaths,
+      rawConversationsDir,
+      trackedConversationsDir,
+    ),
     repoBoundaryViolations: collectRepoBoundaryViolations(
       repoRoot,
       trackedContextPaths,

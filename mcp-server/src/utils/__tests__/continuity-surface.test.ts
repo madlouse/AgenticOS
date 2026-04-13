@@ -76,4 +76,25 @@ describe('resolveContinuitySurfacePlan', () => {
 
     expect(plan.unsupported_reasons).toContain('tasks path escapes repo root: /workspace/shared-tasks/');
   });
+
+  it('fails closed when a required tracked continuity path escapes the project root but remains inside the repo', () => {
+    const contextPlan = resolveContextPolicyPlan({
+      projectName: 'Nested Project',
+      projectPath: '/workspace/repo/projects/app',
+      repoRoot: '/workspace/repo',
+      projectYaml: {
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+        },
+        agent_context: {
+          tasks: '../../shared-tasks/',
+        },
+      },
+    });
+
+    const plan = resolveContinuitySurfacePlan(contextPlan);
+
+    expect(plan.unsupported_reasons).toContain('tasks path escapes project root: /workspace/repo/shared-tasks/');
+  });
 });

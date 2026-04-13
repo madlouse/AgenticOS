@@ -67,6 +67,28 @@ describe('resolveContextPolicyPlan', () => {
 
     expect(plan.repoBoundaryViolations).toContain('knowledge path escapes repo root: /workspace/shared-knowledge/');
   });
+
+  it('records project-boundary violations for configured paths outside the project root but still inside the repo', () => {
+    const plan = resolveContextPolicyPlan({
+      projectName: 'Nested Project',
+      projectPath: '/workspace/repo/projects/app',
+      repoRoot: '/workspace/repo',
+      projectYaml: {
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+        },
+        agent_context: {
+          tasks: '../../shared-tasks/',
+        },
+      },
+    });
+
+    expect(plan.projectBoundaryViolations).toContain(
+      'tasks path escapes project root: /workspace/repo/shared-tasks/',
+    );
+    expect(plan.repoBoundaryViolations).toEqual([]);
+  });
 });
 
 describe('toRepoRelativePath', () => {
