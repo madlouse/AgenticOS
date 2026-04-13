@@ -6,7 +6,7 @@ import { joinDisplayPath, type ManagedProjectContextDisplayPaths } from './agent
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 11;
+export const CURRENT_TEMPLATE_VERSION = 12;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -70,6 +70,13 @@ export const TASK_INTAKE_RULE_BULLETS = [
   'Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.',
 ] as const;
 
+export const CONTINUITY_CONTRACT_TITLE = 'Continuity Contract';
+export const CONTINUITY_CONTRACT_BULLETS = [
+  'The tracked continuity contract is publication-policy aware: local_private stays runtime-local, private_continuity persists the tracked continuity core, and public_distilled keeps a narrower tracked surface.',
+  'The configured conversations path is a context contract input, but raw transcript routing may differ by publication policy.',
+  '`CLAUDE.md` and `AGENTS.md` are mirrored adapter surfaces. They should stay aligned with project policy, but continuity correctness must not depend on them existing.',
+] as const;
+
 /** Extract template version from an existing file. Returns 0 if no marker found (v1 or earlier). */
 export function extractTemplateVersion(content: string): number {
   const match = content.match(/<!--\s*agenticos-template:\s*v(\d+)\s*-->/);
@@ -101,6 +108,15 @@ function renderRuntimeGuidanceSection(title: string, bullets: readonly string[])
   ].join('\n');
 }
 
+function renderContinuityContractSection(): string {
+  return [
+    `## ${CONTINUITY_CONTRACT_TITLE}`,
+    '',
+    ...CONTINUITY_CONTRACT_BULLETS.map((line) => `- ${line}`),
+    '',
+  ].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // AGENTS.md template
 // ---------------------------------------------------------------------------
@@ -121,7 +137,7 @@ export function generateAgentsMd(
 ${AGENTS_ADAPTER_LINES[0]}
 ${AGENTS_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
@@ -161,7 +177,7 @@ After recording, call \`agenticos_save\` to commit to Git.
 On session start, align the runtime before meaningful work:
 1. call \`agenticos_status\` to confirm the current session project, current task, pending work, and latest recorded state
 2. if no session project is bound or the bound project is not \`${name}\`, call \`agenticos_switch\`
-3. read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, \`${contextPaths.statePath}\`, and \`${contextPaths.conversationsDir}\`
+3. read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, \`${contextPaths.statePath}\`, and review the configured conversation history surface when relevant
 4. review the latest guardrail evidence and latest \`agenticos_issue_bootstrap\` record before implementation-affecting work
 5. if implementation work is requested, follow the Guardrail Protocol above exactly before editing
 
@@ -179,7 +195,7 @@ Then greet the user with: project name, last progress, current pending items, su
 | \`.project.yaml\` | Project metadata |
 | \`${contextPaths.quickStartPath}\` | Quick project summary |
 | \`${contextPaths.statePath}\` | Session state and working memory |
-| \`${contextPaths.conversationsDir}\` | Session records (auto-generated) |
+| \`${contextPaths.conversationsDir}\` | Configured conversation history surface (tracked or policy-routed) |
 | \`${contextPaths.knowledgeDir}\` | Persistent knowledge documents |
 | \`${contextPaths.tasksDir}\` | Task tracking |
 | \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | Preflight checklist template |
@@ -266,7 +282,7 @@ function buildClaudeMdContent(
 
   const nav = userContent?.navigation
     ? `## Navigation\n\n${userContent.navigation}\n`
-    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`${contextPaths.quickStartPath}\` | 快速项目概览 |\n| \`${contextPaths.statePath}\` | 当前会话状态及工作记忆 |\n| \`${contextPaths.conversationsDir}\` | 会话记录（自动生成） |\n| \`${contextPaths.knowledgeDir}\` | 持久化知识文档 |\n| \`${contextPaths.tasksDir}\` | 任务追踪 |\n| \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | preflight 模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'issue-design-brief.md')}\` | 设计循环模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'non-code-evaluation-rubric.yaml')}\` | 非代码评估模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'submission-evidence.md')}\` | 提交证据模板 |\n| \`${contextPaths.artifactsDir}\` | 产出物 |\n`;
+    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`${contextPaths.quickStartPath}\` | 快速项目概览 |\n| \`${contextPaths.statePath}\` | 当前会话状态及工作记忆 |\n| \`${contextPaths.conversationsDir}\` | 会话历史入口（tracked 或按 policy 路由） |\n| \`${contextPaths.knowledgeDir}\` | 持久化知识文档 |\n| \`${contextPaths.tasksDir}\` | 任务追踪 |\n| \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | preflight 模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'issue-design-brief.md')}\` | 设计循环模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'non-code-evaluation-rubric.yaml')}\` | 非代码评估模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'submission-evidence.md')}\` | 提交证据模板 |\n| \`${contextPaths.artifactsDir}\` | 产出物 |\n`;
 
   return `${VERSION_MARKER}
 # CLAUDE.md — ${name}
@@ -276,7 +292,7 @@ function buildClaudeMdContent(
 ${CLAUDE_ADAPTER_LINES[0]}
 ${CLAUDE_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
@@ -326,7 +342,7 @@ When you open this project in a new session, **immediately do the following**:
 
 1. Call \`agenticos_status\` to confirm the current session project, current task, pending work, and latest recorded state
 2. If no session project is bound or the bound project is not \`${name}\`, call \`agenticos_switch\`
-3. Read \`.project.yaml\`, the "Current State" section below, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.conversationsDir}\`
+3. Read \`.project.yaml\`, the "Current State" section below, \`${contextPaths.quickStartPath}\`, and review the configured conversation history surface when relevant
 4. Review the latest guardrail evidence and latest \`agenticos_issue_bootstrap\` record before implementation-affecting work
 5. Greet the user with a brief status report:
 

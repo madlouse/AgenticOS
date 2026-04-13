@@ -145,3 +145,9 @@ Managed projects now distinguish three separate questions:
 The canonical field location is `source_control.context_publication_policy` in `.project.yaml`.
 
 The canonical rationale for context publication policy lives in [standards/knowledge/context-publication-policy-2026-04-10.md](standards/knowledge/context-publication-policy-2026-04-10.md).
+
+Current save/recovery contract:
+
+- `local_private`: Git is not the continuity recovery mechanism
+- `private_continuity`: `agenticos_save` is expected to persist the tracked continuity core for Git-backed restore
+- `public_distilled`: tracked recovery stays distilled; raw transcript isolation remains a separate contract

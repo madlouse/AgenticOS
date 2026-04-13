@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGENTS_ADAPTER_LINES,
+  CONTINUITY_CONTRACT_BULLETS,
+  CONTINUITY_CONTRACT_TITLE,
   AGENTS_RUNTIME_GUIDANCE_BULLETS,
   AGENTS_RUNTIME_GUIDANCE_TITLE,
   CLAUDE_ADAPTER_LINES,
@@ -19,13 +21,17 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template marker, adapter role, and guardrail flow', () => {
     const content = generateAgentsMd('Demo Project', 'Guardrail test');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(11);
-    expect(content).toContain('<!-- agenticos-template: v11 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(12);
+    expect(content).toContain('<!-- agenticos-template: v12 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
     expect(content).toContain(`## ${SHARED_POLICY_TITLE}`);
     for (const bullet of SHARED_POLICY_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain(`## ${CONTINUITY_CONTRACT_TITLE}`);
+    for (const bullet of CONTINUITY_CONTRACT_BULLETS) {
       expect(content).toContain(bullet);
     }
     expect(content).toContain(`## ${AGENTS_RUNTIME_GUIDANCE_TITLE}`);
@@ -49,6 +55,8 @@ describe('distill templates', () => {
     expect(content).toContain('agenticos_branch_bootstrap');
     expect(content).toContain('agenticos_pr_scope_check');
     expect(content).toContain('.context/quick-start.md');
+    expect(content).toContain('review the configured conversation history surface when relevant');
+    expect(content).toContain('Configured conversation history surface (tracked or policy-routed)');
     expect(content).toContain('tasks/templates/agent-preflight-checklist.yaml');
     expect(content).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
   });
@@ -61,6 +69,10 @@ describe('distill templates', () => {
     expect(content).toContain(CLAUDE_ADAPTER_LINES[1]);
     expect(content).toContain(`## ${SHARED_POLICY_TITLE}`);
     for (const bullet of SHARED_POLICY_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain(`## ${CONTINUITY_CONTRACT_TITLE}`);
+    for (const bullet of CONTINUITY_CONTRACT_BULLETS) {
       expect(content).toContain(bullet);
     }
     expect(content).toContain(`## ${CLAUDE_RUNTIME_GUIDANCE_TITLE}`);
@@ -84,6 +96,8 @@ describe('distill templates', () => {
     expect(content).toContain('agenticos_branch_bootstrap');
     expect(content).toContain('agenticos_pr_scope_check');
     expect(content).toContain('.context/quick-start.md');
+    expect(content).toContain('review the configured conversation history surface when relevant');
+    expect(content).toContain('会话历史入口（tracked 或按 policy 路由）');
     expect(content).toContain('tasks/templates/submission-evidence.md');
     expect(content).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
   });
