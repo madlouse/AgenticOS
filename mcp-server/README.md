@@ -31,6 +31,29 @@ When the client supports a pre-edit hook or local command wrapper, point that la
 For stop-event reminders, prefer `agenticos-record-reminder`.
 The old root `tools/check-edit-boundary.sh` and `tools/record-reminder.sh` paths should now be treated as legacy compatibility shims.
 
+If you still have a legacy Claude Code stop hook that points at a source-checkout script under an old workspace checkout, migrate it to the installed command.
+For example, an older config may still contain:
+
+```json
+{
+  "command": "bash /path/to/tools/record-reminder.sh",
+  "timeout": 5,
+  "type": "command"
+}
+```
+
+Replace it with:
+
+```json
+{
+  "command": "agenticos-record-reminder",
+  "timeout": 5,
+  "type": "command"
+}
+```
+
+The stop hook remains an optional local reminder only. It should not be treated as a canonical guardrail or as a substitute for `agenticos_record`.
+
 ### Homebrew Post-Install Contract
 
 If the user installed AgenticOS with Homebrew:

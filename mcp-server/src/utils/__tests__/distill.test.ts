@@ -16,13 +16,14 @@ import {
   generateAgentsMd,
   generateClaudeMd,
 } from '../distill.js';
+import { STOP_HOOK_MIGRATION_BULLETS } from '../stop-hook-guidance.js';
 
 describe('distill templates', () => {
   it('generates AGENTS.md with the current template marker, adapter role, and guardrail flow', () => {
     const content = generateAgentsMd('Demo Project', 'Guardrail test');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(12);
-    expect(content).toContain('<!-- agenticos-template: v12 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(13);
+    expect(content).toContain('<!-- agenticos-template: v13 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -38,6 +39,11 @@ describe('distill templates', () => {
     for (const bullet of AGENTS_RUNTIME_GUIDANCE_BULLETS) {
       expect(content).toContain(bullet);
     }
+    for (const bullet of STOP_HOOK_MIGRATION_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain('## Optional Stop-Hook Reminder');
+    expect(content).toContain('"command": "agenticos-record-reminder"');
     expect(content).toContain(`## ${TASK_INTAKE_RULE_TITLE}`);
     for (const bullet of TASK_INTAKE_RULE_BULLETS) {
       expect(content).toContain(bullet);
@@ -79,6 +85,11 @@ describe('distill templates', () => {
     for (const bullet of CLAUDE_RUNTIME_GUIDANCE_BULLETS) {
       expect(content).toContain(bullet);
     }
+    for (const bullet of STOP_HOOK_MIGRATION_BULLETS) {
+      expect(content).toContain(bullet);
+    }
+    expect(content).toContain('## Optional Stop-Hook Reminder');
+    expect(content).toContain('"command": "agenticos-record-reminder"');
     expect(content).toContain(`## ${TASK_INTAKE_RULE_TITLE}`);
     for (const bullet of TASK_INTAKE_RULE_BULLETS) {
       expect(content).toContain(bullet);

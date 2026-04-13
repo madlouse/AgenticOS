@@ -16,6 +16,21 @@ It must expose the same canonical policy as other agent adapters rather than def
 
 - If natural-language routing is weak, use explicit `agenticos_*` tool calls before treating the issue as transport failure.
 - Bootstrap differences are runtime concerns rather than policy changes.
+- Optional local stop-hook reminders should call `agenticos-record-reminder`, not a source-checkout `tools/record-reminder.sh` path.
+- If migrating from a legacy source-checkout hook, replace `bash /path/to/tools/record-reminder.sh` with the installed `agenticos-record-reminder` command.
+## Optional Stop-Hook Reminder
+
+If your runtime supports local stop hooks or command reminders, the preferred installed command is:
+
+```json
+{
+  "command": "agenticos-record-reminder",
+  "timeout": 5,
+  "type": "command"
+}
+```
+
+This remains an optional local reminder layer rather than a canonical guardrail.
 ## Task Intake Rule
 
 - At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.
