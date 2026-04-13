@@ -32,3 +32,5 @@ mcp-server/build/
 # Runtime-only state
 .runtime/
 .claude/worktrees/
+.private/
+.meta/transcripts/

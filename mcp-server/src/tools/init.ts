@@ -73,6 +73,27 @@ async function loadExistingProjectYaml(projectPath: string): Promise<any> {
   }
 }
 
+async function ensureIgnoreEntries(projectPath: string, entries: string[]): Promise<void> {
+  const gitignorePath = join(projectPath, '.gitignore');
+  let existing = '';
+  try {
+    existing = await readFile(gitignorePath, 'utf-8');
+  } catch {
+    existing = '';
+  }
+
+  const lines = existing.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+  const missingEntries = entries.filter((entry) => !lines.includes(entry));
+  if (missingEntries.length === 0) {
+    return;
+  }
+
+  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+  const separator = existing.trim().length > 0 ? '\n' : '';
+  const block = `${separator}# AgenticOS private runtime surfaces\n${missingEntries.join('\n')}\n`;
+  await writeFile(gitignorePath, `${existing}${prefix}${block}`, 'utf-8');
+}
+
 function buildProjectYaml(args: {
   name: string;
   id: string;
@@ -196,6 +217,7 @@ export async function initProject(args: any): Promise<string> {
   await mkdir(contextPaths.conversationsDir, { recursive: true });
   if (contextPublicationPolicy === 'public_distilled') {
     await mkdir(join(projectPath, '.private', 'conversations'), { recursive: true });
+    await ensureIgnoreEntries(projectPath, ['.private/', '.meta/transcripts/']);
   }
   await mkdir(contextPaths.knowledgeDir, { recursive: true });
   await mkdir(contextPaths.tasksDir, { recursive: true });

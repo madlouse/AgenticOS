@@ -26,9 +26,32 @@ describe('conversation routing', () => {
     const routing = resolveConversationRoutingPlan(contextPlan);
 
     expect(routing.raw_conversations_display_dir).toBe('.private/conversations/');
-    expect(routing.tracked_conversations_display_dir).toBeNull();
+    expect(routing.tracked_conversations_display_dir).toBe('.context/conversations/');
     expect(routing.tracked_recovery_contract).toBe('git_distilled');
     expect(routing.is_sidecar).toBe(true);
+  });
+
+  it('preserves the configured tracked conversation display path for public_distilled', () => {
+    const contextPlan = resolveContextPolicyPlan({
+      projectName: 'Public Project',
+      projectPath: '/workspace/public-project',
+      repoRoot: '/workspace/public-project',
+      projectYaml: {
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+        },
+        agent_context: {
+          conversations: 'runtime/conversations/',
+        },
+      },
+    });
+
+    const routing = resolveConversationRoutingPlan(contextPlan);
+    const lines = buildConversationRoutingStatusLines(routing, 'tracked_legacy_present');
+
+    expect(routing.tracked_conversations_display_dir).toBe('runtime/conversations/');
+    expect(lines.join('\n')).toContain('runtime/conversations/');
   });
 
   it('detects tracked legacy transcript history for public_distilled projects', async () => {

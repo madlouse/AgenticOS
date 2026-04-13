@@ -54,7 +54,13 @@ function mockGitResponses(responses: Record<string, string>): void {
 describe('runPrScopeCheck', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    readFileMock.mockResolvedValue('{"meta":{"id":"agenticos","name":"AgenticOS"}}');
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: { id: 'agenticos', name: 'AgenticOS' },
+      source_control: {
+        topology: 'local_directory_only',
+        context_publication_policy: 'local_private',
+      },
+    }));
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
@@ -71,9 +77,9 @@ describe('runPrScopeCheck', () => {
       targetProject: {
         id: 'agenticos',
         name: 'AgenticOS',
-        path: '/workspace/projects/agenticos/standards',
-        statePath: '/workspace/projects/agenticos/standards/.context/state.yaml',
-        projectYamlPath: '/workspace/projects/agenticos/standards/.project.yaml',
+        path: '/repo',
+        statePath: '/repo/.context/state.yaml',
+        projectYamlPath: '/repo/.project.yaml',
         sourceRepoRoots: ['/repo'],
         sourceRepoRootsDeclared: true,
       },
@@ -82,7 +88,7 @@ describe('runPrScopeCheck', () => {
 
   it('returns PASS when commits and files stay within the intended issue scope', async () => {
     mockGitResponses({
-      'rev-parse --show-toplevel': '/repo/worktrees/issue-36\n',
+      'rev-parse --show-toplevel': '/repo\n',
       'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
@@ -107,7 +113,7 @@ describe('runPrScopeCheck', () => {
 
   it('returns PASS when declared exact file paths contain dots', async () => {
     mockGitResponses({
-      'rev-parse --show-toplevel': '/repo/worktrees/issue-114\n',
+      'rev-parse --show-toplevel': '/repo\n',
       'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
@@ -131,7 +137,7 @@ describe('runPrScopeCheck', () => {
 
   it('returns BLOCK when commit subjects do not match the current issue', async () => {
     mockGitResponses({
-      'rev-parse --show-toplevel': '/repo/worktrees/issue-36\n',
+      'rev-parse --show-toplevel': '/repo\n',
       'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
@@ -153,7 +159,7 @@ describe('runPrScopeCheck', () => {
 
   it('returns BLOCK when changed files escape the declared target scope', async () => {
     mockGitResponses({
-      'rev-parse --show-toplevel': '/repo/worktrees/issue-36\n',
+      'rev-parse --show-toplevel': '/repo\n',
       'rev-parse --git-common-dir': '/repo/.git\n',
       'rev-parse origin/main': 'base999\n',
       'merge-base HEAD origin/main': 'base999\n',
@@ -174,8 +180,26 @@ describe('runPrScopeCheck', () => {
   });
 
   it('returns PASS when the diff is runtime-managed only', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-171',
+        statePath: '/repo/worktrees/issue-171/standards/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-171/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
     readFileMock.mockResolvedValue(JSON.stringify({
       meta: { id: 'agenticos', name: 'AgenticOS' },
+      source_control: {
+        topology: 'local_directory_only',
+        context_publication_policy: 'local_private',
+      },
       agent_context: {
         current_state: 'standards/.context/state.yaml',
         conversations: 'standards/.context/conversations/',
@@ -208,8 +232,26 @@ describe('runPrScopeCheck', () => {
   });
 
   it('returns BLOCK when runtime-managed files are mixed into a normal product review slice', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-171',
+        statePath: '/repo/worktrees/issue-171/standards/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-171/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
     readFileMock.mockResolvedValue(JSON.stringify({
       meta: { id: 'agenticos', name: 'AgenticOS' },
+      source_control: {
+        topology: 'local_directory_only',
+        context_publication_policy: 'local_private',
+      },
       agent_context: {
         current_state: 'standards/.context/state.yaml',
         conversations: 'standards/.context/conversations/',
@@ -239,6 +281,20 @@ describe('runPrScopeCheck', () => {
   });
 
   it('returns BLOCK when private raw transcript paths appear in tracked review scope for public_distilled projects', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/repo/worktrees/issue-245',
+        statePath: '/repo/worktrees/issue-245/standards/.context/state.yaml',
+        projectYamlPath: '/repo/worktrees/issue-245/.project.yaml',
+        sourceRepoRoots: ['/repo/worktrees/issue-245'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
     readFileMock.mockResolvedValue(JSON.stringify({
       meta: { id: 'agenticos', name: 'AgenticOS' },
       source_control: {
@@ -270,6 +326,55 @@ describe('runPrScopeCheck', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.private_raw_transcript_files).toEqual(['.private/conversations/2026-04-13.md']);
+    expect(result.block_reasons.join(' ')).toContain('private raw transcript paths appear in tracked review scope');
+  });
+
+  it('blocks nested-project tracked transcript diffs using repo-relative review paths', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'nested-public-project',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'nested-public-project',
+        name: 'Nested Public Project',
+        path: '/repo/projects/app',
+        statePath: '/repo/projects/app/runtime/state.yaml',
+        projectYamlPath: '/repo/projects/app/.project.yaml',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+      },
+    });
+    readFileMock.mockResolvedValue(JSON.stringify({
+      meta: { id: 'nested-public-project', name: 'Nested Public Project' },
+      source_control: {
+        topology: 'github_versioned',
+        context_publication_policy: 'public_distilled',
+      },
+      agent_context: {
+        current_state: 'runtime/state.yaml',
+        conversations: 'runtime/conversations/',
+        last_record_marker: 'runtime/.last_record',
+      },
+    }));
+
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'feat(mcp-server): isolate nested public raw transcripts (#245)\n',
+      'diff --name-only origin/main...HEAD': 'projects/app/runtime/conversations/2026-04-13.md\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '245',
+      repo_path: '/repo',
+      declared_target_files: ['projects/app/mcp-server/src/**'],
+      expected_issue_scope: 'nested_public_distilled_transcript_isolation',
+    })) as { status: string; private_raw_transcript_files: string[]; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.private_raw_transcript_files).toEqual(['projects/app/runtime/conversations/2026-04-13.md']);
     expect(result.block_reasons.join(' ')).toContain('private raw transcript paths appear in tracked review scope');
   });
 
