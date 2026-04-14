@@ -22,10 +22,13 @@ vi.mock('../standard-kit.js', () => ({
 import { runHealthCheck } from '../health.js';
 import { runHealth } from '../../tools/health.js';
 
-async function setupProjectRoot(stateYaml: string): Promise<string> {
+async function setupProjectRoot(stateYaml: string, options?: { projectYaml?: string }): Promise<string> {
   const projectRoot = await mkdtemp(join(tmpdir(), 'agenticos-health-'));
   await mkdir(join(projectRoot, '.context'), { recursive: true });
-  await writeFile(join(projectRoot, '.context', 'state.yaml'), stateYaml, 'utf-8');
+  const projectYaml = options?.projectYaml || `meta:\n  id: "health-project"\n  name: "Health Project"\nsource_control:\n  topology: "github_versioned"\n  context_publication_policy: "public_distilled"\nagent_context:\n  quick_start: "standards/.context/quick-start.md"\n  current_state: "standards/.context/state.yaml"\n  conversations: "standards/.context/conversations/"\n  last_record_marker: "standards/.context/.last_record"\n`;
+  await mkdir(join(projectRoot, 'standards', '.context'), { recursive: true });
+  await writeFile(join(projectRoot, '.project.yaml'), projectYaml, 'utf-8');
+  await writeFile(join(projectRoot, 'standards', '.context', 'state.yaml'), stateYaml, 'utf-8');
   return projectRoot;
 }
 
@@ -56,6 +59,14 @@ describe('health command', () => {
       { gate: 'guardrail_evidence', status: 'PASS', summary: 'Latest guardrail evidence is present (agenticos_preflight).' },
       { gate: 'standard_kit', status: 'PASS', summary: 'Standard-kit files match the canonical kit.' },
     ]);
+    expect(result.repo_sync).toEqual({
+      branch_line: '## main...origin/main',
+      branch_status: 'aligned',
+      dirty_paths: [],
+      runtime_dirty_paths: [],
+      source_dirty_paths: [],
+    });
+    expect(result.recovery_actions).toEqual([]);
 
     const wrapped = JSON.parse(await runHealth({
       repo_path: '/repo',
@@ -65,9 +76,9 @@ describe('health command', () => {
     expect(wrapped.status).toBe('PASS');
   });
 
-  it('reports BLOCK and WARN gates for a behind or dirty canonical checkout with stale state surfaces', async () => {
+  it('reports branch misalignment separately from runtime drift and source edits', async () => {
     const projectRoot = await setupProjectRoot(`session:\n  id: "session-1"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main [behind 2]\n M README.md\n', ''));
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main [behind 2]\n M standards/.context/state.yaml\n M README.md\n', ''));
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -79,7 +90,7 @@ describe('health command', () => {
       {
         gate: 'repo_sync',
         status: 'BLOCK',
-        summary: 'Canonical checkout is not aligned with origin/main: ## main...origin/main [behind 2]',
+        summary: 'Canonical checkout is blocked by branch misalignment: ## main...origin/main [behind 2]; runtime-managed drift: 1 path(s); source-tree edits: 1 path(s).',
       },
       {
         gate: 'entry_surface_refresh',
@@ -91,6 +102,19 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'No persisted guardrail evidence is present yet.',
       },
+    ]);
+    expect(result.repo_sync).toEqual({
+      branch_line: '## main...origin/main [behind 2]',
+      branch_status: 'behind',
+      dirty_paths: ['standards/.context/state.yaml', 'README.md'],
+      runtime_dirty_paths: ['standards/.context/state.yaml'],
+      source_dirty_paths: ['README.md'],
+    });
+    expect(result.recovery_actions).toEqual([
+      'fast-forward canonical main to origin/main before treating it as a trusted base checkout',
+      'discard or isolate runtime-managed drift from the canonical checkout: standards/.context/state.yaml',
+      'review, move, or revert source-tree edits before trusting the canonical checkout: README.md',
+      'keep new implementation work inside isolated issue worktrees rather than the canonical main checkout',
     ]);
   });
 
@@ -129,9 +153,9 @@ describe('health command', () => {
     ]);
   });
 
-  it('blocks a canonical checkout that is on main but still dirty', async () => {
+  it('classifies runtime-only drift in a canonical checkout that is otherwise aligned', async () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n M README.md\n', ''));
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n M standards/.context/state.yaml\n M CLAUDE.md\n', ''));
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -142,8 +166,10 @@ describe('health command', () => {
     expect(result.gates[0]).toEqual({
       gate: 'repo_sync',
       status: 'BLOCK',
-      summary: 'Canonical checkout is dirty and cannot be treated as a trusted starting point.',
+      summary: 'Canonical checkout is blocked by runtime-managed drift: 2 path(s).',
     });
+    expect(result.repo_sync?.runtime_dirty_paths).toEqual(['standards/.context/state.yaml', 'CLAUDE.md']);
+    expect(result.repo_sync?.source_dirty_paths).toEqual([]);
   });
 
   it('fails closed on missing repo_path, git command failure fallbacks, missing branch status, and missing project_path for standard-kit checks', async () => {
@@ -167,7 +193,7 @@ describe('health command', () => {
       {
         gate: 'repo_sync',
         status: 'BLOCK',
-        summary: 'Canonical checkout is not aligned with origin/main: missing branch status',
+        summary: 'Canonical checkout is blocked by branch misalignment: missing branch status.',
       },
       {
         gate: 'entry_surface_refresh',
@@ -179,6 +205,16 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'No persisted guardrail evidence is present yet.',
       },
+    ]);
+    expect(missingBranchResult.repo_sync).toEqual({
+      branch_line: '',
+      branch_status: 'unknown',
+      dirty_paths: [],
+      runtime_dirty_paths: [],
+      source_dirty_paths: [],
+    });
+    expect(missingBranchResult.recovery_actions).toEqual([
+      'inspect canonical branch status "missing branch status" and restore exact main...origin/main alignment',
     ]);
 
     childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));

@@ -9,6 +9,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
+import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 
 function parseArray(val: unknown): string[] {
   if (Array.isArray(val)) return val as string[];
@@ -42,6 +43,14 @@ export async function recordSession(args: any): Promise<string> {
   }
 
   const { project, projectPath, projectYaml, statePath, markerPath } = resolved;
+  const writeProtection = await detectCanonicalMainWriteProtection(projectPath);
+  if (writeProtection.blocked) {
+    return `❌ agenticos_record blocked for "${project.name}" because canonical main checkout runtime persistence is write-protected.\n\n` +
+      `- ${writeProtection.reason}\n` +
+      '- switch to an isolated issue worktree before recording operational state\n' +
+      '- keep runtime recording out of the canonical main checkout so future issue flow starts from a trusted baseline';
+  }
+
   const contextPolicyPlan = resolveContextPolicyPlan({
     projectName: project.name,
     projectPath,
