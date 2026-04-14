@@ -3,6 +3,8 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
 import { checkStandardKitUpgrade } from './standard-kit.js';
+import { analyzeCanonicalRepoSync, type CanonicalRepoSyncDetails } from './canonical-checkout-sync.js';
+import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from './agent-context-paths.js';
 
 export interface HealthArgs {
   repo_path: string;
@@ -27,6 +29,8 @@ export interface HealthResult {
   checkout_role: 'canonical';
   checked_at: string;
   gates: HealthGate[];
+  repo_sync?: CanonicalRepoSyncDetails;
+  recovery_actions?: string[];
 }
 
 function execCommand(command: string): Promise<string> {
@@ -47,40 +51,45 @@ function combineHealthStatus(gates: HealthGate[]): 'PASS' | 'WARN' | 'BLOCK' {
   return 'PASS';
 }
 
-function parseRepoSyncGate(statusOutput: string, remoteBaseBranch: string): HealthGate {
-  const lines = statusOutput.trimEnd().split('\n');
-  const branchLine = lines[0] || '';
-  const fileChanges = lines.slice(1).filter((line) => line.trim().length > 0);
-  const expectedBranchLine = `## main...${remoteBaseBranch}`;
-
-  if (branchLine !== expectedBranchLine) {
-    return {
-      gate: 'repo_sync',
-      status: 'BLOCK',
-      summary: `Canonical checkout is not aligned with ${remoteBaseBranch}: ${branchLine || 'missing branch status'}`,
-    };
-  }
-
-  if (fileChanges.length > 0) {
-    return {
-      gate: 'repo_sync',
-      status: 'BLOCK',
-      summary: 'Canonical checkout is dirty and cannot be treated as a trusted starting point.',
-    };
-  }
-
-  return {
-    gate: 'repo_sync',
-    status: 'PASS',
-    summary: `Canonical checkout is clean and aligned with ${remoteBaseBranch}.`,
-  };
-}
-
-async function readState(projectPath?: string): Promise<any | null> {
+async function readProjectYaml(projectPath?: string): Promise<any | null> {
   if (!projectPath) return null;
 
   try {
-    return yaml.parse(await readFile(join(projectPath, '.context', 'state.yaml'), 'utf-8')) || {};
+    return yaml.parse(await readFile(join(projectPath, '.project.yaml'), 'utf-8')) || {};
+  } catch {
+    return null;
+  }
+}
+
+function resolveRuntimeManagedEntries(projectYaml: any | null): string[] {
+  if (!projectYaml) {
+    return ['CLAUDE.md', 'AGENTS.md'];
+  }
+
+  const contextPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
+  const toRelative = (path: string, options?: { directory?: boolean }): string => {
+    const normalized = path.replace(/\\/g, '/').replace(/^\.\/+/, '');
+    return options?.directory && !normalized.endsWith('/') ? `${normalized}/` : normalized;
+  };
+
+  return [
+    toRelative(contextPaths.quickStartPath),
+    toRelative(contextPaths.statePath),
+    toRelative(contextPaths.markerPath),
+    toRelative(contextPaths.conversationsDir, { directory: true }),
+    'CLAUDE.md',
+    'AGENTS.md',
+  ];
+}
+
+async function readState(projectPath?: string, projectYaml?: any | null): Promise<any | null> {
+  if (!projectPath) return null;
+
+  try {
+    const statePath = projectYaml
+      ? resolveManagedProjectContextPaths(projectPath, projectYaml).statePath
+      : join(projectPath, '.context', 'state.yaml');
+    return yaml.parse(await readFile(statePath, 'utf-8')) || {};
   } catch {
     return null;
   }
@@ -173,11 +182,21 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   const checkoutRole = args.checkout_role || 'canonical';
   const checkedAt = new Date().toISOString();
 
-  const repoStatus = await execCommand(`git -C "${args.repo_path}" status --short --branch`);
-  const state = await readState(args.project_path);
+  const repoStatus = await execCommand(`git -C "${args.repo_path}" status --short --branch --untracked-files=all`);
+  const projectYaml = await readProjectYaml(args.project_path);
+  const state = await readState(args.project_path, projectYaml);
+  const repoSync = analyzeCanonicalRepoSync({
+    statusOutput: repoStatus,
+    remoteBaseBranch,
+    runtimeManagedEntries: resolveRuntimeManagedEntries(projectYaml),
+  });
 
   const gates: HealthGate[] = [
-    parseRepoSyncGate(repoStatus, remoteBaseBranch),
+    {
+      gate: 'repo_sync',
+      status: repoSync.status,
+      summary: repoSync.summary,
+    },
     buildEntrySurfaceGate(state),
     buildGuardrailGate(state),
   ];
@@ -196,5 +215,7 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     checkout_role: checkoutRole,
     checked_at: checkedAt,
     gates,
+    repo_sync: repoSync.details,
+    recovery_actions: repoSync.recovery_actions,
   };
 }
