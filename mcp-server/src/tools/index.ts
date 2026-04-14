@@ -7,6 +7,7 @@ export { runIssueBootstrap } from './issue-bootstrap.js';
 export { runBranchBootstrap } from './branch-bootstrap.js';
 export { runPrScopeCheck } from './pr-scope-check.js';
 export { runHealth } from './health.js';
+export { runCanonicalSync } from './canonical-sync.js';
 export { runConfig } from './config.js';
 export { runEditGuard } from './edit-guard.js';
 export { runEntrySurfaceRefresh } from './entry-surface-refresh.js';

@@ -384,6 +384,18 @@ Evaluate whether a canonical checkout and project context are fresh enough to tr
 
 **Returns**: JSON with overall `PASS`, `WARN`, or `BLOCK`
 
+### agenticos_canonical_sync
+Plan, snapshot, or prepare runtime-managed cleanup for a canonical checkout before manual branch resync.
+
+**Parameters**:
+- `repo_path` (required)
+- `action` (optional: `plan`, `snapshot`, or `prepare`; default `plan`)
+- `project_path` (optional)
+- `remote_base_branch` (optional, default `origin/main`)
+- `snapshot_label` (optional)
+
+**Returns**: JSON with current repo-sync status plus optional snapshot / cleanup details
+
 ### agenticos_refresh_entry_surfaces
 Deterministically refresh the configured quick-start and state paths from structured merged-work inputs, honoring `.project.yaml.agent_context` when present and defaulting to root `.context/*` otherwise.
 
