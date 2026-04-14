@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -301,6 +301,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_canonical_sync',
+      description: 'Plan, snapshot, or prepare runtime-managed cleanup for a canonical checkout before manual branch resync.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['plan', 'snapshot', 'prepare'], description: 'Whether to inspect, snapshot, or snapshot-and-clean runtime drift.' },
+          repo_path: { type: 'string', description: 'Absolute repository checkout path to evaluate.' },
+          project_path: { type: 'string', description: 'Optional absolute project path whose .project.yaml defines runtime-managed entries.' },
+          remote_base_branch: { type: 'string', description: 'Remote base branch expected for canonical checkout freshness (default: origin/main).' },
+          snapshot_label: { type: 'string', description: 'Optional label appended to the created snapshot directory.' },
+        },
+        required: ['repo_path'],
+      },
+    },
+    {
       name: 'agenticos_refresh_entry_surfaces',
       description: 'Deterministically refresh the configured quick-start and state paths from structured merged-work inputs, honoring .project.yaml agent_context when present.',
       inputSchema: {
@@ -429,6 +444,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
     case 'agenticos_health':
       return { content: [{ type: 'text', text: await runHealth(args ?? {}) }] };
+    case 'agenticos_canonical_sync':
+      return { content: [{ type: 'text', text: await runCanonicalSync(args ?? {}) }] };
     case 'agenticos_refresh_entry_surfaces':
       return { content: [{ type: 'text', text: await runEntrySurfaceRefresh(args ?? {}) }] };
     case 'agenticos_standard_kit_adopt':
