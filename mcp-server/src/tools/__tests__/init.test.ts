@@ -111,6 +111,8 @@ describe('initProject', () => {
     const expectedDirs = [
       `${base}/.context/conversations`,
       `${base}/knowledge`,
+      `${base}/knowledge/corner-cases`,
+      `${base}/knowledge/bad-cases`,
       `${base}/tasks`,
       `${base}/artifacts`,
     ];

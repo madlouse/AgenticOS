@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import yaml from 'yaml';
@@ -265,6 +265,9 @@ describe('standard kit commands', () => {
     const stateYaml = yaml.parse(await readFile(join(projectRoot, '.context', 'state.yaml'), 'utf-8')) as any;
     expect(stateYaml.memory_contract.version).toBe(1);
     expect(stateYaml.loaded_context).toContain('.context/quick-start.md');
+    expect(await readdir(join(projectRoot, 'knowledge'))).toEqual(
+      expect.arrayContaining(['bad-cases', 'corner-cases']),
+    );
 
     const agentsMd = await readFile(join(projectRoot, 'AGENTS.md'), 'utf-8');
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');

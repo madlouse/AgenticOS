@@ -5,6 +5,7 @@ import { loadRegistry, patchRegistry, getAgenticOSHome } from '../utils/registry
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
 import { buildProjectTopologyInitializationMessage, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
+import { ensureCaseKnowledgeDirectories } from '../utils/case-knowledge.js';
 
 function isValidGithubRepo(value: string): boolean {
   return /^[^/\s]+\/[^/\s]+$/.test(value);
@@ -219,7 +220,7 @@ export async function initProject(args: any): Promise<string> {
     await mkdir(join(projectPath, '.private', 'conversations'), { recursive: true });
     await ensureIgnoreEntries(projectPath, ['.private/', '.meta/transcripts/']);
   }
-  await mkdir(contextPaths.knowledgeDir, { recursive: true });
+  await ensureCaseKnowledgeDirectories(projectPath, projectYaml);
   await mkdir(contextPaths.tasksDir, { recursive: true });
   await mkdir(contextPaths.artifactsDir, { recursive: true });
 

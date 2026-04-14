@@ -16,17 +16,24 @@ vi.mock('../../utils/project-target.js', () => ({
   resolveManagedProjectTarget: vi.fn(),
 }));
 
+vi.mock('../../utils/case-knowledge.js', () => ({
+  buildCaseContextSection: vi.fn(),
+}));
+
 import { readFile } from 'fs/promises';
 import { getProjectContext } from '../context.js';
 import { resolveManagedProjectTarget } from '../../utils/project-target.js';
+import { buildCaseContextSection } from '../../utils/case-knowledge.js';
 
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
 const resolveManagedProjectTargetMock = resolveManagedProjectTarget as unknown as ReturnType<typeof vi.fn>;
+const buildCaseContextSectionMock = buildCaseContextSection as unknown as ReturnType<typeof vi.fn>;
 
 describe('getProjectContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     yamlMock.parse.mockImplementation((content: string) => JSON.parse(content));
+    buildCaseContextSectionMock.mockResolvedValue('## Relevant Cases\n\n### bad-case: Retry loop\n- Trigger: bad input\n');
   });
 
   afterEach(() => {
@@ -67,6 +74,7 @@ describe('getProjectContext', () => {
     expect(result).toContain('Project Path: /workspace/alpha');
     expect(result).toContain('## Quick Start');
     expect(result).toContain('## Latest Issue Bootstrap');
+    expect(result).toContain('## Relevant Cases');
     expect(result).toContain('Issue: #179');
     expect(result).toContain('## Current State');
   });

@@ -12,6 +12,7 @@ import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextP
 import { getSessionProjectBinding } from './session-context.js';
 import { resolveConversationRoutingPlan } from './conversation-routing.js';
 import { resolveContextPolicyPlan } from './context-policy-plan.js';
+import { ensureCaseKnowledgeDirectories } from './case-knowledge.js';
 
 interface StandardKitEntry {
   path: string;
@@ -237,7 +238,7 @@ async function ensureStandardDirectories(project: ResolvedProjectTarget): Promis
   if (project.projectYaml?.source_control?.context_publication_policy === 'public_distilled') {
     await mkdir(join(project.projectPath, '.private', 'conversations'), { recursive: true });
   }
-  await mkdir(contextPaths.knowledgeDir, { recursive: true });
+  await ensureCaseKnowledgeDirectories(project.projectPath, project.projectYaml);
   await mkdir(join(contextPaths.tasksDir, 'templates'), { recursive: true });
   await mkdir(contextPaths.artifactsDir, { recursive: true });
 }
