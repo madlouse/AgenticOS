@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -90,6 +90,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['summary'],
+      },
+    },
+    {
+      name: 'agenticos_record_case',
+      description: 'Record a structured corner case or bad case under the current project knowledge surface.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          type: { type: 'string', enum: ['corner', 'bad'], description: 'Case type.' },
+          title: { type: 'string', description: 'Short case title.' },
+          trigger: { type: 'string', description: 'What action or input triggered this case.' },
+          behavior: { type: 'string', description: 'What the agent or system did incorrectly.' },
+          rootCause: { type: 'string', description: 'Optional root cause analysis.' },
+          impact: { type: 'string', description: 'Optional impact summary.' },
+          workaround: { type: 'string', description: 'Optional workaround or fix.' },
+          prevention: { type: 'string', description: 'Optional prevention guidance.' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Optional domain tags.' },
+          timestamp: { type: 'string', description: 'Optional ISO-8601 timestamp override.' },
+        },
+        required: ['type', 'title', 'trigger', 'behavior'],
+      },
+    },
+    {
+      name: 'agenticos_list_cases',
+      description: 'List recorded corner cases and bad cases for the current project or across all managed projects.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. Use "all" to search all active managed projects.' },
+          type: { type: 'string', enum: ['corner', 'bad', 'all'], description: 'Optional case type filter.' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Optional tag filter. All supplied tags must match.' },
+        },
       },
     },
     {
@@ -374,6 +407,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await listProjects() }] };
     case 'agenticos_record':
       return { content: [{ type: 'text', text: await recordSession(args) }] };
+    case 'agenticos_record_case':
+      return { content: [{ type: 'text', text: await runRecordCase(args ?? {}) }] };
+    case 'agenticos_list_cases':
+      return { content: [{ type: 'text', text: await runListCases(args ?? {}) }] };
     case 'agenticos_save':
       return { content: [{ type: 'text', text: await saveState(args) }] };
     case 'agenticos_status':
