@@ -5,6 +5,7 @@ import yaml from 'yaml';
 import { checkStandardKitUpgrade } from './standard-kit.js';
 import { analyzeCanonicalRepoSync, type CanonicalRepoSyncDetails } from './canonical-checkout-sync.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from './agent-context-paths.js';
+import { assessVersionedEntrySurfaceState } from './versioned-entry-surface-state.js';
 
 export interface HealthArgs {
   repo_path: string;
@@ -15,7 +16,7 @@ export interface HealthArgs {
 }
 
 export interface HealthGate {
-  gate: 'repo_sync' | 'entry_surface_refresh' | 'guardrail_evidence' | 'standard_kit';
+  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'standard_kit';
   status: 'PASS' | 'WARN' | 'BLOCK';
   summary: string;
 }
@@ -67,16 +68,13 @@ function resolveRuntimeManagedEntries(projectYaml: any | null): string[] {
   }
 
   const contextPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
-  const toRelative = (path: string, options?: { directory?: boolean }): string => {
-    const normalized = path.replace(/\\/g, '/').replace(/^\.\/+/, '');
-    return options?.directory && !normalized.endsWith('/') ? `${normalized}/` : normalized;
-  };
+  const toRelative = (path: string): string => path.replace(/\\/g, '/').replace(/^\.\/+/, '');
 
   return [
     toRelative(contextPaths.quickStartPath),
     toRelative(contextPaths.statePath),
     toRelative(contextPaths.markerPath),
-    toRelative(contextPaths.conversationsDir, { directory: true }),
+    toRelative(contextPaths.conversationsDir),
     'CLAUDE.md',
     'AGENTS.md',
   ];
@@ -190,6 +188,11 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     remoteBaseBranch,
     runtimeManagedEntries: resolveRuntimeManagedEntries(projectYaml),
   });
+  const versionedEntrySurfaceState = assessVersionedEntrySurfaceState({
+    projectYaml,
+    state,
+    projectPath: args.project_path,
+  });
 
   const gates: HealthGate[] = [
     {
@@ -198,8 +201,19 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
       summary: repoSync.summary,
     },
     buildEntrySurfaceGate(state),
-    buildGuardrailGate(state),
   ];
+
+  if (versionedEntrySurfaceState.applies) {
+    gates.push({
+      gate: 'versioned_entry_surface_state',
+      status: versionedEntrySurfaceState.status,
+      summary: versionedEntrySurfaceState.summary,
+    });
+  }
+
+  gates.push(
+    buildGuardrailGate(state),
+  );
 
   const standardKitGate = await buildStandardKitGate(args);
   if (standardKitGate) {

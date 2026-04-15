@@ -384,6 +384,9 @@ Evaluate whether a canonical checkout and project context are fresh enough to tr
 
 **Returns**: JSON with overall `PASS`, `WARN`, or `BLOCK`
 
+For `github_versioned` projects, the health result also distinguishes stale
+committed entry-surface state from canonical checkout runtime drift.
+
 ### agenticos_canonical_sync
 Plan, snapshot, or prepare runtime-managed cleanup for a canonical checkout before manual branch resync.
 

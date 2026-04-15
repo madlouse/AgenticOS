@@ -16,6 +16,10 @@ import {
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
 import { bindSessionProject, getSessionProjectBinding } from '../utils/session-context.js';
+import {
+  assessVersionedEntrySurfaceState,
+  type VersionedEntrySurfaceAssessment,
+} from '../utils/versioned-entry-surface-state.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -44,6 +48,7 @@ interface GuardrailEvidenceState {
 
 interface IssueBootstrapSummaryInput {
   issueBootstrap?: IssueBootstrapState;
+  committedSnapshotAssessment?: VersionedEntrySurfaceAssessment;
 }
 
 interface SwitchContextSummaryInput {
@@ -51,6 +56,7 @@ interface SwitchContextSummaryInput {
   quickStart?: string;
   state?: any;
   lastRecorded?: string;
+  committedSnapshotAssessment?: VersionedEntrySurfaceAssessment;
 }
 
 function formatTimestamp(value?: string): string | null {
@@ -101,10 +107,38 @@ function summarizeGuardrailDetail(entry: GuardrailEvidenceEntry): string | null 
   return null;
 }
 
-function buildGuardrailSummaryLines(guardrailEvidence?: GuardrailEvidenceState): string[] {
+function usesCommittedSnapshotLabels(assessment?: VersionedEntrySurfaceAssessment): boolean {
+  return Boolean(assessment?.applies && assessment.freshness !== 'fresh');
+}
+
+function buildCommittedSnapshotSummaryLines(assessment?: VersionedEntrySurfaceAssessment): string[] {
+  if (!assessment?.applies || assessment.freshness === 'fresh') {
+    return [];
+  }
+
+  const lines = [
+    assessment.freshness === 'stale'
+      ? '⚠️ Committed snapshot: stale for canonical mainline use'
+      : '⚠️ Committed snapshot: freshness is not proven for canonical mainline use',
+  ];
+
+  for (const reason of assessment.reasons.slice(0, 3)) {
+    lines.push(`   Reason: ${reason}`);
+  }
+
+  return lines;
+}
+
+function buildGuardrailSummaryLines(
+  guardrailEvidence?: GuardrailEvidenceState,
+  committedSnapshotAssessment?: VersionedEntrySurfaceAssessment,
+): string[] {
+  const label = usesCommittedSnapshotLabels(committedSnapshotAssessment)
+    ? '🛡️ Latest committed guardrail snapshot'
+    : '🛡️ Latest guardrail';
   const latestGuardrail = getLatestGuardrailEntry(guardrailEvidence);
   if (!latestGuardrail?.command) {
-    return ['🛡️ Latest guardrail: None recorded'];
+    return [`${label}: ${usesCommittedSnapshotLabels(committedSnapshotAssessment) ? 'freshness not proven' : 'None recorded'}`];
   }
 
   const status = latestGuardrail.result?.status || 'UNKNOWN';
@@ -113,7 +147,7 @@ function buildGuardrailSummaryLines(guardrailEvidence?: GuardrailEvidenceState):
     formatTimestamp(guardrailEvidence?.updated_at) ||
     'Unknown time';
 
-  const lines = [`🛡️ Latest guardrail: ${latestGuardrail.command} -> ${status} (${recordedAt})`];
+  const lines = [`${label}: ${latestGuardrail.command} -> ${status} (${recordedAt})`];
 
   if (latestGuardrail.issue_id) {
     lines.push(`   Issue: #${latestGuardrail.issue_id}`);
@@ -139,9 +173,12 @@ function summarizeIssueBootstrapDetail(entry: IssueBootstrapRecord): string | nu
 }
 
 function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): string[] {
+  const label = usesCommittedSnapshotLabels(input.committedSnapshotAssessment)
+    ? '🧭 Latest committed issue bootstrap snapshot'
+    : '🧭 Latest issue bootstrap';
   const latestBootstrap = input.issueBootstrap?.latest;
   if (!latestBootstrap) {
-    return ['🧭 Latest issue bootstrap: None recorded'];
+    return [`${label}: ${usesCommittedSnapshotLabels(input.committedSnapshotAssessment) ? 'freshness not proven' : 'None recorded'}`];
   }
 
   const recordedAt =
@@ -150,7 +187,7 @@ function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): str
     'Unknown time';
   const issueLabel = latestBootstrap.issue_id ? `#${latestBootstrap.issue_id}` : 'unknown issue';
   const branchDetail = latestBootstrap.current_branch ? ` on ${latestBootstrap.current_branch}` : '';
-  const lines = [`🧭 Latest issue bootstrap: ${issueLabel}${branchDetail} (${recordedAt})`];
+  const lines = [`${label}: ${issueLabel}${branchDetail} (${recordedAt})`];
 
   if (latestBootstrap.issue_title) {
     lines.push(`   Title: ${latestBootstrap.issue_title}`);
@@ -182,6 +219,9 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
   const decisions = Array.isArray(state.working_memory?.decisions) ? state.working_memory.decisions : [];
   const task = state.current_task;
   const description = input.description || extractQuickStartSummary(input.quickStart);
+  const taskLabel = usesCommittedSnapshotLabels(input.committedSnapshotAssessment)
+    ? '🎯 Current committed task snapshot'
+    : '🎯 Current task';
 
   if (input.lastRecorded) {
     const recordedAt = formatTimestamp(input.lastRecorded);
@@ -191,7 +231,7 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
   }
 
   if (task?.title) {
-    lines.push(`🎯 Current task: ${task.title} (${task.status || 'unknown'})`);
+    lines.push(`${taskLabel}: ${task.title} (${task.status || 'unknown'})`);
   }
 
   if (pending.length > 0) {
@@ -318,18 +358,29 @@ export async function switchProject(args: any): Promise<string> {
   }
 
   const bootstrap = bootstrapNotes.length > 0 ? '\n\n' + bootstrapNotes.join('\n') : '';
-  const guardrailSummary = buildGuardrailSummaryLines(state?.guardrail_evidence as GuardrailEvidenceState | undefined);
+  const committedSnapshotAssessment = assessVersionedEntrySurfaceState({
+    projectYaml,
+    state,
+    projectPath: found.path,
+  });
+  const committedSnapshotSummary = buildCommittedSnapshotSummaryLines(committedSnapshotAssessment);
+  const guardrailSummary = buildGuardrailSummaryLines(
+    state?.guardrail_evidence as GuardrailEvidenceState | undefined,
+    committedSnapshotAssessment,
+  );
   const issueBootstrapSummary = buildIssueBootstrapSummaryLines({
     issueBootstrap: state?.issue_bootstrap as IssueBootstrapState | undefined,
+    committedSnapshotAssessment,
   });
   const contextSummary = buildSwitchContextSummaryLines({
     description,
     quickStart,
     state,
     lastRecorded: found.last_recorded,
+    committedSnapshotAssessment,
   });
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
@@ -406,16 +457,30 @@ export async function getStatus(args: any = {}): Promise<string> {
     ));
   } catch {}
 
-  lines.push(...buildGuardrailSummaryLines(state.guardrail_evidence as GuardrailEvidenceState | undefined));
+  const committedSnapshotAssessment = assessVersionedEntrySurfaceState({
+    projectYaml: resolved.projectYaml,
+    state,
+    projectPath: resolved.projectPath,
+  });
+
+  lines.push(...buildCommittedSnapshotSummaryLines(committedSnapshotAssessment));
+  lines.push(...buildGuardrailSummaryLines(
+    state.guardrail_evidence as GuardrailEvidenceState | undefined,
+    committedSnapshotAssessment,
+  ));
   lines.push(...buildIssueBootstrapSummaryLines({
     issueBootstrap: state.issue_bootstrap as IssueBootstrapState | undefined,
+    committedSnapshotAssessment,
   }));
 
   lines.push('');
+  const taskLabel = usesCommittedSnapshotLabels(committedSnapshotAssessment)
+    ? '🎯 Current committed task snapshot'
+    : '🎯 Current task';
   if (state.current_task) {
-    lines.push(`🎯 Current task: ${state.current_task.title || 'Untitled'} (${state.current_task.status || 'unknown'})`);
+    lines.push(`${taskLabel}: ${state.current_task.title || 'Untitled'} (${state.current_task.status || 'unknown'})`);
   } else {
-    lines.push(`🎯 Current task: None`);
+    lines.push(`${taskLabel}: None`);
   }
 
   const pending = state.working_memory?.pending || [];

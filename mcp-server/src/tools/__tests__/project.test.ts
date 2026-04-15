@@ -47,6 +47,7 @@ vi.mock('../../utils/distill.js', () => ({
 import { switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
+import * as distill from '../../utils/distill.js';
 import * as fs from 'fs';
 import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
 
@@ -57,6 +58,9 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
 const registryMock = registry as typeof registry & {
   loadRegistry: ReturnType<typeof vi.fn>;
   patchProjectMetadata: ReturnType<typeof vi.fn>;
+};
+const distillMock = distill as typeof distill & {
+  extractTemplateVersion: ReturnType<typeof vi.fn>;
 };
 const fsMock = fs as typeof fs & { existsSync: ReturnType<typeof vi.fn> };
 
@@ -245,6 +249,65 @@ describe('switchProject', () => {
     const writeCalls = fsPromisesMock.writeFile.mock.calls;
     const claudeMdCall = writeCalls.find((c) => c[0].endsWith('CLAUDE.md'));
     expect(claudeMdCall).toBeDefined();
+  });
+
+  it('upgrades stale CLAUDE.md and AGENTS.md templates when both files already exist', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsMock.existsSync.mockReturnValue(true);
+    distillMock.extractTemplateVersion.mockReturnValue(1);
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          working_memory: { pending: [], decisions: [] },
+        });
+      }
+      if (path.endsWith('/.context/quick-start.md')) {
+        return '# Quick Start\n\nProject summary';
+      }
+      if (path.endsWith('/CLAUDE.md')) {
+        return '# CLAUDE.md\n\nOld';
+      }
+      if (path.endsWith('/AGENTS.md')) {
+        return '# AGENTS.md\n\nOld';
+      }
+      return '';
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('📝 CLAUDE.md upgraded: v1 → v2 (user content preserved)');
+    expect(result).toContain('📝 AGENTS.md upgraded: v1 → v2');
+    expect(fsPromisesMock.writeFile).toHaveBeenCalledWith(
+      '/test/path/CLAUDE.md',
+      expect.any(String),
+      'utf-8',
+    );
+    expect(fsPromisesMock.writeFile).toHaveBeenCalledWith(
+      '/test/path/AGENTS.md',
+      expect.any(String),
+      'utf-8',
+    );
   });
 
   it('shows a friendly guardrail placeholder in switch output when no evidence exists', async () => {
@@ -453,6 +516,63 @@ describe('switchProject', () => {
     expect(fsPromisesMock.readFile).toHaveBeenCalledWith('/workspace/projects/agenticos/standards/.context/quick-start.md', 'utf-8');
     expect(result).toContain('/workspace/projects/agenticos/standards/.context/quick-start.md');
     expect(result).toContain('/workspace/projects/agenticos/standards/.context/state.yaml');
+  });
+
+  it('marks stale committed github-versioned switch context explicitly', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: 'Self-hosting product' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'madlouse/AgenticOS',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+        agent_context: {
+          quick_start: 'standards/.context/quick-start.md',
+          current_state: 'standards/.context/state.yaml',
+        },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        current_task: { title: 'Implement #262 concurrent runtime project resolution', status: 'in_progress' },
+        working_memory: { pending: [], decisions: [] },
+        entry_surface_refresh: { refreshed_at: '2025-01-02T12:00:00.000Z', status: 'in_progress' },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '260',
+            current_branch: 'fix/260-stop-active-project-drift-and-main-state-pollution',
+            workspace_type: 'isolated_worktree',
+            repo_path: '/tmp/worktrees/issue-260',
+          },
+        },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nCanonical quick start');
+
+    const result = await switchProject({ project: 'agenticos' });
+
+    expect(result).toContain('⚠️ Committed snapshot: stale for canonical mainline use');
+    expect(result).toContain('🛡️ Latest committed guardrail snapshot: freshness not proven');
+    expect(result).toContain('🧭 Latest committed issue bootstrap snapshot: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
+    expect(result).toContain('🎯 Current committed task snapshot: Implement #262 concurrent runtime project resolution (in_progress)');
   });
 
   it('falls back to quick-start summary when project description is missing', async () => {
@@ -1032,6 +1152,67 @@ describe('getStatus', () => {
 
     expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
     expect(result).toContain('Title: Implement bootstrap evidence');
+  });
+
+  it('marks stale committed github-versioned status explicitly', async () => {
+    bindSessionProject({
+      projectId: 'agenticos',
+      projectName: 'AgenticOS',
+      projectPath: '/workspace/projects/agenticos',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'agenticos',
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'agenticos', name: 'AgenticOS' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'madlouse/AgenticOS',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {
+        session: { last_backup: '2025-01-02T12:00:00.000Z', last_entry_surface_refresh: '2025-01-02T12:00:00.000Z' },
+        current_task: { title: 'Implement #262 concurrent runtime project resolution', status: 'in_progress' },
+        working_memory: { pending: [], decisions: [] },
+        entry_surface_refresh: { refreshed_at: '2025-01-02T12:00:00.000Z', status: 'in_progress' },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '260',
+            issue_title: 'Stop active-project drift',
+            current_branch: 'fix/260-stop-active-project-drift-and-main-state-pollution',
+            workspace_type: 'isolated_worktree',
+            repo_path: '/tmp/worktrees/issue-260',
+          },
+        },
+      }
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('⚠️ Committed snapshot: stale for canonical mainline use');
+    expect(result).toContain('🛡️ Latest committed guardrail snapshot: freshness not proven');
+    expect(result).toContain('🧭 Latest committed issue bootstrap snapshot: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
+    expect(result).toContain('🎯 Current committed task snapshot: Implement #262 concurrent runtime project resolution (in_progress)');
   });
 
   it('surfaces the public_distilled transcript contract in status output', async () => {
