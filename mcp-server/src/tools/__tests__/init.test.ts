@@ -30,6 +30,10 @@ vi.mock('yaml', () => ({
   default: yamlMock,
 }));
 
+vi.mock('../../utils/canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(async () => ({ blocked: false })),
+}));
+
 // Mock the distill utils module
 vi.mock('../utils/distill.js', () => ({
   generateClaudeMd: vi.fn(() => '# CLAUDE.md\n\nMocked CLAUDE.md content'),
