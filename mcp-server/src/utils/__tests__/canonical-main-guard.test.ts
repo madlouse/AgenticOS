@@ -47,4 +47,30 @@ describe('detectCanonicalMainWriteProtection', () => {
     expect(result.blocked).toBe(false);
     expect(result.workspace_type).toBe('isolated_worktree');
   });
+
+  it('fails closed when git inspection cannot determine workspace safety', async () => {
+    execAsyncMock.mockRejectedValue(new Error('git unavailable'));
+
+    const result = await detectCanonicalMainWriteProtection('/workspace/root');
+
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toContain('failed to verify canonical main write protection');
+  });
+
+  it('allows non-git runtime directories', async () => {
+    execAsyncMock.mockRejectedValue(new Error('fatal: not a git repository'));
+
+    const result = await detectCanonicalMainWriteProtection('/runtime/home');
+
+    expect(result.blocked).toBe(false);
+  });
+
+  it('returns the generic failure reason when git inspection throws a non-Error value', async () => {
+    execAsyncMock.mockRejectedValue('boom');
+
+    const result = await detectCanonicalMainWriteProtection('/workspace/root');
+
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toBe('failed to verify canonical main write protection');
+  });
 });

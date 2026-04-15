@@ -7,7 +7,7 @@ import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeM
 import { writeFile } from 'fs/promises';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../utils/project-target.js';
-import { type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
+import { loadLatestGuardrailState, type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
 import { resolveManagedProjectContextDisplayPaths } from '../utils/agent-context-paths.js';
 import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
 import {
@@ -308,6 +308,7 @@ export async function switchProject(args: any): Promise<string> {
 
   let description = '';
   let state: any = undefined;
+  let displayState: any = undefined;
   let quickStart = '';
   description = projectYaml?.meta?.description || '';
   const contextPaths = resolveManagedProjectContextPaths(found.path, projectYaml);
@@ -315,6 +316,15 @@ export async function switchProject(args: any): Promise<string> {
   try {
     state = yaml.parse(await readFile(contextPaths.statePath, 'utf-8'));
   } catch {}
+  try {
+    const loadedGuardrailState = await loadLatestGuardrailState({
+      project_id: found.id,
+      committed_state_path: contextPaths.statePath,
+    });
+    displayState = loadedGuardrailState.state;
+  } catch {
+    displayState = state;
+  }
   try {
     quickStart = await readFile(contextPaths.quickStartPath, 'utf-8');
   } catch {}
@@ -365,11 +375,11 @@ export async function switchProject(args: any): Promise<string> {
   });
   const committedSnapshotSummary = buildCommittedSnapshotSummaryLines(committedSnapshotAssessment);
   const guardrailSummary = buildGuardrailSummaryLines(
-    state?.guardrail_evidence as GuardrailEvidenceState | undefined,
+    displayState?.guardrail_evidence as GuardrailEvidenceState | undefined,
     committedSnapshotAssessment,
   );
   const issueBootstrapSummary = buildIssueBootstrapSummaryLines({
-    issueBootstrap: state?.issue_bootstrap as IssueBootstrapState | undefined,
+    issueBootstrap: displayState?.issue_bootstrap as IssueBootstrapState | undefined,
     committedSnapshotAssessment,
   });
   const contextSummary = buildSwitchContextSummaryLines({
@@ -423,11 +433,21 @@ export async function getStatus(args: any = {}): Promise<string> {
 
   const { project, statePath } = resolved;
   let state: any = {};
+  let displayState: any = {};
   try {
     const content = await readFile(statePath, 'utf-8');
     state = yaml.parse(content) || {};
   } catch {
     return `❌ Failed to read state.yaml for project "${project.name}"`;
+  }
+  try {
+    const loadedGuardrailState = await loadLatestGuardrailState({
+      project_id: project.id,
+      committed_state_path: statePath,
+    });
+    displayState = loadedGuardrailState.state;
+  } catch {
+    displayState = state;
   }
 
   const lines: string[] = [];
@@ -465,11 +485,11 @@ export async function getStatus(args: any = {}): Promise<string> {
 
   lines.push(...buildCommittedSnapshotSummaryLines(committedSnapshotAssessment));
   lines.push(...buildGuardrailSummaryLines(
-    state.guardrail_evidence as GuardrailEvidenceState | undefined,
+    displayState.guardrail_evidence as GuardrailEvidenceState | undefined,
     committedSnapshotAssessment,
   ));
   lines.push(...buildIssueBootstrapSummaryLines({
-    issueBootstrap: state.issue_bootstrap as IssueBootstrapState | undefined,
+    issueBootstrap: displayState.issue_bootstrap as IssueBootstrapState | undefined,
     committedSnapshotAssessment,
   }));
 

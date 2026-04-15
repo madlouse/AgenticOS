@@ -1,9 +1,7 @@
-import { readFile } from 'fs/promises';
 import { exec } from 'child_process';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
-import yaml from 'yaml';
-import { extractLatestIssueBootstrap } from '../utils/guardrail-evidence.js';
+import { extractLatestIssueBootstrap, loadLatestGuardrailState } from '../utils/guardrail-evidence.js';
 import {
   isImplementationAffectingTask,
   resolveGuardrailProjectTarget,
@@ -183,10 +181,14 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
   let state: any = {};
   if (result.target_project) {
     try {
-      state = yaml.parse(await readFile(result.target_project.state_path, 'utf-8')) || {};
+      const loadedGuardrailState = await loadLatestGuardrailState({
+        project_id: result.target_project.id,
+        committed_state_path: result.target_project.state_path,
+      });
+      state = loadedGuardrailState.state;
     } catch {
-      result.block_reasons.push(`managed project state is missing or unreadable: ${result.target_project.state_path}`);
-      result.recovery_actions.push('ensure the managed project state exists before using the edit guard');
+      result.block_reasons.push(`managed project guardrail state is missing or unreadable: ${result.target_project.state_path}`);
+      result.recovery_actions.push('ensure the managed project guardrail state exists before using the edit guard');
     }
   }
 
