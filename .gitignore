@@ -31,6 +31,7 @@ mcp-server/build/
 
 # Runtime-only state
 .runtime/
+.agent-workspace/
 .claude/worktrees/
 .private/
 .meta/transcripts/

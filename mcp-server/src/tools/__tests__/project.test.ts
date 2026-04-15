@@ -5,6 +5,7 @@ const yamlMock = vi.hoisted(() => ({
   parse: vi.fn(),
   stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
 }));
+const loadLatestGuardrailStateMock = vi.hoisted(() => vi.fn());
 
 // Mock modules
 vi.mock('fs/promises', () => ({
@@ -12,6 +13,9 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
   access: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
+  stat: vi.fn(),
 }));
 
 vi.mock('fs', () => ({
@@ -44,6 +48,10 @@ vi.mock('../../utils/distill.js', () => ({
   extractTemplateVersion: vi.fn(() => 2),
 }));
 
+vi.mock('../../utils/guardrail-evidence.js', () => ({
+  loadLatestGuardrailState: loadLatestGuardrailStateMock,
+}));
+
 import { switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
@@ -74,6 +82,19 @@ function mockStatusReads(projectYaml: unknown, state: unknown | Error = {}): voi
     }
     return JSON.stringify(state);
   });
+  if (state instanceof Error) {
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: null,
+      state: {},
+      state_path: null,
+    });
+    return;
+  }
+  loadLatestGuardrailStateMock.mockResolvedValue({
+    source: 'committed',
+    state,
+    state_path: '/mock/state.yaml',
+  });
 }
 
 describe('switchProject', () => {
@@ -84,6 +105,11 @@ describe('switchProject', () => {
     fsMock.existsSync.mockReturnValue(false);
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: null,
+      state: {},
+      state_path: null,
     });
     fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
       meta: { description: '' },
@@ -187,6 +213,52 @@ describe('switchProject', () => {
     expect(result).toContain('Project B');
     expect(result).toContain('project-a');
     expect(result).toContain('project-b');
+  });
+
+  it('returns a topology initialization error when project metadata cannot be read', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockRejectedValue(new Error('missing project yaml'));
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('has not completed source-control topology initialization');
+  });
+
+  it('returns a topology initialization error when project metadata parses to null', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue('null');
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('has not completed source-control topology initialization');
   });
 
   it('updates last_accessed timestamp on switch', async () => {
@@ -341,6 +413,126 @@ describe('switchProject', () => {
     expect(result).toContain('🛡️ Latest guardrail: None recorded');
   });
 
+  it('shows no guardrail when last command is preflight but the runtime slot is missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_preflight',
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🛡️ Latest guardrail: None recorded');
+  });
+
+  it('shows no guardrail when last command is branch bootstrap but the runtime slot is missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_branch_bootstrap',
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🛡️ Latest guardrail: None recorded');
+  });
+
+  it('shows no guardrail when last command is pr-scope-check but the runtime slot is missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_pr_scope_check',
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🛡️ Latest guardrail: None recorded');
+  });
+
   it('shows the latest guardrail summary in switch output when evidence exists', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -358,25 +550,33 @@ describe('switchProject', () => {
       ],
     });
 
+    const guardrailState = {
+      guardrail_evidence: {
+        updated_at: '2025-01-02T14:00:00.000Z',
+        last_command: 'agenticos_preflight',
+        preflight: {
+          command: 'agenticos_preflight',
+          recorded_at: '2025-01-02T14:00:00.000Z',
+          issue_id: '76',
+          result: {
+            status: 'REDIRECT',
+            redirect_actions: ['create an isolated issue branch/worktree before implementation'],
+          },
+        },
+      },
+    };
     fsPromisesMock.readFile.mockResolvedValue(
       JSON.stringify({
         meta: { description: '' },
         source_control: { topology: 'local_directory_only' },
-        guardrail_evidence: {
-          updated_at: '2025-01-02T14:00:00.000Z',
-          last_command: 'agenticos_preflight',
-          preflight: {
-            command: 'agenticos_preflight',
-            recorded_at: '2025-01-02T14:00:00.000Z',
-            issue_id: '76',
-            result: {
-              status: 'REDIRECT',
-              redirect_actions: ['create an isolated issue branch/worktree before implementation'],
-            },
-          },
-        },
+        ...guardrailState,
       })
     );
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state: guardrailState,
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+    });
 
     const result = await switchProject({ project: 'my-project' });
 
@@ -422,6 +622,23 @@ describe('switchProject', () => {
         },
       }))
       .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state: {
+        issue_bootstrap: {
+          updated_at: '2025-01-02T15:00:00.000Z',
+          latest: {
+            issue_id: '179',
+            issue_title: 'Implement bootstrap evidence',
+            recorded_at: '2025-01-02T15:00:00.000Z',
+            current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            startup_context_paths: ['.project.yaml', '.context/quick-start.md'],
+            additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
+          },
+        },
+      },
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+    });
 
     const result = await switchProject({ project: 'my-project' });
 
@@ -566,6 +783,20 @@ describe('switchProject', () => {
         },
       }))
       .mockResolvedValueOnce('# Quick Start\n\nCanonical quick start');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/agenticos/guardrail-state.yaml',
+      state: {
+        issue_bootstrap: {
+          latest: {
+            issue_id: '260',
+            current_branch: 'fix/260-stop-active-project-drift-and-main-state-pollution',
+            workspace_type: 'isolated_worktree',
+            repo_path: '/tmp/worktrees/issue-260',
+          },
+        },
+      },
+    });
 
     const result = await switchProject({ project: 'agenticos' });
 
@@ -573,6 +804,434 @@ describe('switchProject', () => {
     expect(result).toContain('🛡️ Latest committed guardrail snapshot: freshness not proven');
     expect(result).toContain('🧭 Latest committed issue bootstrap snapshot: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
     expect(result).toContain('🎯 Current committed task snapshot: Implement #262 concurrent runtime project resolution (in_progress)');
+  });
+
+  it('prefers runtime guardrail and bootstrap summaries in switch output', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: 'Self-hosting product' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'madlouse/AgenticOS',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+        agent_context: {
+          quick_start: 'standards/.context/quick-start.md',
+          current_state: 'standards/.context/state.yaml',
+        },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        current_task: { title: 'Canonical state', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '236',
+            current_branch: 'chore/236-old-bootstrap',
+          },
+        },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nCanonical quick start');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/agenticos/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_preflight',
+          updated_at: '2025-01-03T15:00:00.000Z',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2025-01-03T15:00:00.000Z',
+            issue_id: '294',
+            result: { status: 'PASS', summary: 'runtime preflight passed' },
+          },
+        },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '294',
+            current_branch: 'chore/294-eliminate-canonical-main-runtime-write-paths',
+          },
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'agenticos' });
+
+    expect(result).toContain('Issue: #294');
+    expect(result).toContain('#294 on chore/294-eliminate-canonical-main-runtime-write-paths');
+    expect(result).not.toContain('#236 on chore/236-old-bootstrap');
+  });
+
+  it('shows branch bootstrap guardrail summaries with fallback timestamp text', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_branch_bootstrap',
+          updated_at: 'not-a-date',
+          branch_bootstrap: {
+            command: 'agenticos_branch_bootstrap',
+            result: {
+              status: 'CREATED',
+              branch_name: 'feat/71-runtime-guardrails',
+            },
+          },
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('agenticos_branch_bootstrap -> CREATED (Unknown time)');
+    expect(result).toContain('Detail: created feat/71-runtime-guardrails');
+  });
+
+  it('shows pr-scope guardrail summaries and preserves summary text', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_pr_scope_check',
+          pr_scope_check: {
+            command: 'agenticos_pr_scope_check',
+            recorded_at: '2025-01-03T10:00:00.000Z',
+            issue_id: '88',
+            result: {
+              status: 'PASS',
+              summary: 'diff scope matches declared issue boundary',
+            },
+          },
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('agenticos_pr_scope_check -> PASS');
+    expect(result).toContain('Issue: #88');
+    expect(result).toContain('diff scope matches declared issue boundary');
+  });
+
+  it('shows unknown guardrail status when the latest entry has no result payload', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_preflight',
+          preflight: {
+            command: 'agenticos_preflight',
+          },
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('agenticos_preflight -> UNKNOWN (Unknown time)');
+  });
+
+  it('uses branch bootstrap notes when no branch name is recorded', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_branch_bootstrap',
+          branch_bootstrap: {
+            command: 'agenticos_branch_bootstrap',
+            result: {
+              status: 'CREATED',
+              notes: ['created worktree without explicit branch label'],
+            },
+          },
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('created worktree without explicit branch label');
+  });
+
+  it('omits guardrail detail when the latest entry has no detail-bearing fields', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_preflight',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2025-01-03T10:00:00.000Z',
+            result: {
+              status: 'PASS',
+            },
+          },
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('agenticos_preflight -> PASS');
+    expect(result).not.toContain('Detail:');
+  });
+
+  it('shows unknown issue bootstrap labels when issue metadata is missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/my-project/guardrail-state.yaml',
+      state: {
+        issue_bootstrap: {
+          updated_at: 'bad-date',
+          latest: {},
+        },
+      },
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🧭 Latest issue bootstrap: unknown issue (Unknown time)');
+  });
+
+  it('surfaces a registry metadata patch warning during switch bootstrap', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    registryMock.patchProjectMetadata.mockRejectedValue(new Error('registry busy'));
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/quick-start.md')) {
+        return '# Only headings\n- ignored';
+      }
+      return JSON.stringify({});
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('⚠️ Session bound, but registry metadata was not updated: registry busy');
+  });
+
+  it('falls back to committed switch state when runtime guardrail loading fails', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '179',
+            current_branch: 'feat/179-issue-start-bootstrap-evidence',
+          },
+        },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\nProject summary');
+    loadLatestGuardrailStateMock.mockRejectedValue(new Error('runtime unavailable'));
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('#179 on feat/179-issue-start-bootstrap-evidence');
   });
 
   it('falls back to quick-start summary when project description is missing', async () => {
@@ -610,6 +1269,84 @@ describe('switchProject', () => {
     const result = await switchProject({ project: 'my-project' });
 
     expect(result).toContain('📖 Project summary: Fallback project summary from quick-start.');
+  });
+
+  it('does not infer a project summary from heading-only quick-start content and falls back task status to unknown', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile
+      .mockResolvedValueOnce(JSON.stringify({
+        meta: { description: '' },
+        source_control: { topology: 'local_directory_only' },
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        current_task: {
+          title: 'Runtime-only summary',
+        },
+        working_memory: {
+          pending: [],
+          decisions: [],
+        },
+      }))
+      .mockResolvedValueOnce('# Quick Start\n\n# Heading Only\n- ignored bullet');
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('🎯 Current task: Runtime-only summary (unknown)');
+    expect(result).not.toContain('📖 Project summary:');
+  });
+
+  it('switches successfully when committed state and quick-start files are missing', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/CLAUDE.md')) {
+        return '# CLAUDE.md\n\nCurrent';
+      }
+      if (path.endsWith('/AGENTS.md')) {
+        return '# AGENTS.md\n\nCurrent';
+      }
+      throw new Error(`missing: ${path}`);
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('✅ Switched to project "My Project"');
+    expect(result).not.toContain('📝');
   });
 
   it('surfaces the public_distilled transcript contract in switch output', async () => {
@@ -1152,6 +1889,211 @@ describe('getStatus', () => {
 
     expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
     expect(result).toContain('Title: Implement bootstrap evidence');
+  });
+
+  it('prefers runtime guardrail and bootstrap summaries in status output', async () => {
+    bindSessionProject({
+      projectId: 'agenticos',
+      projectName: 'AgenticOS',
+      projectPath: '/workspace/projects/agenticos',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'agenticos',
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'agenticos', name: 'AgenticOS' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'madlouse/AgenticOS',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {
+        current_task: { title: 'Canonical status', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '236',
+            current_branch: 'chore/236-old-bootstrap',
+          },
+        },
+      }
+    );
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/home/testuser/AgenticOS/.agent-workspace/projects/agenticos/guardrail-state.yaml',
+      state: {
+        guardrail_evidence: {
+          last_command: 'agenticos_preflight',
+          updated_at: '2025-01-03T15:00:00.000Z',
+          preflight: {
+            command: 'agenticos_preflight',
+            recorded_at: '2025-01-03T15:00:00.000Z',
+            issue_id: '294',
+            result: { status: 'PASS', summary: 'runtime preflight passed' },
+          },
+        },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '294',
+            current_branch: 'chore/294-eliminate-canonical-main-runtime-write-paths',
+          },
+        },
+      },
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('Issue: #294');
+    expect(result).toContain('#294 on chore/294-eliminate-canonical-main-runtime-write-paths');
+    expect(result).not.toContain('#236 on chore/236-old-bootstrap');
+  });
+
+  it('falls back to committed status state when runtime guardrail loading fails', async () => {
+    bindSessionProject({
+      projectId: 'my-project',
+      projectName: 'My Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'my-project',
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'my-project', name: 'My Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          latest: {
+            issue_id: '179',
+            current_branch: 'feat/179-issue-start-bootstrap-evidence',
+          },
+        },
+      }
+    );
+    loadLatestGuardrailStateMock.mockRejectedValue(new Error('runtime unavailable'));
+
+    const result = await getStatus();
+
+    expect(result).toContain('#179 on feat/179-issue-start-bootstrap-evidence');
+  });
+
+  it('treats a null parsed status state as an empty state object', async () => {
+    bindSessionProject({
+      projectId: 'my-project',
+      projectName: 'My Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'my-project',
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'my-project', name: 'My Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      return 'null';
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'committed',
+      state: {},
+      state_path: '/mock/state.yaml',
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('🎯 Current task: None');
+  });
+
+  it('uses task fallback labels when status task metadata is incomplete', async () => {
+    bindSessionProject({
+      projectId: 'my-project',
+      projectName: 'My Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'my-project',
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'my-project', name: 'My Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
+        current_task: {},
+        working_memory: { pending: [], decisions: [] },
+      }
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('🎯 Current task: Untitled (unknown)');
+    expect(result).toContain('📋 Pending: None');
   });
 
   it('marks stale committed github-versioned status explicitly', async () => {

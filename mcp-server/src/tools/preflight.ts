@@ -1,9 +1,12 @@
 import { exec } from 'child_process';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
-import { readFile } from 'fs/promises';
-import yaml from 'yaml';
-import { extractLatestIssueBootstrap, persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
+import {
+  extractLatestIssueBootstrap,
+  loadLatestGuardrailState,
+  persistGuardrailEvidence,
+  type GuardrailPersistenceResult,
+} from '../utils/guardrail-evidence.js';
 import {
   isImplementationAffectingTask,
   resolveGuardrailProjectTarget,
@@ -309,8 +312,11 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
 
     if (projectResolution.targetProject && result.worktree_ok) {
       try {
-        const state = yaml.parse(await readFile(projectResolution.targetProject.statePath, 'utf-8')) || {};
-        const latestBootstrap = extractLatestIssueBootstrap(state);
+        const guardrailState = await loadLatestGuardrailState({
+          project_id: projectResolution.targetProject.id,
+          committed_state_path: projectResolution.targetProject.statePath,
+        });
+        const latestBootstrap = extractLatestIssueBootstrap(guardrailState.state);
         result.evidence.issue_bootstrap = latestBootstrap
           ? {
               recorded_at: latestBootstrap.recorded_at || null,
@@ -353,7 +359,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
           }
         }
       } catch {
-        result.block_reasons.push(`managed project state is missing or unreadable: ${projectResolution.targetProject.statePath}`);
+        result.block_reasons.push(`managed project guardrail state is missing or unreadable: ${projectResolution.targetProject.statePath}`);
       }
     }
   } else {

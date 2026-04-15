@@ -52,7 +52,15 @@ export async function detectCanonicalMainWriteProtection(repoPath: string): Prom
       current_branch: currentBranch,
       workspace_type: workspaceType,
     };
-  } catch {
-    return { blocked: false };
+  } catch (error) {
+    if (error instanceof Error && /not a git repository/i.test(error.message)) {
+      return { blocked: false };
+    }
+    return {
+      blocked: true,
+      reason: error instanceof Error
+        ? `failed to verify canonical main write protection: ${error.message}`
+        : 'failed to verify canonical main write protection',
+    };
   }
 }

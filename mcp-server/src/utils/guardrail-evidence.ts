@@ -1,7 +1,7 @@
-import { access, readFile, writeFile } from 'fs/promises';
+import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, dirname, join, resolve, sep } from 'path';
 import yaml from 'yaml';
-import { loadRegistry } from './registry.js';
+import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { detectCanonicalMainWriteProtection } from './canonical-main-guard.js';
 
 type GuardrailCommand =
@@ -55,6 +55,12 @@ interface StateYaml {
   [key: string]: unknown;
 }
 
+export interface LoadedGuardrailState {
+  source: 'runtime' | 'committed' | null;
+  state: StateYaml;
+  state_path: string | null;
+}
+
 export interface GuardrailPersistenceResult {
   attempted: boolean;
   persisted: boolean;
@@ -80,6 +86,11 @@ interface ResolvedProjectTarget {
   id: string;
   path: string;
   statePath: string;
+}
+
+interface LoadLatestGuardrailStateArgs {
+  project_id: string;
+  committed_state_path?: string;
 }
 
 function normalizePath(path: string): string {
@@ -110,6 +121,20 @@ function getCommandSlot(command: GuardrailCommand): GuardrailEvidenceSlot {
   }
 }
 
+function getProjectGuardrailRuntimeDir(projectId: string): string {
+  return join(getAgenticOSHome(), '.agent-workspace', 'projects', encodeURIComponent(projectId));
+}
+
+function getProjectGuardrailRuntimeStatePath(projectId: string): string {
+  return join(getProjectGuardrailRuntimeDir(projectId), 'guardrail-state.yaml');
+}
+
+function getProjectGuardrailRuntimeLockPath(projectId: string): string {
+  return join(getProjectGuardrailRuntimeDir(projectId), 'guardrail-state.lock');
+}
+
+const GUARDRAIL_LOCK_STALE_MS = 30_000;
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -117,6 +142,116 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
+async function readStateYaml(path: string): Promise<StateYaml | null> {
+  try {
+    const content = await readFile(path, 'utf-8');
+    const parsed = yaml.parse(content);
+    return parsed && typeof parsed === 'object' ? parsed as StateYaml : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureRuntimeWriteAllowed(): Promise<void> {
+  const writeProtection = await detectCanonicalMainWriteProtection(getAgenticOSHome());
+  if (writeProtection.blocked) {
+    throw new Error(writeProtection.reason);
+  }
+}
+
+async function reapStaleGuardrailRuntimeLock(lockPath: string): Promise<boolean> {
+  try {
+    const lockStat = await stat(lockPath);
+    if ((Date.now() - lockStat.mtimeMs) <= GUARDRAIL_LOCK_STALE_MS) {
+      return false;
+    }
+    await rm(lockPath, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function withProjectGuardrailRuntimeLock<T>(
+  projectId: string,
+  callback: (runtimeStatePath: string) => Promise<T>,
+): Promise<T> {
+  await ensureRuntimeWriteAllowed();
+
+  const runtimeDir = getProjectGuardrailRuntimeDir(projectId);
+  const lockPath = getProjectGuardrailRuntimeLockPath(projectId);
+  await mkdir(runtimeDir, { recursive: true });
+
+  let locked = false;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await mkdir(lockPath);
+      locked = true;
+      break;
+    } catch {
+      const reapedStaleLock = await reapStaleGuardrailRuntimeLock(lockPath);
+      if (reapedStaleLock) {
+        continue;
+      }
+      await sleep(10);
+    }
+  }
+
+  if (!locked) {
+    throw new Error(`failed to acquire guardrail runtime lock at ${lockPath}`);
+  }
+
+  try {
+    return await callback(getProjectGuardrailRuntimeStatePath(projectId));
+  } finally {
+    await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function writeRuntimeGuardrailState(
+  projectId: string,
+  mutate: (state: StateYaml, runtimeStatePath: string) => void | Promise<void>,
+): Promise<string> {
+  return await withProjectGuardrailRuntimeLock(projectId, async (runtimeStatePath) => {
+    const state = (await readStateYaml(runtimeStatePath)) || {};
+    await mutate(state, runtimeStatePath);
+    const tempPath = `${runtimeStatePath}.tmp-${process.pid}-${Date.now()}`;
+    await writeFile(tempPath, yaml.stringify(state), 'utf-8');
+    await rename(tempPath, runtimeStatePath);
+    return runtimeStatePath;
+  });
+}
+
+function mergeGuardrailEvidenceState(
+  runtimeGuardrail: GuardrailEvidenceState | undefined,
+  committedGuardrail: GuardrailEvidenceState | undefined,
+): GuardrailEvidenceState | undefined {
+  if (!runtimeGuardrail && !committedGuardrail) {
+    return undefined;
+  }
+
+  return {
+    ...(committedGuardrail || {}),
+    ...(runtimeGuardrail || {}),
+    preflight: runtimeGuardrail?.preflight ?? committedGuardrail?.preflight,
+    branch_bootstrap: runtimeGuardrail?.branch_bootstrap ?? committedGuardrail?.branch_bootstrap,
+    pr_scope_check: runtimeGuardrail?.pr_scope_check ?? committedGuardrail?.pr_scope_check,
+  };
+}
+
+function mergeGuardrailState(runtimeState: StateYaml, committedState: StateYaml | null): StateYaml {
+  return {
+    ...(committedState || {}),
+    ...runtimeState,
+    guardrail_evidence: mergeGuardrailEvidenceState(runtimeState?.guardrail_evidence, committedState?.guardrail_evidence),
+    issue_bootstrap: runtimeState?.issue_bootstrap ?? committedState?.issue_bootstrap,
+  };
 }
 
 async function findProjectRootFromRepoPath(repoPath: string): Promise<ResolvedProjectTarget | null> {
@@ -235,6 +370,41 @@ async function resolveProjectTarget(repoPath: string, projectPath?: string): Pro
   return findProjectRootFromRepoPath(normalizedRepoPath);
 }
 
+export async function loadLatestGuardrailState(
+  args: LoadLatestGuardrailStateArgs,
+): Promise<LoadedGuardrailState> {
+  const runtimeStatePath = getProjectGuardrailRuntimeStatePath(args.project_id);
+  const runtimeState = await readStateYaml(runtimeStatePath);
+  const committedStatePath = typeof args.committed_state_path === 'string' && args.committed_state_path.length > 0
+    ? args.committed_state_path
+    : null;
+  const committedState = committedStatePath
+    ? await readStateYaml(committedStatePath)
+    : null;
+
+  if (runtimeState) {
+    return {
+      source: 'runtime',
+      state: mergeGuardrailState(runtimeState, committedState),
+      state_path: runtimeStatePath,
+    };
+  }
+
+  if (committedStatePath && committedState) {
+    return {
+      source: 'committed',
+      state: committedState,
+      state_path: committedStatePath,
+    };
+  }
+
+  return {
+    source: null,
+    state: {},
+    state_path: runtimeStatePath,
+  };
+}
+
 export async function persistGuardrailEvidence(
   args: PersistGuardrailEvidenceArgs,
 ): Promise<GuardrailPersistenceResult> {
@@ -259,51 +429,40 @@ export async function persistGuardrailEvidence(
     };
   }
 
-  const writeProtection = await detectCanonicalMainWriteProtection(repo_path);
-  if (writeProtection.blocked) {
+  try {
+    const statePath = await writeRuntimeGuardrailState(project.id, async (state) => {
+      if (!state.guardrail_evidence) {
+        state.guardrail_evidence = {};
+      }
+
+      const recordedAt = new Date().toISOString();
+      const slot = getCommandSlot(command);
+
+      state.guardrail_evidence.updated_at = recordedAt;
+      state.guardrail_evidence.last_command = command;
+      state.guardrail_evidence[slot] = {
+        command,
+        recorded_at: recordedAt,
+        repo_path,
+        ...payload,
+      };
+    });
+
+    return {
+      attempted: true,
+      persisted: true,
+      project_id: project.id,
+      state_path: statePath,
+    };
+  } catch (error) {
     return {
       attempted: true,
       persisted: false,
       project_id: project.id,
-      state_path: project.statePath,
-      reason: writeProtection.reason,
+      state_path: getProjectGuardrailRuntimeStatePath(project.id),
+      reason: error instanceof Error ? error.message : 'failed to persist runtime guardrail evidence',
     };
   }
-
-  const statePath = project.statePath;
-  let state: StateYaml = {};
-
-  try {
-    const content = await readFile(statePath, 'utf-8');
-    state = (yaml.parse(content) || {}) as StateYaml;
-  } catch {
-    state = {};
-  }
-
-  if (!state.guardrail_evidence) {
-    state.guardrail_evidence = {};
-  }
-
-  const recordedAt = new Date().toISOString();
-  const slot = getCommandSlot(command);
-
-  state.guardrail_evidence.updated_at = recordedAt;
-  state.guardrail_evidence.last_command = command;
-  state.guardrail_evidence[slot] = {
-    command,
-    recorded_at: recordedAt,
-    repo_path,
-    ...payload,
-  };
-
-  await writeFile(statePath, yaml.stringify(state), 'utf-8');
-
-  return {
-    attempted: true,
-    persisted: true,
-    project_id: project.id,
-    state_path: statePath,
-  };
 }
 
 export function extractLatestIssueBootstrap(state: StateYaml | null | undefined): IssueBootstrapRecord | null {
@@ -337,44 +496,33 @@ export async function persistIssueBootstrapEvidence(
     };
   }
 
-  const writeProtection = await detectCanonicalMainWriteProtection(repo_path);
-  if (writeProtection.blocked) {
+  try {
+    const statePath = await writeRuntimeGuardrailState(project.id, async (state) => {
+      const recordedAt = payload.recorded_at || new Date().toISOString();
+      state.issue_bootstrap = {
+        updated_at: recordedAt,
+        latest: {
+          ...payload,
+          recorded_at: recordedAt,
+          project_path: payload.project_path || project.path,
+          repo_path: payload.repo_path || repo_path,
+        },
+      };
+    });
+
+    return {
+      attempted: true,
+      persisted: true,
+      project_id: project.id,
+      state_path: statePath,
+    };
+  } catch (error) {
     return {
       attempted: true,
       persisted: false,
       project_id: project.id,
-      state_path: project.statePath,
-      reason: writeProtection.reason,
+      state_path: getProjectGuardrailRuntimeStatePath(project.id),
+      reason: error instanceof Error ? error.message : 'failed to persist runtime issue bootstrap evidence',
     };
   }
-
-  const statePath = project.statePath;
-  let state: StateYaml = {};
-
-  try {
-    const content = await readFile(statePath, 'utf-8');
-    state = (yaml.parse(content) || {}) as StateYaml;
-  } catch {
-    state = {};
-  }
-
-  const recordedAt = payload.recorded_at || new Date().toISOString();
-  state.issue_bootstrap = {
-    updated_at: recordedAt,
-    latest: {
-      ...payload,
-      recorded_at: recordedAt,
-      project_path: payload.project_path || project.path,
-      repo_path: payload.repo_path || repo_path,
-    },
-  };
-
-  await writeFile(statePath, yaml.stringify(state), 'utf-8');
-
-  return {
-    attempted: true,
-    persisted: true,
-    project_id: project.id,
-    state_path: statePath,
-  };
 }
