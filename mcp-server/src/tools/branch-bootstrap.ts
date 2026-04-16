@@ -3,8 +3,10 @@ import { access, mkdir } from 'fs/promises';
 import { basename, dirname, join, resolve } from 'path';
 import { promisify } from 'util';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
+import { getAgenticOSHome } from '../utils/registry.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
+import { resolveProjectWorktreeRoot } from '../utils/worktree-topology.js';
 
 const execAsync = promisify(exec);
 
@@ -83,11 +85,8 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   if (!repo_path) {
     result.block_reasons.push('repo_path is required');
   }
-  if (!worktree_root) {
-    result.block_reasons.push('worktree_root is required');
-  }
 
-  if (result.block_reasons.length > 0 || !slug || !repo_path || !worktree_root || !issue_id) {
+  if (result.block_reasons.length > 0 || !slug || !repo_path || !issue_id) {
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
@@ -144,12 +143,70 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     repoPath: repo_path,
     projectPath: project_path,
   });
-  if (!projectResolution.targetProject) {
+  const targetProject = projectResolution.targetProject;
+  if (!targetProject) {
     result.block_reasons.push(...projectResolution.resolutionErrors);
+  }
+
+  const rootResolution = targetProject
+    && targetProject.expectedWorktreeRoot
+    ? resolveProjectWorktreeRoot({
+        agenticosHome: getAgenticOSHome(),
+        projectId: targetProject.id,
+        requestedWorktreeRoot: worktree_root,
+      })
+    : null;
+  if (rootResolution?.mismatchReason) {
+    result.block_reasons.push(rootResolution.mismatchReason);
   }
 
   let gitCommonRepoRoot: string | null = null;
   let gitRemoteOrigin: string | null = null;
+  let effectiveWorktreeRoot: string | null = rootResolution?.effectiveWorktreeRoot || null;
+  let expectedWorktreeRoot: string | null = rootResolution?.expectedWorktreeRoot || null;
+  let deprecatedOverrideUsed = rootResolution?.deprecatedOverrideUsed || false;
+  if (targetProject?.topology !== 'github_versioned') {
+    result.block_reasons.push('agenticos_branch_bootstrap requires a github_versioned managed project');
+  }
+  if (targetProject && !effectiveWorktreeRoot) {
+    result.block_reasons.push(`target project "${targetProject.id}" is missing a derived project-scoped worktree root`);
+  }
+  if (deprecatedOverrideUsed && worktree_root) {
+    result.notes.push(`accepted deprecated worktree_root override because it matched the derived project-scoped root: ${expectedWorktreeRoot}`);
+  }
+
+  if (result.block_reasons.length > 0) {
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path,
+      project_path: targetProject?.path || project_path,
+      payload: {
+        issue_id,
+        target_project_id: targetProject?.id || null,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
+        branch_type,
+        slug,
+        remote_base_branch,
+        requested_worktree_root: worktree_root || null,
+        expected_worktree_root: expectedWorktreeRoot,
+        effective_worktree_root: effectiveWorktreeRoot,
+        deprecated_override_used: deprecatedOverrideUsed,
+        result: {
+          status: result.status,
+          branch_name: result.branch_name,
+          base_commit: result.base_commit,
+          worktree_path: result.worktree_path,
+          notes: result.notes,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
+    return JSON.stringify(result, null, 2);
+  }
+  const managedTargetProject = targetProject as NonNullable<typeof targetProject>;
+  const worktreeRoot = effectiveWorktreeRoot as string;
 
   try {
     const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
@@ -159,41 +216,43 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     const repoName = sanitizeSegment(basename(gitCommonRepoRoot)) || sanitizeSegment(basename(repo_path)) || 'repo';
 
     result.branch_name = `${branch_type}/${issue_id}-${sanitizedSlug}`;
-    result.worktree_path = join(worktree_root, `${repoName}-${issue_id}-${sanitizedSlug}`);
+    result.worktree_path = join(worktreeRoot, `${repoName}-${issue_id}-${sanitizedSlug}`);
     result.base_commit = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
 
-    if (projectResolution.targetProject) {
-      const repoIdentity = validateGuardrailRepoIdentity({
-        projectId: projectResolution.targetProject.id,
-        projectYamlPath: projectResolution.targetProject.projectYamlPath,
-        declaredGithubRepo: projectResolution.targetProject.githubRepo,
-        declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
-        sourceRepoRootsDeclared: projectResolution.targetProject.sourceRepoRootsDeclared,
-        gitWorktreeRoot,
-        gitCommonRepoRoot,
-        gitRemoteOrigin,
-      });
-      if (!repoIdentity.ok && repoIdentity.message) {
-        result.block_reasons.push(repoIdentity.message);
-        result.notes.push(`declared source repo roots: ${projectResolution.targetProject.sourceRepoRoots.join(', ')}`);
-      }
+    const repoIdentity = validateGuardrailRepoIdentity({
+      projectId: managedTargetProject.id,
+      projectYamlPath: managedTargetProject.projectYamlPath,
+      declaredGithubRepo: managedTargetProject.githubRepo,
+      declaredSourceRepoRoots: managedTargetProject.sourceRepoRoots,
+      sourceRepoRootsDeclared: managedTargetProject.sourceRepoRootsDeclared,
+      expectedWorktreeRoot: managedTargetProject.expectedWorktreeRoot,
+      gitWorktreeRoot,
+      gitCommonRepoRoot,
+      gitRemoteOrigin,
+    });
+    if (!repoIdentity.ok && repoIdentity.message) {
+      result.block_reasons.push(repoIdentity.message);
+      result.notes.push(`declared source repo roots: ${managedTargetProject.sourceRepoRoots.join(', ')}`);
     }
   } catch {
     result.block_reasons.push(`failed to resolve remote base ${remote_base_branch}`);
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
-      project_path: projectResolution.targetProject?.path || project_path,
+      project_path: managedTargetProject.path,
       payload: {
         issue_id,
-        target_project_id: projectResolution.targetProject?.id || null,
+        target_project_id: managedTargetProject.id,
         active_project: projectResolution.activeProjectId,
         git_common_repo_root: gitCommonRepoRoot,
         git_remote_origin: gitRemoteOrigin,
         branch_type,
         slug,
         remote_base_branch,
-        requested_worktree_root: worktree_root,
+        requested_worktree_root: worktree_root || null,
+        expected_worktree_root: expectedWorktreeRoot,
+        effective_worktree_root: effectiveWorktreeRoot,
+        deprecated_override_used: deprecatedOverrideUsed,
         result: {
           status: result.status,
           branch_name: result.branch_name,
@@ -222,17 +281,20 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
-      project_path: projectResolution.targetProject?.path || project_path,
+      project_path: managedTargetProject.path,
       payload: {
         issue_id,
-        target_project_id: projectResolution.targetProject?.id || null,
+        target_project_id: managedTargetProject.id,
         active_project: projectResolution.activeProjectId,
         git_common_repo_root: gitCommonRepoRoot,
         git_remote_origin: gitRemoteOrigin,
         branch_type,
         slug,
         remote_base_branch,
-        requested_worktree_root: worktree_root,
+        requested_worktree_root: worktree_root || null,
+        expected_worktree_root: expectedWorktreeRoot,
+        effective_worktree_root: effectiveWorktreeRoot,
+        deprecated_override_used: deprecatedOverrideUsed,
         result: {
           status: result.status,
           branch_name: result.branch_name,
@@ -246,11 +308,43 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     return JSON.stringify(result, null, 2);
   }
 
-  await mkdir(worktree_root, { recursive: true });
-  await runGit(
-    repo_path,
-    `worktree add "${result.worktree_path}" -b ${result.branch_name} ${result.base_commit}`,
-  );
+  try {
+    await mkdir(worktreeRoot, { recursive: true });
+    await runGit(
+      repo_path,
+      `worktree add "${result.worktree_path}" -b ${result.branch_name} ${result.base_commit}`,
+    );
+  } catch (error) {
+    result.block_reasons.push(error instanceof Error ? error.message : 'failed to create isolated worktree');
+    result.persistence = await persistGuardrailEvidence({
+      command: 'agenticos_branch_bootstrap',
+      repo_path,
+      project_path: managedTargetProject.path,
+      payload: {
+        issue_id,
+        target_project_id: managedTargetProject.id,
+        active_project: projectResolution.activeProjectId,
+        git_common_repo_root: gitCommonRepoRoot,
+        git_remote_origin: gitRemoteOrigin,
+        branch_type,
+        slug,
+        remote_base_branch,
+        requested_worktree_root: worktree_root || null,
+        expected_worktree_root: expectedWorktreeRoot,
+        effective_worktree_root: effectiveWorktreeRoot,
+        deprecated_override_used: deprecatedOverrideUsed,
+        result: {
+          status: result.status,
+          branch_name: result.branch_name,
+          base_commit: result.base_commit,
+          worktree_path: result.worktree_path,
+          notes: result.notes,
+          block_reasons: result.block_reasons,
+        },
+      },
+    });
+    return JSON.stringify(result, null, 2);
+  }
 
   result.status = 'CREATED';
   result.notes.push(`created branch ${result.branch_name} from ${remote_base_branch}`);
@@ -258,17 +352,20 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   result.persistence = await persistGuardrailEvidence({
     command: 'agenticos_branch_bootstrap',
     repo_path,
-    project_path: projectResolution.targetProject?.path || project_path,
+    project_path: managedTargetProject.path,
     payload: {
       issue_id,
-      target_project_id: projectResolution.targetProject?.id || null,
+      target_project_id: managedTargetProject.id,
       active_project: projectResolution.activeProjectId,
       git_common_repo_root: gitCommonRepoRoot,
       git_remote_origin: gitRemoteOrigin,
       branch_type,
       slug,
       remote_base_branch,
-      requested_worktree_root: worktree_root,
+      requested_worktree_root: worktree_root || null,
+      expected_worktree_root: expectedWorktreeRoot,
+      effective_worktree_root: effectiveWorktreeRoot,
+      deprecated_override_used: deprecatedOverrideUsed,
       result: {
         status: result.status,
         branch_name: result.branch_name,

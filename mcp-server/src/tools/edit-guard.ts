@@ -159,6 +159,7 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
           declaredGithubRepo: projectResolution.targetProject?.githubRepo || null,
           declaredSourceRepoRoots: result.target_project.declared_source_repo_roots,
           sourceRepoRootsDeclared: result.target_project.declared_source_repo_roots.length > 0,
+          expectedWorktreeRoot: projectResolution.targetProject?.expectedWorktreeRoot || null,
           gitWorktreeRoot,
           gitCommonRepoRoot,
           gitRemoteOrigin,

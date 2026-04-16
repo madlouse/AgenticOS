@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -11,12 +11,38 @@ const standardKitMock = vi.hoisted(() => ({
   checkStandardKitUpgrade: vi.fn(),
 }));
 
+const registryMock = vi.hoisted(() => ({
+  getAgenticOSHome: vi.fn(() => '/workspace'),
+}));
+
+const repoBoundaryMock = vi.hoisted(() => ({
+  resolveGuardrailProjectTarget: vi.fn(),
+}));
+
+const worktreeTopologyMock = vi.hoisted(() => ({
+  deriveExpectedWorktreeRoot: vi.fn(() => '/workspace/worktrees/health-project'),
+  inspectProjectWorktreeTopology: vi.fn(),
+}));
+
 vi.mock('child_process', () => ({
   exec: childProcessMock.exec,
 }));
 
 vi.mock('../standard-kit.js', () => ({
   checkStandardKitUpgrade: standardKitMock.checkStandardKitUpgrade,
+}));
+
+vi.mock('../registry.js', () => ({
+  getAgenticOSHome: registryMock.getAgenticOSHome,
+}));
+
+vi.mock('../repo-boundary.js', () => ({
+  resolveGuardrailProjectTarget: repoBoundaryMock.resolveGuardrailProjectTarget,
+}));
+
+vi.mock('../worktree-topology.js', () => ({
+  deriveExpectedWorktreeRoot: worktreeTopologyMock.deriveExpectedWorktreeRoot,
+  inspectProjectWorktreeTopology: worktreeTopologyMock.inspectProjectWorktreeTopology,
 }));
 
 import { runHealthCheck } from '../health.js';
@@ -33,6 +59,32 @@ async function setupProjectRoot(stateYaml: string, options?: { projectYaml?: str
 }
 
 describe('health command', () => {
+  beforeEach(() => {
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: 'repo_path_match',
+      targetProject: {
+        id: 'health-project',
+        path: '/resolved/project',
+      },
+      resolutionErrors: [],
+    });
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'PASS',
+      summary: 'Worktree topology matches the derived project-scoped root.',
+      expected_worktree_root: '/workspace/worktrees/health-project',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: [],
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -58,6 +110,7 @@ describe('health command', () => {
       { gate: 'entry_surface_refresh', status: 'PASS', summary: 'Entry surfaces have explicit refresh metadata.' },
       { gate: 'versioned_entry_surface_state', status: 'PASS', summary: 'Committed versioned entry surfaces look fresh for canonical mainline use.' },
       { gate: 'guardrail_evidence', status: 'PASS', summary: 'Latest guardrail evidence is present (agenticos_preflight).' },
+      { gate: 'worktree_topology', status: 'PASS', summary: 'Worktree topology matches the derived project-scoped root.' },
       { gate: 'standard_kit', status: 'PASS', summary: 'Standard-kit files match the canonical kit.' },
     ]);
     expect(result.repo_sync).toEqual({
@@ -67,6 +120,7 @@ describe('health command', () => {
       runtime_dirty_paths: [],
       source_dirty_paths: [],
     });
+    expect(result.worktree_topology?.status).toBe('PASS');
     expect(result.recovery_actions).toEqual([]);
 
     const wrapped = JSON.parse(await runHealth({
@@ -80,6 +134,20 @@ describe('health command', () => {
   it('reports branch misalignment separately from runtime drift and source edits', async () => {
     const projectRoot = await setupProjectRoot(`session:\n  id: "session-1"\n`);
     childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main [behind 2]\n M standards/.context/state.yaml\n M README.md\n', ''));
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'WARN',
+      summary: 'Worktree topology has 1 misplaced clean worktree(s).',
+      expected_worktree_root: '/workspace/worktrees/health-project',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 1,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: [],
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -108,6 +176,11 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'No persisted guardrail evidence is present yet.',
       },
+      {
+        gate: 'worktree_topology',
+        status: 'WARN',
+        summary: 'Worktree topology has 1 misplaced clean worktree(s).',
+      },
     ]);
     expect(result.repo_sync).toEqual({
       branch_line: '## main...origin/main [behind 2]',
@@ -121,6 +194,7 @@ describe('health command', () => {
       'discard or isolate runtime-managed drift from the canonical checkout: standards/.context/state.yaml',
       'review, move, or revert source-tree edits before trusting the canonical checkout: README.md',
       'keep new implementation work inside isolated issue worktrees rather than the canonical main checkout',
+      'recreate misplaced clean worktrees under the derived project-scoped worktree root and remove the old paths',
     ]);
   });
 
@@ -174,6 +248,11 @@ describe('health command', () => {
       status: 'BLOCK',
       summary: 'Canonical checkout is blocked by runtime-managed drift: 2 path(s).',
     });
+    expect(result.gates[4]).toEqual({
+      gate: 'worktree_topology',
+      status: 'PASS',
+      summary: 'Worktree topology matches the derived project-scoped root.',
+    });
     expect(result.repo_sync?.runtime_dirty_paths).toEqual(['standards/.context/state.yaml', 'CLAUDE.md']);
     expect(result.repo_sync?.source_dirty_paths).toEqual([]);
   });
@@ -193,6 +272,7 @@ describe('health command', () => {
       { gate: 'entry_surface_refresh', status: 'PASS', summary: 'Entry surfaces have explicit refresh metadata.' },
       { gate: 'versioned_entry_surface_state', status: 'WARN', summary: 'Committed versioned entry surfaces look stale for canonical mainline use.' },
       { gate: 'guardrail_evidence', status: 'WARN', summary: 'No persisted guardrail evidence is present yet.' },
+      { gate: 'worktree_topology', status: 'PASS', summary: 'Worktree topology matches the derived project-scoped root.' },
     ]);
   });
 
@@ -245,6 +325,146 @@ describe('health command', () => {
     ]);
   });
 
+  it('reports BLOCK when topology inspection finds dirty misplaced worktrees', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'BLOCK',
+      summary: 'Worktree topology is blocked by 1 misplaced dirty worktree(s).',
+      expected_worktree_root: '/workspace/worktrees/health-project',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 1,
+      },
+      inspection_errors: [],
+    });
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      project_path: projectRoot,
+    });
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.gates[4]).toEqual({
+      gate: 'worktree_topology',
+      status: 'BLOCK',
+      summary: 'Worktree topology is blocked by 1 misplaced dirty worktree(s).',
+    });
+    expect(result.recovery_actions).toContain('protect dirty misplaced worktrees first, then recreate them under the derived project-scoped worktree root before removing the old paths');
+  });
+
+  it('fails topology checks when a github_versioned project is missing meta.id', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`, {
+      projectYaml: `meta:\n  name: "Health Project"\nsource_control:\n  topology: "github_versioned"\n  context_publication_policy: "public_distilled"\n  github_repo: "madlouse/health-project"\n  branch_strategy: "github_flow"\nagent_context:\n  quick_start: "standards/.context/quick-start.md"\n  current_state: "standards/.context/state.yaml"\n  conversations: "standards/.context/conversations/"\n  last_record_marker: "standards/.context/.last_record"\n`,
+    });
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      project_path: projectRoot,
+    });
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.gates[4]).toEqual({
+      gate: 'worktree_topology',
+      status: 'BLOCK',
+      summary: 'Worktree topology could not be checked because the project is missing meta.id.',
+    });
+    expect(result.recovery_actions).toContain('restore project meta.id before relying on derived project-scoped worktree-root checks');
+  });
+
+  it('uses the resolved managed project path when health runs from repo_path only', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('status --short --branch')) {
+        cb(null, '## main...origin/main\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --show-toplevel')) {
+        cb(null, '/workspace/worktrees/health-project/issue-1\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --git-common-dir')) {
+        cb(null, '/workspace/projects/health-project/.git\n', '');
+        return;
+      }
+      if (command.includes('config --get remote.origin.url')) {
+        cb(null, 'https://github.com/madlouse/health-project.git\n', '');
+        return;
+      }
+      cb(new Error(`Unexpected command: ${command}`), '', '');
+    });
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: 'repo_path_match',
+      targetProject: {
+        id: 'health-project',
+        path: projectRoot,
+        statePath: `${projectRoot}/standards/.context/state.yaml`,
+        projectYamlPath: `${projectRoot}/.project.yaml`,
+        topology: 'github_versioned',
+        githubRepo: 'madlouse/health-project',
+        sourceRepoRoots: ['/workspace/projects/health-project'],
+        sourceRepoRootsDeclared: true,
+        expectedWorktreeRoot: '/workspace/worktrees/health-project',
+      },
+      resolutionErrors: [],
+    });
+
+    const result = await runHealthCheck({
+      repo_path: '/workspace/worktrees/health-project/issue-1',
+    });
+
+    expect(result.project_path).toBe(projectRoot);
+    expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(true);
+    expect(worktreeTopologyMock.inspectProjectWorktreeTopology).toHaveBeenCalled();
+  });
+
+  it('drops the inferred managed project path when repo identity validation itself fails to execute', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: 'repo_path_match',
+      targetProject: {
+        id: 'health-project',
+        path: projectRoot,
+        statePath: `${projectRoot}/standards/.context/state.yaml`,
+        projectYamlPath: `${projectRoot}/.project.yaml`,
+        topology: 'github_versioned',
+        githubRepo: 'madlouse/health-project',
+        sourceRepoRoots: ['/workspace/projects/health-project'],
+        sourceRepoRootsDeclared: true,
+        expectedWorktreeRoot: '/workspace/worktrees/health-project',
+      },
+      resolutionErrors: [],
+    });
+    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('status --short --branch')) {
+        cb(null, '## main...origin/main\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --show-toplevel')) {
+        cb(new Error('show-toplevel failed'), '', 'show-toplevel failed');
+        return;
+      }
+      cb(new Error(`Unexpected command: ${command}`), '', '');
+    });
+
+    const result = await runHealthCheck({
+      repo_path: '/workspace/worktrees/health-project/issue-1',
+    });
+
+    expect(result.project_path).toBeNull();
+    expect(result.recovery_actions).toContain(
+      'verify git repo identity before treating repo_path as a managed project: show-toplevel failed',
+    );
+    expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(false);
+  });
+
   it('fails closed on missing repo_path, git command failure fallbacks, missing branch status, and missing project_path for standard-kit checks', async () => {
     await expect(() => runHealth(undefined)).rejects.toThrow('repo_path is required.');
 
@@ -283,6 +503,11 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'No persisted guardrail evidence is present yet.',
       },
+      {
+        gate: 'worktree_topology',
+        status: 'PASS',
+        summary: 'Worktree topology matches the derived project-scoped root.',
+      },
     ]);
     expect(missingBranchResult.repo_sync).toEqual({
       branch_line: '',
@@ -317,8 +542,175 @@ describe('health command', () => {
       {
         gate: 'standard_kit',
         status: 'WARN',
+        summary: 'Standard-kit drift was detected and should be reviewed before starting work.',
+      },
+    ]);
+  });
+
+  it('returns a null project_path and skips topology when repo_path cannot resolve a managed project', async () => {
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: null,
+      targetProject: null,
+      resolutionErrors: ['unmatched repo'],
+    });
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      check_standard_kit: true,
+    });
+
+    expect(result.project_path).toBeNull();
+    expect(result.status).toBe('WARN');
+    expect(result.gates).toEqual([
+      { gate: 'repo_sync', status: 'PASS', summary: 'Canonical checkout is clean and aligned with origin/main.' },
+      {
+        gate: 'entry_surface_refresh',
+        status: 'WARN',
+        summary: 'Project state could not be read, so entry-surface freshness was not proven.',
+      },
+      {
+        gate: 'guardrail_evidence',
+        status: 'WARN',
+        summary: 'Project state could not be read, so guardrail visibility was not proven.',
+      },
+      {
+        gate: 'standard_kit',
+        status: 'WARN',
         summary: 'Standard-kit drift check was requested without a project_path.',
       },
     ]);
+    expect(result.worktree_topology).toBeUndefined();
+    expect(standardKitMock.checkStandardKitUpgrade).not.toHaveBeenCalled();
+  });
+
+  it('does not trust a repo_path-only match under the derived worktree root when repo identity validation fails', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: 'repo_path_match',
+      targetProject: {
+        id: 'health-project',
+        path: projectRoot,
+        statePath: `${projectRoot}/standards/.context/state.yaml`,
+        projectYamlPath: `${projectRoot}/.project.yaml`,
+        topology: 'github_versioned',
+        githubRepo: 'madlouse/health-project',
+        sourceRepoRoots: ['/workspace/projects/health-project'],
+        sourceRepoRootsDeclared: true,
+        expectedWorktreeRoot: '/workspace/worktrees/health-project',
+      },
+      resolutionErrors: [],
+    });
+    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('status --short --branch')) {
+        cb(null, '## main...origin/main\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --show-toplevel')) {
+        cb(null, '/workspace/worktrees/health-project/issue-1\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --git-common-dir')) {
+        cb(null, '/external/shared.git\n', '');
+        return;
+      }
+      if (command.includes('config --get remote.origin.url')) {
+        cb(null, 'https://github.com/madlouse/health-project.git\n', '');
+        return;
+      }
+      cb(new Error(`Unexpected command: ${command}`), '', '');
+    });
+
+    const result = await runHealthCheck({
+      repo_path: '/workspace/worktrees/health-project/issue-1',
+    });
+
+    expect(result.project_path).toBeNull();
+    expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(false);
+    expect(result.recovery_actions).toContain(
+      'verify git repo identity before treating repo_path as a managed project: git worktree root "/workspace/worktrees/health-project/issue-1" is under the derived project worktree root "/workspace/worktrees/health-project", but git common repo root "/external" is not declared for target project "health-project"',
+    );
+  });
+
+  it('does not trust a session-bound github project when repo identity validation fails for the provided repo_path', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: 'session_project',
+      targetProject: {
+        id: 'health-project',
+        path: projectRoot,
+        statePath: `${projectRoot}/standards/.context/state.yaml`,
+        projectYamlPath: `${projectRoot}/.project.yaml`,
+        topology: 'github_versioned',
+        githubRepo: 'madlouse/health-project',
+        sourceRepoRoots: ['/workspace/projects/health-project'],
+        sourceRepoRootsDeclared: true,
+        expectedWorktreeRoot: '/workspace/worktrees/health-project',
+      },
+      resolutionErrors: [],
+    });
+    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('status --short --branch')) {
+        cb(null, '## main...origin/main\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --show-toplevel')) {
+        cb(null, '/workspace/other-repo\n', '');
+        return;
+      }
+      if (command.includes('rev-parse --git-common-dir')) {
+        cb(null, '/workspace/other-repo/.git\n', '');
+        return;
+      }
+      if (command.includes('config --get remote.origin.url')) {
+        cb(null, 'https://github.com/other/repo.git\n', '');
+        return;
+      }
+      cb(new Error(`Unexpected command: ${command}`), '', '');
+    });
+
+    const result = await runHealthCheck({
+      repo_path: '/workspace/other-repo',
+    });
+
+    expect(result.project_path).toBeNull();
+    expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(false);
+    expect(result.recovery_actions).toContain(
+      'verify git repo identity before treating repo_path as a managed project: neither git worktree root "/workspace/other-repo" nor git common repo root "/workspace/other-repo" is declared for target project "health-project"',
+    );
+  });
+
+  it('uses topology-failure-specific recovery actions instead of dirty-worktree guidance', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'BLOCK',
+      summary: 'Worktree topology inspection failed: git worktree listing failed.',
+      expected_worktree_root: '/workspace/worktrees/health-project',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: ['git worktree listing failed'],
+    });
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      project_path: projectRoot,
+    });
+
+    expect(result.recovery_actions).toContain(
+      'inspect git worktree topology failures and restore accurate worktree visibility before trusting this checkout',
+    );
+    expect(result.recovery_actions).not.toContain(
+      'protect dirty misplaced worktrees first, then recreate them under the derived project-scoped worktree root before removing the old paths',
+    );
   });
 });

@@ -356,7 +356,8 @@ Create an issue branch and isolated worktree from the intended remote base.
 - `issue_id` (required)
 - `slug` (required)
 - `repo_path` (required)
-- `worktree_root` (required)
+- `project_path` (optional, but recommended when `repo_path` is inside a larger checkout or worktree)
+- `worktree_root` (optional, deprecated compatibility input; AgenticOS derives `$AGENTICOS_HOME/worktrees/<project-id>` and rejects mismatched overrides)
 - `remote_base_branch` (optional, default `origin/main`)
 
 **Returns**: JSON with `CREATED` or `BLOCK`
@@ -386,6 +387,15 @@ Evaluate whether a canonical checkout and project context are fresh enough to tr
 
 For `github_versioned` projects, the health result also distinguishes stale
 committed entry-surface state from canonical checkout runtime drift.
+When `repo_path` is inside a managed repo or its derived project-scoped
+worktree root, `agenticos_health` resolves the effective project automatically
+and returns a `worktree_topology` payload sourced from `git worktree list
+--porcelain`.
+That topology gate reports:
+
+- `PASS` when all non-canonical worktrees are under the derived project-scoped root
+- `WARN` when misplaced clean worktrees still exist
+- `BLOCK` when misplaced dirty worktrees or topology inspection failures exist
 
 ### agenticos_canonical_sync
 Plan, snapshot, or prepare runtime-managed cleanup for a canonical checkout before manual branch resync.

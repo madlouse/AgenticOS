@@ -6,6 +6,7 @@ interface ValidateGuardrailRepoIdentityArgs {
   declaredGithubRepo?: string | null;
   declaredSourceRepoRoots: string[];
   sourceRepoRootsDeclared: boolean;
+  expectedWorktreeRoot?: string | null;
   gitWorktreeRoot: string;
   gitCommonRepoRoot: string;
   gitRemoteOrigin?: string | null;
@@ -63,6 +64,7 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
     declaredGithubRepo,
     declaredSourceRepoRoots,
     sourceRepoRootsDeclared,
+    expectedWorktreeRoot,
     gitWorktreeRoot,
     gitCommonRepoRoot,
     gitRemoteOrigin,
@@ -78,7 +80,11 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
   }
 
   const normalizedDeclaredRoots = declaredSourceRepoRoots.map((root) => normalizePath(root));
-  const worktreeMatch = normalizedDeclaredRoots.find((root) => pathIsWithinDeclaredRoot(gitWorktreeRoot, root));
+  const implicitWorktreeRoot = expectedWorktreeRoot ? normalizePath(expectedWorktreeRoot) : null;
+  const declaredWorktreeMatch = normalizedDeclaredRoots.find((root) => pathIsWithinDeclaredRoot(gitWorktreeRoot, root));
+  const implicitWorktreeMatch = implicitWorktreeRoot && pathIsWithinDeclaredRoot(gitWorktreeRoot, implicitWorktreeRoot)
+    ? implicitWorktreeRoot
+    : undefined;
   const commonRepoMatch = normalizedDeclaredRoots.find((root) => pathIsWithinDeclaredRoot(gitCommonRepoRoot, root));
   if (commonRepoMatch) {
     if (declaredGithubRepo) {
@@ -101,7 +107,7 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
     };
   }
 
-  if (worktreeMatch && declaredGithubRepo) {
+  if (declaredWorktreeMatch && declaredGithubRepo) {
     const expectedRepo = normalizeGitHubRepo(declaredGithubRepo);
     const actualRepo = extractGitHubRepoFromRemoteOrigin(gitRemoteOrigin || '');
     if (actualRepo !== expectedRepo) {
@@ -114,12 +120,21 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
     }
   }
 
-  if (worktreeMatch) {
+  if (declaredWorktreeMatch) {
     return {
       ok: true,
       matchedBy: 'git_worktree_root',
-      matchedDeclaredRoot: worktreeMatch,
+      matchedDeclaredRoot: declaredWorktreeMatch,
       message: null,
+    };
+  }
+
+  if (implicitWorktreeMatch) {
+    return {
+      ok: false,
+      matchedBy: null,
+      matchedDeclaredRoot: null,
+      message: `git worktree root "${gitWorktreeRoot}" is under the derived project worktree root "${implicitWorktreeMatch}", but git common repo root "${gitCommonRepoRoot}" is not declared for target project "${projectId}"`,
     };
   }
 

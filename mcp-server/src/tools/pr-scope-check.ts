@@ -190,6 +190,7 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
       declaredGithubRepo: projectResolution.targetProject!.githubRepo,
       declaredSourceRepoRoots: projectResolution.targetProject!.sourceRepoRoots,
       sourceRepoRootsDeclared: projectResolution.targetProject!.sourceRepoRootsDeclared,
+      expectedWorktreeRoot: projectResolution.targetProject!.expectedWorktreeRoot,
       gitWorktreeRoot,
       gitCommonRepoRoot,
       gitRemoteOrigin,

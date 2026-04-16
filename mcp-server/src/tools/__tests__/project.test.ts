@@ -6,6 +6,10 @@ const yamlMock = vi.hoisted(() => ({
   stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
 }));
 const loadLatestGuardrailStateMock = vi.hoisted(() => vi.fn());
+const worktreeTopologyMock = vi.hoisted(() => ({
+  deriveExpectedWorktreeRoot: vi.fn(() => '/home/testuser/AgenticOS/worktrees/project-1'),
+  inspectProjectWorktreeTopology: vi.fn(),
+}));
 
 // Mock modules
 vi.mock('fs/promises', () => ({
@@ -50,6 +54,11 @@ vi.mock('../../utils/distill.js', () => ({
 
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   loadLatestGuardrailState: loadLatestGuardrailStateMock,
+}));
+
+vi.mock('../../utils/worktree-topology.js', () => ({
+  deriveExpectedWorktreeRoot: worktreeTopologyMock.deriveExpectedWorktreeRoot,
+  inspectProjectWorktreeTopology: worktreeTopologyMock.inspectProjectWorktreeTopology,
 }));
 
 import { switchProject, listProjects, getStatus } from '../project.js';
@@ -110,6 +119,20 @@ describe('switchProject', () => {
       source: null,
       state: {},
       state_path: null,
+    });
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'PASS',
+      summary: 'Worktree topology matches the derived project-scoped root.',
+      expected_worktree_root: '/home/testuser/AgenticOS/worktrees/project-1',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: [],
     });
     fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
       meta: { description: '' },
@@ -1557,6 +1580,20 @@ describe('getStatus', () => {
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'PASS',
+      summary: 'Worktree topology matches the derived project-scoped root.',
+      expected_worktree_root: '/home/testuser/AgenticOS/worktrees/project-1',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: [],
+    });
   });
 
   afterEach(() => {
@@ -1757,6 +1794,369 @@ describe('getStatus', () => {
 
     expect(result).toContain('None');
     expect(result).toContain('Test Project');
+  });
+
+  it('surfaces expected worktree root and misplaced worktrees for github_versioned projects', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    worktreeTopologyMock.deriveExpectedWorktreeRoot.mockReturnValue('/home/testuser/AgenticOS/worktrees/test-project');
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'WARN',
+      summary: 'Worktree topology has 1 misplaced clean worktree(s).',
+      expected_worktree_root: '/home/testuser/AgenticOS/worktrees/test-project',
+      worktrees: [
+        {
+          path: '/home/testuser/AgenticOS/worktrees/test-project/test-project-297-current',
+          branch: 'fix/297-current',
+          upstream: 'origin/fix/297-current',
+          dirty: false,
+          placement: 'project_scoped',
+          suggested_action: null,
+        },
+        {
+          path: '/tmp/shared/test-project-13-clean',
+          branch: 'fix/13-clean',
+          upstream: 'origin/fix/13-clean',
+          dirty: false,
+          placement: 'misplaced',
+          suggested_action: 'recreate under the expected worktree root, verify branch and HEAD, then remove the misplaced worktree',
+        },
+      ],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 1,
+        misplaced_clean: 1,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: [],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          github_repo: 'madlouse/test-project',
+          branch_strategy: 'github_flow',
+          context_publication_policy: 'public_distilled',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Expected worktree root: /home/testuser/AgenticOS/worktrees/test-project');
+    expect(result).toContain('Misplaced worktrees: clean 1, dirty 0');
+    expect(result).toContain('/tmp/shared/test-project-13-clean');
+  });
+
+  it('shows a topology warning when a github_versioned project is missing meta.id', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          github_repo: 'madlouse/test-project',
+          branch_strategy: 'github_flow',
+          context_publication_policy: 'public_distilled',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('missing meta.id');
+  });
+
+  it('shows only the expected worktree root when topology inspection is not applicable', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    worktreeTopologyMock.deriveExpectedWorktreeRoot.mockReturnValue('/home/testuser/AgenticOS/worktrees/test-project');
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: false,
+      status: 'PASS',
+      summary: 'Worktree topology does not apply to this project.',
+      expected_worktree_root: '/home/testuser/AgenticOS/worktrees/test-project',
+      worktrees: [],
+      counts: {
+        canonical_main: 0,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: [],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          github_repo: 'madlouse/test-project',
+          branch_strategy: 'github_flow',
+          context_publication_policy: 'public_distilled',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Expected worktree root: /home/testuser/AgenticOS/worktrees/test-project');
+    expect(result).not.toContain('Misplaced worktrees:');
+  });
+
+  it('surfaces topology inspection failures instead of claiming there are no misplaced worktrees', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    worktreeTopologyMock.deriveExpectedWorktreeRoot.mockReturnValue('/home/testuser/AgenticOS/worktrees/test-project');
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'BLOCK',
+      summary: 'Worktree topology inspection failed: git worktree listing failed.',
+      expected_worktree_root: '/home/testuser/AgenticOS/worktrees/test-project',
+      worktrees: [],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 0,
+      },
+      inspection_errors: ['git worktree listing failed'],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          github_repo: 'madlouse/test-project',
+          branch_strategy: 'github_flow',
+          context_publication_policy: 'public_distilled',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Expected worktree root: /home/testuser/AgenticOS/worktrees/test-project');
+    expect(result).toContain('Worktree topology: Worktree topology inspection failed: git worktree listing failed.');
+    expect(result).not.toContain('no misplaced worktrees detected');
+  });
+
+  it('renders misplaced dirty worktrees even when branch metadata is absent', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    worktreeTopologyMock.deriveExpectedWorktreeRoot.mockReturnValue('/home/testuser/AgenticOS/worktrees/test-project');
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
+      applies: true,
+      status: 'BLOCK',
+      summary: 'Worktree topology is blocked by 1 misplaced dirty worktree(s).',
+      expected_worktree_root: '/home/testuser/AgenticOS/worktrees/test-project',
+      worktrees: [
+        {
+          path: '/tmp/shared/test-project-14-dirty',
+          branch: null,
+          upstream: null,
+          dirty: true,
+          placement: 'misplaced',
+          suggested_action: 'stash or commit changes before recreating this worktree under the expected worktree root',
+        },
+      ],
+      counts: {
+        canonical_main: 1,
+        project_scoped: 0,
+        misplaced_clean: 0,
+        misplaced_dirty: 1,
+      },
+      inspection_errors: [],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          github_repo: 'madlouse/test-project',
+          branch_strategy: 'github_flow',
+          context_publication_policy: 'public_distilled',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Misplaced worktrees: clean 0, dirty 1');
+    expect(result).toContain('/tmp/shared/test-project-14-dirty [dirty]');
+    expect(result).not.toContain('(/tmp/shared');
+  });
+
+  it('ignores topology-summary rendering failures instead of failing the whole status command', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    worktreeTopologyMock.inspectProjectWorktreeTopology.mockRejectedValue(new Error('topology failed'));
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          github_repo: 'madlouse/test-project',
+          branch_strategy: 'github_flow',
+          context_publication_policy: 'public_distilled',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Test Project');
+    expect(result).not.toContain('Expected worktree root:');
   });
 
   it('shows a friendly guardrail placeholder when no guardrail evidence exists', async () => {
