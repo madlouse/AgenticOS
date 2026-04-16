@@ -246,7 +246,7 @@ describe('saveState', () => {
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(addCommand).toBeDefined();
     expect(addCommand).toContain('/test/path/.context/state.yaml');
-    expect(addCommand).toContain('/test/path/.context/.last_record');
+    expect(addCommand).not.toContain('/test/path/.context/.last_record');
     expect(addCommand).toContain('/test/path/.context/conversations');
     expect(addCommand).toContain('/test/path/CLAUDE.md');
     expect(addCommand).not.toContain('add "/test/path/"');

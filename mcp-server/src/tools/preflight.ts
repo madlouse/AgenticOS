@@ -13,6 +13,7 @@ import {
   type GuardrailTaskType,
 } from '../utils/repo-boundary.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
+import { classifyUnrelatedCommitSubjects } from '../utils/issue-commit-scope.js';
 
 const execAsync = promisify(exec);
 
@@ -282,8 +283,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     result.evidence.commit_subjects_since_base = subjects;
 
     if (subjects.length > 0) {
-      const issueMarker = issue_id ? `#${issue_id}` : '';
-      const unrelatedSubjects = subjects.filter((subject) => !issueMarker || !subject.includes(issueMarker));
+      const unrelatedSubjects = classifyUnrelatedCommitSubjects(subjects, issue_id);
       if (unrelatedSubjects.length > 0) {
         result.block_reasons.push(`branch includes unrelated commits relative to ${remote_base_branch}`);
       } else {

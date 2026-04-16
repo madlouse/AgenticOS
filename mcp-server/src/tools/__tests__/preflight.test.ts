@@ -428,7 +428,52 @@ describe('runPreflight', () => {
     expect(result.branch_based_on_intended_remote).toBe(true);
   });
 
-  it('treats missing issue id as an empty issue marker when scanning commit subjects', async () => {
+  it('accepts a clean issue branch commit even when the subject omits the issue marker', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
+      'rev-parse --abbrev-ref HEAD': 'fix/296-save-pr-scope-guardrail-release-flow\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/fix/296-save-pr-scope-guardrail-release-flow\n',
+      'log --format=%s origin/main..HEAD': 'fix: preserve teams session and hotel booking guardrails\n',
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/runtime/.agent-workspace/projects/agenticos/guardrail-state.yaml',
+      state: {
+        issue_bootstrap: {
+          latest: {
+            issue_id: '296',
+            repo_path: '/repo',
+            current_branch: 'fix/296-save-pr-scope-guardrail-release-flow',
+            startup_context_paths: ['/workspace/projects/agenticos/standards/.project.yaml'],
+            stages: {
+              context_reset_performed: true,
+              project_hot_load_performed: true,
+              issue_payload_attached: true,
+            },
+          },
+        },
+      },
+    });
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '296',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/pr-scope-check.ts'],
+      worktree_required: true,
+    })) as { status: string; branch_based_on_intended_remote: boolean; block_reasons: string[] };
+
+    expect(result.status).toBe('PASS');
+    expect(result.branch_based_on_intended_remote).toBe(true);
+    expect(result.block_reasons).toEqual([]);
+  });
+
+  it('treats neutral commit subjects as in-scope even when issue_id is missing', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
       'rev-parse --git-common-dir': '.git\n',
@@ -467,8 +512,8 @@ describe('runPreflight', () => {
     })) as { block_reasons: string[]; branch_based_on_intended_remote: boolean };
 
     expect(result.block_reasons).toContain('issue_id is required for implementation work');
-    expect(result.block_reasons.join(' ')).toContain('unrelated commits');
-    expect(result.branch_based_on_intended_remote).toBe(false);
+    expect(result.block_reasons.join(' ')).not.toContain('unrelated commits');
+    expect(result.branch_based_on_intended_remote).toBe(true);
   });
 
   it('returns BLOCK and persists evidence when git repository resolution fails', async () => {

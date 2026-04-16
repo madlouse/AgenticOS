@@ -7,6 +7,7 @@ import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../ut
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { matchesRuntimeReviewExcludedPath, resolveRuntimeReviewSurfacePaths } from '../utils/runtime-review-surface.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
+import { classifyUnrelatedCommitSubjects } from '../utils/issue-commit-scope.js';
 
 const execAsync = promisify(exec);
 
@@ -296,7 +297,7 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   result.changed_files = changedFiles;
   result.runtime_managed_files = changedFiles.filter((file) => matchesRuntimeReviewExcludedPath(file, runtimeTrackedPaths));
   result.private_raw_transcript_files = changedFiles.filter((file) => matchesRuntimeReviewExcludedPath(file, privateTranscriptPaths));
-  result.unrelated_commit_subjects = subjects.filter((subject) => !subject.includes(`#${issue_id}`));
+  result.unrelated_commit_subjects = classifyUnrelatedCommitSubjects(subjects, issue_id);
   const productReviewFiles = changedFiles.filter((file) =>
     !matchesRuntimeReviewExcludedPath(file, runtimeTrackedPaths)
     && !matchesRuntimeReviewExcludedPath(file, privateTranscriptPaths));

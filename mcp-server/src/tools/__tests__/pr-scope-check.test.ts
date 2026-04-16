@@ -135,6 +135,31 @@ describe('runPrScopeCheck', () => {
     expect(result.unexpected_files).toEqual([]);
   });
 
+  it('returns PASS when a clean issue branch commit omits the issue marker in the subject', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '/repo/.git\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'log --format=%s origin/main..HEAD': 'feat: preserve teams session and hotel booking guardrails\n',
+      'diff --name-only origin/main...HEAD': 'README.md\nprojects/agenticos/mcp-server/src/tools/pr-scope-check.ts\n',
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '296',
+      repo_path: '/repo',
+      declared_target_files: [
+        'README.md',
+        'projects/agenticos/mcp-server/src/tools/pr-scope-check.ts',
+      ],
+      expected_issue_scope: 'clean_release_branch',
+    })) as { status: string; unrelated_commit_subjects: string[]; unexpected_files: string[] };
+
+    expect(result.status).toBe('PASS');
+    expect(result.unrelated_commit_subjects).toEqual([]);
+    expect(result.unexpected_files).toEqual([]);
+  });
+
   it('returns BLOCK when commit subjects do not match the current issue', async () => {
     mockGitResponses({
       'rev-parse --show-toplevel': '/repo\n',
