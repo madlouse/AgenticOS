@@ -54,6 +54,14 @@ function normalizePath(value: string): string {
   return resolve(value);
 }
 
+function normalizeTrackedPath(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/$/, '');
+}
+
+function isLastRecordMarkerPath(pathValue: string): boolean {
+  return normalizeTrackedPath(pathValue).endsWith('/.last_record');
+}
+
 function toGitRelativePath(gitWorktreeRoot: string, absolutePath: string, options?: { directory?: boolean }): string {
   const relativePath = relative(normalizePath(gitWorktreeRoot), normalizePath(absolutePath)).replace(/\\/g, '/');
   if (!relativePath || relativePath.startsWith('..')) {
@@ -287,7 +295,8 @@ export async function saveState(args: any): Promise<string> {
       : resolveRuntimeReviewSurfacePaths(projectPath, projectYaml, {
         include_claude_state_mirror: true,
       }).tracked_review_excluded_paths;
-    const stageTargets = stagePaths
+    const filteredStagePaths = stagePaths.filter((trackedPath) => !isLastRecordMarkerPath(trackedPath));
+    const stageTargets = filteredStagePaths
       .map((trackedPath) => continuityPlan
         ? `"${trackedPath}"`
         : `"${toProjectAbsoluteRuntimePath(projectPath, trackedPath)}"`)
