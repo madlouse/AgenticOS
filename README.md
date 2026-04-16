@@ -154,6 +154,8 @@ codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 
 - `projects/agenticos/` is the only canonical AgenticOS product-source project under `projects/`
 - the enclosing `AgenticOS/` path is the workspace home; product source lives under `projects/agenticos/`
+- issue worktrees live under `$AGENTICOS_HOME/worktrees/<project-id>/` as
+  helper execution checkouts, not as managed project roots
 - root-level `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` currently remain as compatibility entrypoints during that migration
 
 ## Managed Project Contract

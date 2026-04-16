@@ -2,7 +2,7 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import yaml from 'yaml';
-import { loadRegistry, patchProjectMetadata } from '../utils/registry.js';
+import { getAgenticOSHome, loadRegistry, patchProjectMetadata } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { writeFile } from 'fs/promises';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
@@ -20,6 +20,7 @@ import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
 } from '../utils/versioned-entry-surface-state.js';
+import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../utils/worktree-topology.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -196,6 +197,43 @@ function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): str
   const detail = summarizeIssueBootstrapDetail(latestBootstrap);
   if (detail) {
     lines.push(`   Detail: ${detail}`);
+  }
+
+  return lines;
+}
+
+async function buildWorktreeTopologySummaryLines(projectPath: string, projectYaml: any): Promise<string[]> {
+  if (projectYaml?.source_control?.topology !== 'github_versioned') {
+    return [];
+  }
+
+  const projectId = String(projectYaml.meta.id).trim();
+
+  const topology = await inspectProjectWorktreeTopology({
+    repoPath: projectPath,
+    canonicalProjectPath: projectPath,
+    expectedWorktreeRoot: deriveExpectedWorktreeRoot(getAgenticOSHome(), projectId),
+  });
+
+  const lines = [`🪵 Expected worktree root: ${topology.expected_worktree_root}`];
+  if (!topology.applies) {
+    return lines;
+  }
+
+  if (topology.status === 'BLOCK' && topology.counts.misplaced_clean === 0 && topology.counts.misplaced_dirty === 0) {
+    lines.push(`⚠️ Worktree topology: ${topology.summary}`);
+    return lines;
+  }
+
+  if (topology.counts.misplaced_clean === 0 && topology.counts.misplaced_dirty === 0) {
+    lines.push('🪵 Worktree topology: no misplaced worktrees detected');
+    return lines;
+  }
+
+  lines.push(`⚠️ Misplaced worktrees: clean ${topology.counts.misplaced_clean}, dirty ${topology.counts.misplaced_dirty}`);
+  for (const worktree of topology.worktrees.filter((entry) => entry.placement === 'misplaced').slice(0, 3)) {
+    const branchDetail = worktree.branch ? ` (${worktree.branch})` : '';
+    lines.push(`   - ${worktree.path}${branchDetail}${worktree.dirty ? ' [dirty]' : ' [clean]'}`);
   }
 
   return lines;
@@ -492,6 +530,9 @@ export async function getStatus(args: any = {}): Promise<string> {
     issueBootstrap: displayState.issue_bootstrap as IssueBootstrapState | undefined,
     committedSnapshotAssessment,
   }));
+  try {
+    lines.push(...await buildWorktreeTopologySummaryLines(resolved.projectPath, resolved.projectYaml));
+  } catch {}
 
   lines.push('');
   const taskLabel = usesCommittedSnapshotLabels(committedSnapshotAssessment)

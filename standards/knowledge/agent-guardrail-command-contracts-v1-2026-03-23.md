@@ -132,7 +132,7 @@ branch_type: "feat"
 slug: "guardrail-helper"
 repo_path: "/abs/path/to/repo"
 remote_base_branch: "origin/main"
-worktree_root: "/abs/path/to/worktrees"
+worktree_root: "/abs/path/to/worktrees" # optional, deprecated compatibility input
 ```
 
 ### Output shape
@@ -148,6 +148,9 @@ notes: []
 ### Hard rules
 
 - must derive the branch from the intended remote base, not the local current branch
+- must derive the effective worktree root as `$AGENTICOS_HOME/worktrees/<project-id>`
+- if `worktree_root` is supplied for compatibility, it must normalize to the
+  same derived root or the command must fail closed
 - must record the exact base commit used
 - must fail if target branch or worktree path already exists unexpectedly
 

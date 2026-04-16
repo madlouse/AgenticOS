@@ -1,11 +1,15 @@
 import { exec } from 'child_process';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
 import yaml from 'yaml';
 import { checkStandardKitUpgrade } from './standard-kit.js';
 import { analyzeCanonicalRepoSync, type CanonicalRepoSyncDetails } from './canonical-checkout-sync.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from './agent-context-paths.js';
+import { resolveGuardrailProjectTarget, type GuardrailProjectTarget } from './repo-boundary.js';
+import { validateGuardrailRepoIdentity } from './guardrail-repo-identity.js';
 import { assessVersionedEntrySurfaceState } from './versioned-entry-surface-state.js';
+import { getAgenticOSHome } from './registry.js';
+import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology, type WorktreeTopologyInspection } from './worktree-topology.js';
 
 export interface HealthArgs {
   repo_path: string;
@@ -16,7 +20,7 @@ export interface HealthArgs {
 }
 
 export interface HealthGate {
-  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'standard_kit';
+  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'worktree_topology' | 'standard_kit';
   status: 'PASS' | 'WARN' | 'BLOCK';
   summary: string;
 }
@@ -31,6 +35,7 @@ export interface HealthResult {
   checked_at: string;
   gates: HealthGate[];
   repo_sync?: CanonicalRepoSyncDetails;
+  worktree_topology?: WorktreeTopologyInspection;
   recovery_actions?: string[];
 }
 
@@ -141,6 +146,51 @@ function buildGuardrailGate(state: any | null): HealthGate {
   };
 }
 
+async function buildWorktreeTopologyGate(args: HealthArgs, projectYaml: any | null): Promise<{ gate: HealthGate; topology: WorktreeTopologyInspection } | null> {
+  if (!args.project_path) return null;
+  if (projectYaml?.source_control?.topology !== 'github_versioned') return null;
+
+  const projectId = String(projectYaml?.meta?.id || '').trim();
+  if (!projectId) {
+    return {
+      gate: {
+        gate: 'worktree_topology',
+        status: 'BLOCK',
+        summary: 'Worktree topology could not be checked because the project is missing meta.id.',
+      },
+      topology: {
+        applies: true,
+        status: 'BLOCK',
+        summary: 'Worktree topology could not be checked because the project is missing meta.id.',
+        expected_worktree_root: null,
+        worktrees: [],
+        counts: {
+          canonical_main: 0,
+          project_scoped: 0,
+          misplaced_clean: 0,
+          misplaced_dirty: 0,
+        },
+        inspection_errors: ['missing meta.id for github_versioned project'],
+      },
+    };
+  }
+
+  const topology = await inspectProjectWorktreeTopology({
+    repoPath: args.repo_path,
+    canonicalProjectPath: args.project_path,
+    expectedWorktreeRoot: deriveExpectedWorktreeRoot(getAgenticOSHome(), projectId),
+  });
+
+  return {
+    gate: {
+      gate: 'worktree_topology',
+      status: topology.status,
+      summary: topology.summary,
+    },
+    topology,
+  };
+}
+
 async function buildStandardKitGate(args: HealthArgs): Promise<HealthGate | null> {
   if (!args.check_standard_kit) return null;
   if (!args.project_path) {
@@ -171,6 +221,58 @@ async function buildStandardKitGate(args: HealthArgs): Promise<HealthGate | null
   };
 }
 
+async function resolveTrustedProjectPath(args: {
+  repoPath: string;
+  explicitProjectPath?: string;
+  targetProject: GuardrailProjectTarget | null;
+  resolutionSource: 'explicit_project_path' | 'repo_path_match' | 'session_project' | null;
+}): Promise<{ effectiveProjectPath: string | null; repoIdentityError: string | null }> {
+  const { repoPath, explicitProjectPath, targetProject, resolutionSource } = args;
+  const initialProjectPath = explicitProjectPath || targetProject?.path || null;
+  const requiresRepoIdentityProof = resolutionSource === 'repo_path_match' || resolutionSource === 'session_project';
+  if (!targetProject || targetProject.topology !== 'github_versioned' || !requiresRepoIdentityProof) {
+    return {
+      effectiveProjectPath: initialProjectPath,
+      repoIdentityError: null,
+    };
+  }
+
+  try {
+    const gitWorktreeRoot = (await execCommand(`git -C "${repoPath}" rev-parse --show-toplevel`)).trim();
+    const gitCommonDir = resolve(gitWorktreeRoot, (await execCommand(`git -C "${repoPath}" rev-parse --git-common-dir`)).trim());
+    const gitCommonRepoRoot = dirname(gitCommonDir);
+    const gitRemoteOrigin = await execCommand(`git -C "${repoPath}" config --get remote.origin.url`).catch(() => '');
+    const repoIdentity = validateGuardrailRepoIdentity({
+      projectId: targetProject.id,
+      projectYamlPath: targetProject.projectYamlPath,
+      declaredGithubRepo: targetProject.githubRepo,
+      declaredSourceRepoRoots: targetProject.sourceRepoRoots,
+      sourceRepoRootsDeclared: targetProject.sourceRepoRootsDeclared,
+      expectedWorktreeRoot: targetProject.expectedWorktreeRoot,
+      gitWorktreeRoot,
+      gitCommonRepoRoot,
+      gitRemoteOrigin,
+    });
+    if (!repoIdentity.ok) {
+      return {
+        effectiveProjectPath: null,
+        repoIdentityError: repoIdentity.message as string,
+      };
+    }
+  } catch (error) {
+    return {
+      effectiveProjectPath: null,
+      /* c8 ignore next -- execCommand and repo identity validation only throw Error instances here */
+      repoIdentityError: error instanceof Error ? error.message : 'failed to validate repo identity for the resolved managed project',
+    };
+  }
+
+  return {
+    effectiveProjectPath: initialProjectPath,
+    repoIdentityError: null,
+  };
+}
+
 export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   if (!args?.repo_path) {
     throw new Error('repo_path is required.');
@@ -179,10 +281,23 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   const remoteBaseBranch = args.remote_base_branch || 'origin/main';
   const checkoutRole = args.checkout_role || 'canonical';
   const checkedAt = new Date().toISOString();
+  const projectResolution = await resolveGuardrailProjectTarget({
+    commandName: 'agenticos_health',
+    repoPath: args.repo_path,
+    projectPath: args.project_path,
+  });
+  const trustedProject = await resolveTrustedProjectPath({
+    repoPath: args.repo_path,
+    explicitProjectPath: args.project_path,
+    targetProject: projectResolution.targetProject,
+    resolutionSource: projectResolution.resolutionSource,
+  });
+  const effectiveProjectPath = trustedProject.effectiveProjectPath;
 
   const repoStatus = await execCommand(`git -C "${args.repo_path}" status --short --branch --untracked-files=all`);
-  const projectYaml = await readProjectYaml(args.project_path);
-  const state = await readState(args.project_path, projectYaml);
+  const resolvedProjectPath = effectiveProjectPath ?? undefined;
+  const projectYaml = await readProjectYaml(resolvedProjectPath);
+  const state = await readState(resolvedProjectPath, projectYaml);
   const repoSync = analyzeCanonicalRepoSync({
     statusOutput: repoStatus,
     remoteBaseBranch,
@@ -191,8 +306,13 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   const versionedEntrySurfaceState = assessVersionedEntrySurfaceState({
     projectYaml,
     state,
-    projectPath: args.project_path,
+    projectPath: resolvedProjectPath,
   });
+  const effectiveArgs = {
+    ...args,
+    project_path: resolvedProjectPath,
+  };
+  const worktreeTopologyGate = await buildWorktreeTopologyGate(effectiveArgs, projectYaml);
 
   const gates: HealthGate[] = [
     {
@@ -215,7 +335,11 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     buildGuardrailGate(state),
   );
 
-  const standardKitGate = await buildStandardKitGate(args);
+  if (worktreeTopologyGate) {
+    gates.push(worktreeTopologyGate.gate);
+  }
+
+  const standardKitGate = await buildStandardKitGate(effectiveArgs);
   if (standardKitGate) {
     gates.push(standardKitGate);
   }
@@ -224,12 +348,35 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     command: 'agenticos_health',
     status: combineHealthStatus(gates),
     repo_path: args.repo_path,
-    project_path: args.project_path || null,
+    project_path: effectiveProjectPath || null,
     remote_base_branch: remoteBaseBranch,
     checkout_role: checkoutRole,
     checked_at: checkedAt,
     gates,
     repo_sync: repoSync.details,
-    recovery_actions: repoSync.recovery_actions,
+    worktree_topology: worktreeTopologyGate?.topology,
+    recovery_actions: [
+      ...repoSync.recovery_actions,
+      ...(trustedProject.repoIdentityError
+        ? [`verify git repo identity before treating repo_path as a managed project: ${trustedProject.repoIdentityError}`]
+        : []),
+      ...(worktreeTopologyGate?.topology.status === 'WARN' && worktreeTopologyGate.topology.counts.misplaced_clean > 0
+        ? ['recreate misplaced clean worktrees under the derived project-scoped worktree root and remove the old paths']
+        : []),
+      ...(worktreeTopologyGate?.topology.status === 'BLOCK' && worktreeTopologyGate.topology.counts.misplaced_dirty > 0
+        ? ['protect dirty misplaced worktrees first, then recreate them under the derived project-scoped worktree root before removing the old paths']
+        : []),
+      ...(worktreeTopologyGate?.topology.status === 'BLOCK'
+        && worktreeTopologyGate.topology.counts.misplaced_dirty === 0
+        && worktreeTopologyGate.topology.inspection_errors.some((error) => error.includes('missing meta.id'))
+        ? ['restore project meta.id before relying on derived project-scoped worktree-root checks']
+        : []),
+      ...(worktreeTopologyGate?.topology.status === 'BLOCK'
+        && worktreeTopologyGate.topology.counts.misplaced_dirty === 0
+        && worktreeTopologyGate.topology.inspection_errors.length > 0
+        && !worktreeTopologyGate.topology.inspection_errors.some((error) => error.includes('missing meta.id'))
+        ? ['inspect git worktree topology failures and restore accurate worktree visibility before trusting this checkout']
+        : []),
+    ],
   };
 }

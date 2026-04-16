@@ -260,9 +260,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           repo_path: { type: 'string', description: 'Absolute repository path where the branch should be created' },
           project_path: { type: 'string', description: 'Optional managed project root when repo_path is a larger checkout or worktree.' },
           remote_base_branch: { type: 'string', description: 'Remote base branch to branch from (default: origin/main)' },
-          worktree_root: { type: 'string', description: 'Absolute root directory under which the new worktree should be created' },
+          worktree_root: { type: 'string', description: 'Deprecated compatibility input. When omitted, AgenticOS derives $AGENTICOS_HOME/worktrees/<project-id>. When supplied, it must normalize to the same derived root or the command fails closed.' },
         },
-        required: ['issue_id', 'slug', 'repo_path', 'worktree_root'],
+        required: ['issue_id', 'slug', 'repo_path'],
       },
     },
     {

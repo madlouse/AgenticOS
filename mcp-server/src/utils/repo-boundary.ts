@@ -1,9 +1,10 @@
 import { access, readFile } from 'fs/promises';
 import { basename, isAbsolute, join, resolve, sep } from 'path';
 import yaml from 'yaml';
-import { validateManagedProjectTopology } from './project-contract.js';
-import { loadRegistry } from './registry.js';
+import { type ProjectTopology, validateManagedProjectTopology } from './project-contract.js';
+import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getSessionProjectBinding } from './session-context.js';
+import { deriveExpectedWorktreeRoot } from './worktree-topology.js';
 
 export type GuardrailTaskType =
   | 'discussion_only'
@@ -18,9 +19,11 @@ export interface GuardrailProjectTarget {
   path: string;
   statePath: string;
   projectYamlPath: string;
+  topology: ProjectTopology;
   githubRepo: string | null;
   sourceRepoRoots: string[];
   sourceRepoRootsDeclared: boolean;
+  expectedWorktreeRoot: string | null;
 }
 
 export interface GuardrailProjectResolution {
@@ -95,22 +98,31 @@ async function loadProjectBoundaryMetadata(
     return null;
   }
 
-  const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+  const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8'));
+  if (!projectYaml || typeof projectYaml !== 'object') {
+    throw new Error(`${projectYamlPath} did not parse to a project object`);
+  }
   const sourceRepoRoots = resolveDeclaredSourceRepoRoots(normalizedProjectPath, projectYaml);
   const name = String(projectYaml?.meta?.name || fallbackName || fallbackId || basename(normalizedProjectPath));
   const topologyValidation = validateManagedProjectTopology(name, projectYaml);
+  const topology = topologyValidation.ok ? topologyValidation.topology : null;
+  const projectId = String(projectYaml?.meta?.id || fallbackId || basename(normalizedProjectPath));
 
   return {
-    id: String(projectYaml?.meta?.id || fallbackId || basename(normalizedProjectPath)),
+    id: projectId,
     name,
     path: normalizedProjectPath,
     statePath: resolveProjectStatePath(normalizedProjectPath, projectYaml),
     projectYamlPath,
+    topology: topology || 'local_directory_only',
     githubRepo: typeof projectYaml?.source_control?.github_repo === 'string' && projectYaml.source_control.github_repo.trim().length > 0
       ? projectYaml.source_control.github_repo.trim()
       : null,
     sourceRepoRoots: sourceRepoRoots.roots,
     sourceRepoRootsDeclared: sourceRepoRoots.declared,
+    expectedWorktreeRoot: topology === 'github_versioned'
+      ? deriveExpectedWorktreeRoot(getAgenticOSHome(), projectId)
+      : null,
     topologyValidationError: topologyValidation.ok ? null : topologyValidation.message,
   };
 }
@@ -200,6 +212,7 @@ export async function resolveGuardrailProjectTarget(args: {
         const matchedRoots = [
           projectMetadata.path,
           ...projectMetadata.sourceRepoRoots,
+          ...(projectMetadata.expectedWorktreeRoot ? [projectMetadata.expectedWorktreeRoot] : []),
         ].filter((candidatePath) => isWithinProject(normalizedRepoPath, candidatePath));
 
         if (matchedRoots.length === 0) continue;
