@@ -356,6 +356,7 @@ Create an issue branch and isolated worktree from the intended remote base.
 - `issue_id` (required)
 - `slug` (required)
 - `repo_path` (required)
+- `project_path` (optional, but recommended when `repo_path` is inside a larger checkout or worktree)
 - `worktree_root` (optional, deprecated compatibility input; AgenticOS derives `$AGENTICOS_HOME/worktrees/<project-id>` and rejects mismatched overrides)
 - `remote_base_branch` (optional, default `origin/main`)
 

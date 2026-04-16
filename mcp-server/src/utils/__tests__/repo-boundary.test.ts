@@ -559,7 +559,7 @@ describe('resolveGuardrailProjectTarget', () => {
       '/workspace/projects/theta/relative',
     ]);
     expect(result.targetProject?.sourceRepoRootsDeclared).toBe(true);
-    expect(result.targetProject?.expectedWorktreeRoot).toBe('/workspace/worktrees/theta');
+    expect(result.targetProject?.expectedWorktreeRoot).toBeNull();
   });
 
   it('marks source repo roots as undeclared when execution.source_repo_roots is not an array', async () => {

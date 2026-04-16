@@ -149,6 +149,7 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   }
 
   const rootResolution = targetProject
+    && targetProject.expectedWorktreeRoot
     ? resolveProjectWorktreeRoot({
         agenticosHome: getAgenticOSHome(),
         projectId: targetProject.id,
@@ -167,7 +168,6 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   if (targetProject?.topology !== 'github_versioned') {
     result.block_reasons.push('agenticos_branch_bootstrap requires a github_versioned managed project');
   }
-  /* c8 ignore next 3 -- resolveProjectWorktreeRoot deterministically derives a root whenever targetProject.id is present */
   if (targetProject && !effectiveWorktreeRoot) {
     result.block_reasons.push(`target project "${targetProject.id}" is missing a derived project-scoped worktree root`);
   }

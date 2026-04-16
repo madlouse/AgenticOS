@@ -444,6 +444,37 @@ describe('runBranchBootstrap', () => {
     expect(mkdirMock).not.toHaveBeenCalled();
   });
 
+  it('fails closed when a github_versioned project is missing a declared meta.id-derived worktree root', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'agenticos',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'agenticos',
+        name: 'AgenticOS',
+        path: '/workspace/projects/agenticos',
+        statePath: '/workspace/projects/agenticos/standards/.context/state.yaml',
+        projectYamlPath: '/workspace/projects/agenticos/.project.yaml',
+        topology: 'github_versioned',
+        githubRepo: 'madlouse/AgenticOS',
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+        expectedWorktreeRoot: null,
+      },
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '92',
+      branch_type: 'feat',
+      slug: 'missing root',
+      repo_path: '/repo/mcp-server',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons).toContain('target project "agenticos" is missing a derived project-scoped worktree root');
+    expect(execAsyncMock).not.toHaveBeenCalled();
+  });
+
   it('falls back to the repo_path basename when the common repo basename sanitizes to empty', async () => {
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos',

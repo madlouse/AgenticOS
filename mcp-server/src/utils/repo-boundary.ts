@@ -106,7 +106,8 @@ async function loadProjectBoundaryMetadata(
   const name = String(projectYaml?.meta?.name || fallbackName || fallbackId || basename(normalizedProjectPath));
   const topologyValidation = validateManagedProjectTopology(name, projectYaml);
   const topology = topologyValidation.ok ? topologyValidation.topology : null;
-  const projectId = String(projectYaml?.meta?.id || fallbackId || basename(normalizedProjectPath));
+  const declaredProjectId = typeof projectYaml?.meta?.id === 'string' ? projectYaml.meta.id.trim() : '';
+  const projectId = declaredProjectId || fallbackId || basename(normalizedProjectPath);
 
   return {
     id: projectId,
@@ -120,7 +121,7 @@ async function loadProjectBoundaryMetadata(
       : null,
     sourceRepoRoots: sourceRepoRoots.roots,
     sourceRepoRootsDeclared: sourceRepoRoots.declared,
-    expectedWorktreeRoot: topology === 'github_versioned'
+    expectedWorktreeRoot: topology === 'github_versioned' && declaredProjectId
       ? deriveExpectedWorktreeRoot(getAgenticOSHome(), projectId)
       : null,
     topologyValidationError: topologyValidation.ok ? null : topologyValidation.message,

@@ -207,7 +207,12 @@ async function buildWorktreeTopologySummaryLines(projectPath: string, projectYam
     return [];
   }
 
-  const projectId = String(projectYaml.meta.id).trim();
+  /* c8 ignore next -- current public flows prove project identity before calling this helper */
+  const projectId = typeof projectYaml?.meta?.id === 'string' ? projectYaml.meta.id.trim() : '';
+  /* c8 ignore next 3 -- getStatus proves project identity earlier; missing meta.id is surfaced before topology rendering in current public flows */
+  if (!projectId) {
+    return ['⚠️ Worktree topology: project meta.id is missing, so derived worktree-root checks are unavailable'];
+  }
 
   const topology = await inspectProjectWorktreeTopology({
     repoPath: projectPath,

@@ -78,6 +78,9 @@ describe('inspectProjectWorktreeTopology', () => {
 
   it('classifies canonical, project-scoped, misplaced clean, and misplaced dirty worktrees', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/projects/agenticos\n', stderr: '' };
+      }
       if (cmd.includes('worktree list --porcelain')) {
         return {
           stdout: [
@@ -145,6 +148,9 @@ describe('inspectProjectWorktreeTopology', () => {
 
   it('returns WARN when only misplaced clean worktrees exist', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/projects/agenticos\n', stderr: '' };
+      }
       if (cmd.includes('worktree list --porcelain')) {
         return {
           stdout: [
@@ -180,6 +186,9 @@ describe('inspectProjectWorktreeTopology', () => {
 
   it('returns PASS when all non-canonical worktrees are under the derived project-scoped root', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/projects/agenticos\n', stderr: '' };
+      }
       if (cmd.includes('worktree list --porcelain')) {
         return {
           stdout: [
@@ -246,6 +255,9 @@ describe('inspectProjectWorktreeTopology', () => {
 
   it('marks a misplaced worktree dirty when per-worktree inspection fails', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/projects/agenticos\n', stderr: '' };
+      }
       if (cmd.includes('worktree list --porcelain')) {
         return {
           stdout: [
@@ -278,6 +290,9 @@ describe('inspectProjectWorktreeTopology', () => {
 
   it('falls back to a generic per-worktree inspection error when a non-Error value is thrown', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/projects/agenticos\n', stderr: '' };
+      }
       if (cmd.includes('worktree list --porcelain')) {
         return {
           stdout: [
@@ -316,5 +331,42 @@ describe('inspectProjectWorktreeTopology', () => {
 
     expect(result.applies).toBe(false);
     expect(result.status).toBe('PASS');
+  });
+
+  it('treats the actual git worktree root as canonical when repoPath is inside a larger checkout', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/workspace/checkout\n', stderr: '' };
+      }
+      if (cmd.includes('worktree list --porcelain')) {
+        return {
+          stdout: [
+            'worktree /workspace/checkout',
+            'branch refs/heads/main',
+            '',
+            'worktree /workspace/worktrees/agenticos/agenticos-297-scope',
+            'branch refs/heads/fix/297-scope',
+            '',
+          ].join('\n'),
+          stderr: '',
+        };
+      }
+      if (cmd.includes('status --porcelain')) {
+        return { stdout: '', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --abbrev-ref --symbolic-full-name @{upstream}')) {
+        return { stdout: 'origin/main\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = await inspectProjectWorktreeTopology({
+      repoPath: '/workspace/checkout/projects/agenticos',
+      canonicalProjectPath: '/workspace/checkout/projects/agenticos',
+      expectedWorktreeRoot: '/workspace/worktrees/agenticos',
+    });
+
+    expect(result.status).toBe('PASS');
+    expect(result.worktrees.find((entry) => entry.path === '/workspace/checkout')?.placement).toBe('canonical_main');
   });
 });

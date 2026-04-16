@@ -188,11 +188,12 @@ export async function inspectProjectWorktreeTopology(args: InspectProjectWorktre
   }
 
   const expectedWorktreeRoot = normalizePath(args.expectedWorktreeRoot);
-  const canonicalProjectPath = normalizePath(args.canonicalProjectPath);
   const inspectionErrors: string[] = [];
   let parsedWorktrees: ParsedWorktreeRecord[] = [];
+  let canonicalWorktreeRoot: string | null = null;
 
   try {
+    canonicalWorktreeRoot = normalizePath(await runGit(args.repoPath, 'rev-parse --show-toplevel'));
     parsedWorktrees = parseWorktreeListPorcelain(await runGit(args.repoPath, 'worktree list --porcelain'));
   } catch (error) {
     inspectionErrors.push(error instanceof Error ? error.message : 'failed to list git worktrees');
@@ -207,7 +208,7 @@ export async function inspectProjectWorktreeTopology(args: InspectProjectWorktre
   };
 
   for (const record of parsedWorktrees) {
-    const canonical = record.path === canonicalProjectPath;
+    const canonical = record.path === (canonicalWorktreeRoot as string);
     const placement: WorktreePlacement = canonical
       ? 'canonical_main'
       : isPathWithinRoot(record.path, expectedWorktreeRoot)
