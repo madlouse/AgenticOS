@@ -698,7 +698,52 @@ describe('runPreflight', () => {
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('different repo_path');
+    expect(result.block_reasons.join(' ')).toContain('historical for the current checkout');
+  });
+
+  it('returns BLOCK when the latest issue bootstrap is missing repo_path continuity evidence', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': '/repo\n',
+      'rev-parse --git-common-dir': '.git\n',
+      'config --get remote.origin.url': 'git@github.com:madlouse/AgenticOS.git\n',
+      'rev-parse --abbrev-ref HEAD': 'feat/36-guardrail-preflight\n',
+      'rev-parse HEAD': 'abc123\n',
+      'rev-parse origin/main': 'base999\n',
+      'merge-base HEAD origin/main': 'base999\n',
+      'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/36-guardrail-preflight\n',
+      'log --format=%s origin/main..HEAD': '',
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/runtime/.agent-workspace/projects/agenticos/guardrail-state.yaml',
+      state: {
+        issue_bootstrap: {
+          latest: {
+            issue_id: '36',
+            repo_path: '   ',
+            current_branch: 'feat/36-guardrail-preflight',
+            startup_context_paths: ['/workspace/projects/agenticos/standards/.project.yaml'],
+            stages: {
+              context_reset_performed: true,
+              project_hot_load_performed: true,
+              issue_payload_attached: true,
+            },
+          },
+        },
+      },
+    });
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '36',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    })) as { status: string; block_reasons: string[]; redirect_actions: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('missing repo_path for the current checkout');
+    expect(result.redirect_actions).toContain('rerun agenticos_issue_bootstrap in the current checkout');
   });
 
   it('returns BLOCK when the latest issue bootstrap branch differs from the current branch', async () => {
@@ -949,7 +994,7 @@ describe('runPreflight', () => {
       worktree_required: true,
     })) as { block_reasons: string[] };
 
-    expect(result.block_reasons.join(' ')).toContain('different repo_path');
+    expect(result.block_reasons.join(' ')).toContain('missing repo_path for the current checkout');
   });
 
   it('returns BLOCK for structural move without root exception or reproducibility gate', async () => {

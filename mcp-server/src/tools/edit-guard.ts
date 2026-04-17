@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
 import { extractLatestIssueBootstrap, loadLatestGuardrailState } from '../utils/guardrail-evidence.js';
+import { assessIssueBootstrapContinuity } from '../utils/issue-bootstrap-continuity.js';
 import {
   isImplementationAffectingTask,
   resolveGuardrailProjectTarget,
@@ -198,6 +199,12 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
     result.block_reasons.push('no issue bootstrap evidence is recorded for the target project');
     result.recovery_actions.push('record agenticos_issue_bootstrap for the current issue before rerunning preflight');
   } else {
+    const bootstrapContinuity = await assessIssueBootstrapContinuity({
+      bootstrap: latestBootstrap,
+      currentRepoPath: repo_path,
+      projectPath: result.target_project?.path,
+      checkStartupContextPaths: false,
+    });
     result.evidence.issue_bootstrap_issue_id = typeof latestBootstrap.issue_id === 'string' ? latestBootstrap.issue_id : null;
     result.evidence.issue_bootstrap_repo_path = typeof latestBootstrap.repo_path === 'string' ? latestBootstrap.repo_path : null;
     result.evidence.issue_bootstrap_branch = typeof latestBootstrap.current_branch === 'string' ? latestBootstrap.current_branch : null;
@@ -209,9 +216,9 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
       result.recovery_actions.push(`record agenticos_issue_bootstrap for issue #${issue_id} before rerunning preflight`);
     }
 
-    if (repo_path && resolve(latestBootstrap.repo_path || '') !== resolve(repo_path)) {
-      result.block_reasons.push('latest issue bootstrap was recorded for a different repo_path');
-      result.recovery_actions.push('record agenticos_issue_bootstrap for the current repo_path before rerunning preflight');
+    if (bootstrapContinuity.status !== 'current') {
+      result.block_reasons.push(bootstrapContinuity.summary);
+      result.recovery_actions.push(...bootstrapContinuity.recovery_actions);
     }
 
     if (result.evidence.current_branch && latestBootstrap.current_branch && latestBootstrap.current_branch !== result.evidence.current_branch) {

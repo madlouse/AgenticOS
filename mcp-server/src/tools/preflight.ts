@@ -7,6 +7,7 @@ import {
   persistGuardrailEvidence,
   type GuardrailPersistenceResult,
 } from '../utils/guardrail-evidence.js';
+import { assessIssueBootstrapContinuity } from '../utils/issue-bootstrap-continuity.js';
 import {
   isImplementationAffectingTask,
   resolveGuardrailProjectTarget,
@@ -330,14 +331,21 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
         if (!latestBootstrap) {
           result.block_reasons.push('no issue bootstrap evidence is recorded for the target project');
         } else {
+          const bootstrapContinuity = await assessIssueBootstrapContinuity({
+            bootstrap: latestBootstrap,
+            currentRepoPath: repo_path,
+            projectPath: projectResolution.targetProject.path,
+            checkStartupContextPaths: false,
+          });
+
           if (issue_id && latestBootstrap.issue_id !== issue_id) {
             result.block_reasons.push(
               `latest issue bootstrap issue "${latestBootstrap.issue_id || 'unknown'}" does not match requested issue "${issue_id}"`,
             );
           }
 
-          if (repo_path && resolve(latestBootstrap.repo_path || '') !== resolve(repo_path)) {
-            result.block_reasons.push('latest issue bootstrap was recorded for a different repo_path');
+          if (bootstrapContinuity.status !== 'current') {
+            result.block_reasons.push(bootstrapContinuity.summary);
           }
 
           if (latestBootstrap.current_branch && latestBootstrap.current_branch !== result.evidence.current_branch) {
@@ -358,6 +366,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
           if (!Array.isArray(latestBootstrap.startup_context_paths) || latestBootstrap.startup_context_paths.length === 0) {
             result.block_reasons.push('latest issue bootstrap is missing startup context evidence');
           }
+          result.redirect_actions.push(...bootstrapContinuity.recovery_actions);
         }
       } catch {
         result.block_reasons.push(`managed project guardrail state is missing or unreadable: ${projectResolution.targetProject.statePath}`);

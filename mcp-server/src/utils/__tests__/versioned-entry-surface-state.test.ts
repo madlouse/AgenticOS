@@ -47,7 +47,6 @@ describe('assessVersionedEntrySurfaceState', () => {
       'entry_surface_refresh still reports in_progress in committed state',
       'issue bootstrap still points at non-main branch "fix/260-stop-active-project-drift-and-main-state-pollution"',
       'issue bootstrap still points at an isolated worktree snapshot',
-      'issue bootstrap repo_path still points at "/tmp/worktrees/issue-260" instead of the canonical project root',
     ]);
   });
 

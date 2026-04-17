@@ -639,6 +639,7 @@ describe('switchProject', () => {
             issue_title: 'Implement bootstrap evidence',
             recorded_at: '2025-01-02T15:00:00.000Z',
             current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            repo_path: '/test/path',
             startup_context_paths: ['.project.yaml', '.context/quick-start.md'],
             additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
           },
@@ -655,6 +656,7 @@ describe('switchProject', () => {
             issue_title: 'Implement bootstrap evidence',
             recorded_at: '2025-01-02T15:00:00.000Z',
             current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            repo_path: '/test/path',
             startup_context_paths: ['.project.yaml', '.context/quick-start.md'],
             additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
           },
@@ -665,9 +667,10 @@ describe('switchProject', () => {
 
     const result = await switchProject({ project: 'my-project' });
 
-    expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
+    expect(result).toContain('🧭 Latest issue bootstrap record: #179 on feat/179-issue-start-bootstrap-evidence');
     expect(result).toContain('Title: Implement bootstrap evidence');
     expect(result).toContain('2 startup surface(s), 1 additional context document(s)');
+    expect(result).toContain('Status: current for this project path');
   });
 
   it('inlines actionable project context into switch output', async () => {
@@ -825,7 +828,8 @@ describe('switchProject', () => {
 
     expect(result).toContain('⚠️ Committed snapshot: stale for canonical mainline use');
     expect(result).toContain('🛡️ Latest committed guardrail snapshot: freshness not proven');
-    expect(result).toContain('🧭 Latest committed issue bootstrap snapshot: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
+    expect(result).toContain('🧭 Latest issue bootstrap record: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
+    expect(result).toContain('Status: historical for this project path');
     expect(result).toContain('🎯 Current committed task snapshot: Implement #262 concurrent runtime project resolution (in_progress)');
   });
 
@@ -1180,7 +1184,7 @@ describe('switchProject', () => {
 
     const result = await switchProject({ project: 'my-project' });
 
-    expect(result).toContain('🧭 Latest issue bootstrap: unknown issue (Unknown time)');
+    expect(result).toContain('🧭 Latest issue bootstrap record: unknown issue (Unknown time)');
   });
 
   it('surfaces a registry metadata patch warning during switch bootstrap', async () => {
@@ -2236,7 +2240,7 @@ describe('getStatus', () => {
 
     const result = await getStatus();
 
-    expect(result).toContain('🧭 Latest issue bootstrap: None recorded');
+    expect(result).toContain('🧭 Latest issue bootstrap record: None recorded');
   });
 
   it('shows the latest issue bootstrap summary in status output when evidence exists', async () => {
@@ -2278,6 +2282,7 @@ describe('getStatus', () => {
             issue_title: 'Implement bootstrap evidence',
             recorded_at: '2025-01-02T15:00:00.000Z',
             current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            repo_path: '/test/path',
             startup_context_paths: ['.project.yaml', '.context/quick-start.md'],
             additional_context: [{ path: 'knowledge/issue-158.md', reason: 'design reference' }],
           },
@@ -2287,8 +2292,62 @@ describe('getStatus', () => {
 
     const result = await getStatus();
 
-    expect(result).toContain('🧭 Latest issue bootstrap: #179 on feat/179-issue-start-bootstrap-evidence');
+    expect(result).toContain('🧭 Latest issue bootstrap record: #179 on feat/179-issue-start-bootstrap-evidence');
     expect(result).toContain('Title: Implement bootstrap evidence');
+    expect(result).toContain('Status: current for this project path');
+  });
+
+  it('surfaces missing or invalid issue bootstrap continuity in status output', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
+        source_control: { topology: 'local_directory_only' },
+        session: { last_backup: '2025-01-02T12:00:00.000Z' },
+        working_memory: { pending: [], decisions: [] },
+        issue_bootstrap: {
+          updated_at: '2025-01-02T15:00:00.000Z',
+          latest: {
+            issue_id: '179',
+            issue_title: 'Implement bootstrap evidence',
+            recorded_at: '2025-01-02T15:00:00.000Z',
+            current_branch: 'feat/179-issue-start-bootstrap-evidence',
+            repo_path: '   ',
+          },
+        },
+      },
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('🧭 Latest issue bootstrap record: #179 on feat/179-issue-start-bootstrap-evidence');
+    expect(result).toContain('Status: missing or invalid for this project path');
+    expect(result).toContain('Reason: latest issue bootstrap is missing repo_path evidence');
+    expect(result).toContain('Recovery: rerun agenticos_issue_bootstrap in the current checkout');
   });
 
   it('prefers runtime guardrail and bootstrap summaries in status output', async () => {
@@ -2553,7 +2612,8 @@ describe('getStatus', () => {
 
     expect(result).toContain('⚠️ Committed snapshot: stale for canonical mainline use');
     expect(result).toContain('🛡️ Latest committed guardrail snapshot: freshness not proven');
-    expect(result).toContain('🧭 Latest committed issue bootstrap snapshot: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
+    expect(result).toContain('🧭 Latest issue bootstrap record: #260 on fix/260-stop-active-project-drift-and-main-state-pollution');
+    expect(result).toContain('Status: historical for this project path');
     expect(result).toContain('🎯 Current committed task snapshot: Implement #262 concurrent runtime project resolution (in_progress)');
   });
 

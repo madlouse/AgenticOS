@@ -81,10 +81,6 @@ export function assessVersionedEntrySurfaceState(args: {
     reasons.push('issue bootstrap still points at an isolated worktree snapshot');
   }
 
-  if (args.projectPath && issueBootstrapRepoPath && resolve(issueBootstrapRepoPath) !== resolve(args.projectPath)) {
-    reasons.push(`issue bootstrap repo_path still points at "${issueBootstrapRepoPath}" instead of the canonical project root`);
-  }
-
   if (reasons.length > 0) {
     return {
       applies: true,

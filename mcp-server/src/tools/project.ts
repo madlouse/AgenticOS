@@ -20,6 +20,10 @@ import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
 } from '../utils/versioned-entry-surface-state.js';
+import {
+  assessIssueBootstrapContinuity,
+  type IssueBootstrapContinuityAssessment,
+} from '../utils/issue-bootstrap-continuity.js';
 import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../utils/worktree-topology.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
@@ -49,7 +53,7 @@ interface GuardrailEvidenceState {
 
 interface IssueBootstrapSummaryInput {
   issueBootstrap?: IssueBootstrapState;
-  committedSnapshotAssessment?: VersionedEntrySurfaceAssessment;
+  continuity?: IssueBootstrapContinuityAssessment;
 }
 
 interface SwitchContextSummaryInput {
@@ -174,12 +178,9 @@ function summarizeIssueBootstrapDetail(entry: IssueBootstrapRecord): string | nu
 }
 
 function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): string[] {
-  const label = usesCommittedSnapshotLabels(input.committedSnapshotAssessment)
-    ? '🧭 Latest committed issue bootstrap snapshot'
-    : '🧭 Latest issue bootstrap';
   const latestBootstrap = input.issueBootstrap?.latest;
   if (!latestBootstrap) {
-    return [`${label}: ${usesCommittedSnapshotLabels(input.committedSnapshotAssessment) ? 'freshness not proven' : 'None recorded'}`];
+    return ['🧭 Latest issue bootstrap record: None recorded'];
   }
 
   const recordedAt =
@@ -188,7 +189,7 @@ function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): str
     'Unknown time';
   const issueLabel = latestBootstrap.issue_id ? `#${latestBootstrap.issue_id}` : 'unknown issue';
   const branchDetail = latestBootstrap.current_branch ? ` on ${latestBootstrap.current_branch}` : '';
-  const lines = [`${label}: ${issueLabel}${branchDetail} (${recordedAt})`];
+  const lines = [`🧭 Latest issue bootstrap record: ${issueLabel}${branchDetail} (${recordedAt})`];
 
   if (latestBootstrap.issue_title) {
     lines.push(`   Title: ${latestBootstrap.issue_title}`);
@@ -197,6 +198,24 @@ function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): str
   const detail = summarizeIssueBootstrapDetail(latestBootstrap);
   if (detail) {
     lines.push(`   Detail: ${detail}`);
+  }
+
+  const continuity = input.continuity;
+  if (continuity) {
+    const continuityLabel = continuity.status === 'current'
+      ? 'current for this project path'
+      : continuity.status === 'historical_for_current_checkout'
+        ? 'historical for this project path'
+        : 'missing or invalid for this project path';
+    lines.push(`   Status: ${continuityLabel}`);
+
+    if (continuity.reasons.length > 0) {
+      lines.push(`   Reason: ${continuity.reasons[0]}`);
+    }
+
+    if (continuity.recovery_actions.length > 0) {
+      lines.push(`   Recovery: ${continuity.recovery_actions[0]}`);
+    }
   }
 
   return lines;
@@ -421,9 +440,17 @@ export async function switchProject(args: any): Promise<string> {
     displayState?.guardrail_evidence as GuardrailEvidenceState | undefined,
     committedSnapshotAssessment,
   );
+  const latestSwitchBootstrap = displayState?.issue_bootstrap?.latest as IssueBootstrapRecord | null | undefined;
+  const bootstrapContinuity = latestSwitchBootstrap
+    ? await assessIssueBootstrapContinuity({
+        bootstrap: latestSwitchBootstrap,
+        currentRepoPath: found.path,
+        projectPath: found.path,
+      })
+    : undefined;
   const issueBootstrapSummary = buildIssueBootstrapSummaryLines({
     issueBootstrap: displayState?.issue_bootstrap as IssueBootstrapState | undefined,
-    committedSnapshotAssessment,
+    continuity: bootstrapContinuity,
   });
   const contextSummary = buildSwitchContextSummaryLines({
     description,
@@ -525,6 +552,14 @@ export async function getStatus(args: any = {}): Promise<string> {
     state,
     projectPath: resolved.projectPath,
   });
+  const latestStatusBootstrap = displayState.issue_bootstrap?.latest as IssueBootstrapRecord | null | undefined;
+  const bootstrapContinuity = latestStatusBootstrap
+    ? await assessIssueBootstrapContinuity({
+        bootstrap: latestStatusBootstrap,
+        currentRepoPath: resolved.projectPath,
+        projectPath: resolved.projectPath,
+      })
+    : undefined;
 
   lines.push(...buildCommittedSnapshotSummaryLines(committedSnapshotAssessment));
   lines.push(...buildGuardrailSummaryLines(
@@ -533,7 +568,7 @@ export async function getStatus(args: any = {}): Promise<string> {
   ));
   lines.push(...buildIssueBootstrapSummaryLines({
     issueBootstrap: displayState.issue_bootstrap as IssueBootstrapState | undefined,
-    committedSnapshotAssessment,
+    continuity: bootstrapContinuity,
   }));
   try {
     lines.push(...await buildWorktreeTopologySummaryLines(resolved.projectPath, resolved.projectYaml));
