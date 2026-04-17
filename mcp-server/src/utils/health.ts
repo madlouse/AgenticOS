@@ -8,7 +8,9 @@ import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextP
 import { resolveGuardrailProjectTarget, type GuardrailProjectTarget } from './repo-boundary.js';
 import { validateGuardrailRepoIdentity } from './guardrail-repo-identity.js';
 import { assessVersionedEntrySurfaceState } from './versioned-entry-surface-state.js';
+import { extractLatestIssueBootstrap, loadLatestGuardrailState } from './guardrail-evidence.js';
 import { getAgenticOSHome } from './registry.js';
+import { assessIssueBootstrapContinuity, type IssueBootstrapContinuityAssessment } from './issue-bootstrap-continuity.js';
 import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology, type WorktreeTopologyInspection } from './worktree-topology.js';
 
 export interface HealthArgs {
@@ -20,7 +22,7 @@ export interface HealthArgs {
 }
 
 export interface HealthGate {
-  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'worktree_topology' | 'standard_kit';
+  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'issue_bootstrap_continuity' | 'worktree_topology' | 'standard_kit';
   status: 'PASS' | 'WARN' | 'BLOCK';
   summary: string;
 }
@@ -36,6 +38,7 @@ export interface HealthResult {
   gates: HealthGate[];
   repo_sync?: CanonicalRepoSyncDetails;
   worktree_topology?: WorktreeTopologyInspection;
+  issue_bootstrap_continuity?: IssueBootstrapContinuityAssessment;
   recovery_actions?: string[];
 }
 
@@ -143,6 +146,33 @@ function buildGuardrailGate(state: any | null): HealthGate {
     gate: 'guardrail_evidence',
     status: 'WARN',
     summary: 'No persisted guardrail evidence is present yet.',
+  };
+}
+
+async function buildIssueBootstrapContinuityGate(args: HealthArgs, projectYaml: any | null, state: any | null): Promise<{ gate: HealthGate; continuity: IssueBootstrapContinuityAssessment } | null> {
+  if (!args.project_path || state === null) return null;
+  if (projectYaml?.source_control?.topology !== 'github_versioned') return null;
+
+  const latestBootstrap = extractLatestIssueBootstrap(state);
+  const continuity = await assessIssueBootstrapContinuity({
+    bootstrap: latestBootstrap,
+    currentRepoPath: args.repo_path,
+    projectPath: args.project_path,
+  });
+
+  const gateStatus = continuity.status === 'current'
+    ? 'PASS'
+    : continuity.status === 'historical_for_current_checkout'
+      ? 'WARN'
+      : 'BLOCK';
+
+  return {
+    gate: {
+      gate: 'issue_bootstrap_continuity',
+      status: gateStatus,
+      summary: continuity.summary,
+    },
+    continuity,
   };
 }
 
@@ -298,6 +328,12 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   const resolvedProjectPath = effectiveProjectPath ?? undefined;
   const projectYaml = await readProjectYaml(resolvedProjectPath);
   const state = await readState(resolvedProjectPath, projectYaml);
+  const displayState = effectiveProjectPath && projectResolution.targetProject?.statePath
+    ? await loadLatestGuardrailState({
+        project_id: projectResolution.targetProject.id,
+        committed_state_path: projectResolution.targetProject.statePath,
+      }).then((loaded) => loaded.state).catch(() => state)
+    : state;
   const repoSync = analyzeCanonicalRepoSync({
     statusOutput: repoStatus,
     remoteBaseBranch,
@@ -313,6 +349,11 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     project_path: resolvedProjectPath,
   };
   const worktreeTopologyGate = await buildWorktreeTopologyGate(effectiveArgs, projectYaml);
+  const bootstrapContinuityGate = await buildIssueBootstrapContinuityGate(
+    effectiveArgs,
+    effectiveProjectPath ? projectYaml : null,
+    displayState,
+  );
 
   const gates: HealthGate[] = [
     {
@@ -335,6 +376,10 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     buildGuardrailGate(state),
   );
 
+  if (bootstrapContinuityGate) {
+    gates.push(bootstrapContinuityGate.gate);
+  }
+
   if (worktreeTopologyGate) {
     gates.push(worktreeTopologyGate.gate);
   }
@@ -355,10 +400,14 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     gates,
     repo_sync: repoSync.details,
     worktree_topology: worktreeTopologyGate?.topology,
+    issue_bootstrap_continuity: bootstrapContinuityGate?.continuity,
     recovery_actions: [
       ...repoSync.recovery_actions,
       ...(trustedProject.repoIdentityError
         ? [`verify git repo identity before treating repo_path as a managed project: ${trustedProject.repoIdentityError}`]
+        : []),
+      ...(bootstrapContinuityGate?.continuity.status && bootstrapContinuityGate.continuity.status !== 'current'
+        ? bootstrapContinuityGate.continuity.recovery_actions
         : []),
       ...(worktreeTopologyGate?.topology.status === 'WARN' && worktreeTopologyGate.topology.counts.misplaced_clean > 0
         ? ['recreate misplaced clean worktrees under the derived project-scoped worktree root and remove the old paths']

@@ -359,7 +359,43 @@ describe('runEditGuard', () => {
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons.join(' ')).toContain('different repo_path');
+    expect(result.block_reasons.join(' ')).toContain('historical for the current checkout');
+  });
+
+  it('blocks when the latest issue bootstrap is missing repo_path continuity evidence', async () => {
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'runtime',
+      state_path: '/runtime/.agent-workspace/projects/agenticos-standards/guardrail-state.yaml',
+      state: {
+        issue_bootstrap: {
+          latest: {
+            issue_id: '113',
+            repo_path: '   ',
+            current_branch: 'feat/113-fail-closed-edit-boundaries',
+          },
+        },
+        guardrail_evidence: {
+          preflight: {
+            issue_id: '113',
+            repo_path: '/workspace/source',
+            declared_target_files: ['projects/agenticos/mcp-server/src/index.ts'],
+            result: { status: 'PASS' },
+          },
+        },
+      },
+    });
+
+    const result = JSON.parse(await runEditGuard({
+      issue_id: '113',
+      task_type: 'implementation',
+      repo_path: '/workspace/source',
+      project_path: '/workspace/projects/agenticos/standards',
+      declared_target_files: ['projects/agenticos/mcp-server/src/index.ts'],
+    })) as { status: string; block_reasons: string[]; recovery_actions: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('missing repo_path for the current checkout');
+    expect(result.recovery_actions).toContain('rerun agenticos_issue_bootstrap in the current checkout');
   });
 
   it('blocks when the latest issue bootstrap branch differs from the current branch', async () => {
@@ -642,7 +678,7 @@ describe('runEditGuard', () => {
       declared_target_files: ['projects/agenticos/mcp-server/src/index.ts'],
     })) as { block_reasons: string[] };
 
-    expect(result.block_reasons.join(' ')).toContain('different repo_path');
+    expect(result.block_reasons.join(' ')).toContain('missing repo_path for the current checkout');
   });
 
   it('falls back preflight evidence fields to null when metadata is not string typed', async () => {

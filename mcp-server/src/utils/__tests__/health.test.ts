@@ -90,7 +90,7 @@ describe('health command', () => {
   });
 
   it('reports PASS when the canonical checkout is clean and freshness signals are present', async () => {
-    const projectRoot = await setupProjectRoot(`session:\n  last_entry_surface_refresh: "2026-03-25T00:00:00.000Z"\nguardrail_evidence:\n  last_command: "agenticos_preflight"\nentry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
+    const projectRoot = await setupProjectRoot(`session:\n  last_entry_surface_refresh: "2026-03-25T00:00:00.000Z"\nguardrail_evidence:\n  last_command: "agenticos_preflight"\nentry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    current_branch: "main"\n    workspace_type: "main"\n    repo_path: "/repo"\n`);
     childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
     standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
       missing_required_files: [],
@@ -110,6 +110,7 @@ describe('health command', () => {
       { gate: 'entry_surface_refresh', status: 'PASS', summary: 'Entry surfaces have explicit refresh metadata.' },
       { gate: 'versioned_entry_surface_state', status: 'PASS', summary: 'Committed versioned entry surfaces look fresh for canonical mainline use.' },
       { gate: 'guardrail_evidence', status: 'PASS', summary: 'Latest guardrail evidence is present (agenticos_preflight).' },
+      { gate: 'issue_bootstrap_continuity', status: 'PASS', summary: 'Latest issue bootstrap evidence is current for this checkout.' },
       { gate: 'worktree_topology', status: 'PASS', summary: 'Worktree topology matches the derived project-scoped root.' },
       { gate: 'standard_kit', status: 'PASS', summary: 'Standard-kit files match the canonical kit.' },
     ]);
@@ -177,6 +178,11 @@ describe('health command', () => {
         summary: 'No persisted guardrail evidence is present yet.',
       },
       {
+        gate: 'issue_bootstrap_continuity',
+        status: 'BLOCK',
+        summary: 'No issue bootstrap evidence is recorded for the current checkout.',
+      },
+      {
         gate: 'worktree_topology',
         status: 'WARN',
         summary: 'Worktree topology has 1 misplaced clean worktree(s).',
@@ -194,6 +200,7 @@ describe('health command', () => {
       'discard or isolate runtime-managed drift from the canonical checkout: standards/.context/state.yaml',
       'review, move, or revert source-tree edits before trusting the canonical checkout: README.md',
       'keep new implementation work inside isolated issue worktrees rather than the canonical main checkout',
+      'run agenticos_issue_bootstrap in the current checkout',
       'recreate misplaced clean worktrees under the derived project-scoped worktree root and remove the old paths',
     ]);
   });
@@ -233,6 +240,43 @@ describe('health command', () => {
     ]);
   });
 
+  it('still evaluates issue bootstrap continuity for an explicit trusted project_path without a resolved managed target', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    current_branch: "main"\n    workspace_type: "main"\n    repo_path: "/repo"\n`);
+    repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
+      activeProjectId: null,
+      resolutionSource: null,
+      targetProject: null,
+      resolutionErrors: ['explicit project path is outside the managed registry'],
+    });
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      project_path: projectRoot,
+    });
+
+    expect(result.project_path).toBe(projectRoot);
+    expect(result.gates).toContainEqual({
+      gate: 'issue_bootstrap_continuity',
+      status: 'PASS',
+      summary: 'Latest issue bootstrap evidence is current for this checkout.',
+    });
+  });
+
+  it('skips issue bootstrap continuity for non-github_versioned projects', async () => {
+    const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    repo_path: "/repo"\n`, {
+      projectYaml: `meta:\n  id: "health-project"\n  name: "Health Project"\nsource_control:\n  topology: "local_directory_only"\nagent_context:\n  quick_start: "standards/.context/quick-start.md"\n  current_state: "standards/.context/state.yaml"\n  conversations: "standards/.context/conversations/"\n  last_record_marker: "standards/.context/.last_record"\n`,
+    });
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      project_path: projectRoot,
+    });
+
+    expect(result.gates.some((gate) => gate.gate === 'issue_bootstrap_continuity')).toBe(false);
+  });
+
   it('classifies runtime-only drift in a canonical checkout that is otherwise aligned', async () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
     childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n M standards/.context/state.yaml\n M CLAUDE.md\n', ''));
@@ -249,6 +293,11 @@ describe('health command', () => {
       summary: 'Canonical checkout is blocked by runtime-managed drift: 2 path(s).',
     });
     expect(result.gates[4]).toEqual({
+      gate: 'issue_bootstrap_continuity',
+      status: 'BLOCK',
+      summary: 'No issue bootstrap evidence is recorded for the current checkout.',
+    });
+    expect(result.gates[5]).toEqual({
       gate: 'worktree_topology',
       status: 'PASS',
       summary: 'Worktree topology matches the derived project-scoped root.',
@@ -272,8 +321,27 @@ describe('health command', () => {
       { gate: 'entry_surface_refresh', status: 'PASS', summary: 'Entry surfaces have explicit refresh metadata.' },
       { gate: 'versioned_entry_surface_state', status: 'WARN', summary: 'Committed versioned entry surfaces look stale for canonical mainline use.' },
       { gate: 'guardrail_evidence', status: 'WARN', summary: 'No persisted guardrail evidence is present yet.' },
+      { gate: 'issue_bootstrap_continuity', status: 'WARN', summary: 'Latest issue bootstrap evidence is historical for the current checkout.' },
       { gate: 'worktree_topology', status: 'PASS', summary: 'Worktree topology matches the derived project-scoped root.' },
     ]);
+  });
+
+  it('surfaces invalid issue bootstrap continuity as a dedicated BLOCK gate', async () => {
+    const projectRoot = await setupProjectRoot(`session:\n  last_entry_surface_refresh: "2026-03-25T00:00:00.000Z"\nentry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    current_branch: "main"\n    workspace_type: "main"\n    repo_path: "   "\n`);
+    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+
+    const result = await runHealthCheck({
+      repo_path: '/repo',
+      project_path: projectRoot,
+    });
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.gates).toContainEqual({
+      gate: 'issue_bootstrap_continuity',
+      status: 'BLOCK',
+      summary: 'Latest issue bootstrap evidence is missing repo_path for the current checkout.',
+    });
+    expect(result.recovery_actions).toContain('rerun agenticos_issue_bootstrap in the current checkout');
   });
 
   it('normalizes managed runtime paths when agent_context uses dot-prefixed and slashless directory paths', async () => {
@@ -350,10 +418,16 @@ describe('health command', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.gates[4]).toEqual({
+      gate: 'issue_bootstrap_continuity',
+      status: 'BLOCK',
+      summary: 'No issue bootstrap evidence is recorded for the current checkout.',
+    });
+    expect(result.gates[5]).toEqual({
       gate: 'worktree_topology',
       status: 'BLOCK',
       summary: 'Worktree topology is blocked by 1 misplaced dirty worktree(s).',
     });
+    expect(result.recovery_actions).toContain('run agenticos_issue_bootstrap in the current checkout');
     expect(result.recovery_actions).toContain('protect dirty misplaced worktrees first, then recreate them under the derived project-scoped worktree root before removing the old paths');
   });
 
@@ -370,10 +444,16 @@ describe('health command', () => {
 
     expect(result.status).toBe('BLOCK');
     expect(result.gates[4]).toEqual({
+      gate: 'issue_bootstrap_continuity',
+      status: 'BLOCK',
+      summary: 'No issue bootstrap evidence is recorded for the current checkout.',
+    });
+    expect(result.gates[5]).toEqual({
       gate: 'worktree_topology',
       status: 'BLOCK',
       summary: 'Worktree topology could not be checked because the project is missing meta.id.',
     });
+    expect(result.recovery_actions).toContain('run agenticos_issue_bootstrap in the current checkout');
     expect(result.recovery_actions).toContain('restore project meta.id before relying on derived project-scoped worktree-root checks');
   });
 
@@ -463,6 +543,7 @@ describe('health command', () => {
       'verify git repo identity before treating repo_path as a managed project: show-toplevel failed',
     );
     expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(false);
+    expect(result.gates.some((gate) => gate.gate === 'issue_bootstrap_continuity')).toBe(false);
   });
 
   it('fails closed on missing repo_path, git command failure fallbacks, missing branch status, and missing project_path for standard-kit checks', async () => {
@@ -504,6 +585,11 @@ describe('health command', () => {
         summary: 'No persisted guardrail evidence is present yet.',
       },
       {
+        gate: 'issue_bootstrap_continuity',
+        status: 'BLOCK',
+        summary: 'No issue bootstrap evidence is recorded for the current checkout.',
+      },
+      {
         gate: 'worktree_topology',
         status: 'PASS',
         summary: 'Worktree topology matches the derived project-scoped root.',
@@ -518,6 +604,7 @@ describe('health command', () => {
     });
     expect(missingBranchResult.recovery_actions).toEqual([
       'inspect canonical branch status "missing branch status" and restore exact main...origin/main alignment',
+      'run agenticos_issue_bootstrap in the current checkout',
     ]);
 
     childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
@@ -629,6 +716,7 @@ describe('health command', () => {
 
     expect(result.project_path).toBeNull();
     expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(false);
+    expect(result.gates.some((gate) => gate.gate === 'issue_bootstrap_continuity')).toBe(false);
     expect(result.recovery_actions).toContain(
       'verify git repo identity before treating repo_path as a managed project: git worktree root "/workspace/worktrees/health-project/issue-1" is under the derived project worktree root "/workspace/worktrees/health-project", but git common repo root "/external" is not declared for target project "health-project"',
     );
@@ -678,6 +766,7 @@ describe('health command', () => {
 
     expect(result.project_path).toBeNull();
     expect(result.gates.some((gate) => gate.gate === 'worktree_topology')).toBe(false);
+    expect(result.gates.some((gate) => gate.gate === 'issue_bootstrap_continuity')).toBe(false);
     expect(result.recovery_actions).toContain(
       'verify git repo identity before treating repo_path as a managed project: neither git worktree root "/workspace/other-repo" nor git common repo root "/workspace/other-repo" is declared for target project "health-project"',
     );
