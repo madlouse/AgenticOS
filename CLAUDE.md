@@ -114,20 +114,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-10T08:55:55.177Z
+**Last Updated**: 2026-04-18T13:57:57.296Z
 
-**Current Task**: design/implement #262 concurrent runtime project resolution and legacy fallback downgrade (status: in_progress)
+**Current Task**: Complete #262 concurrent runtime project resolution cleanup (status: completed)
 
 **Active Items**:
-- Finish #262 runtime semantic unification across MCP tools, templates, and docs.
-- Verify remaining normative references versus historical records, then split any migration-only work into #263.
+- Select the next active issue and refresh project state from that issue before starting new implementation work.
 
 **Recent Decisions**:
-- Treat session-local project binding, explicit project selection, and repo-path proof as authoritative; runtime target resolution no longer falls back through legacy registry state.
-- Keep `registry.active_project` as compatibility-only state rather than a home-global enforcement primitive.
-- Handle legacy project migration separately in #263 with compatibility-on-read and targeted repair, not a one-shot mutate-first rewrite.
+- Treat #262 as completed merged work instead of an active implementation branch.
+- Preserve dated #262/#263 RCA and design artifacts as historical evidence rather than rewriting them into current-state truth.
+- Use the next issue selection as the handoff point for the next entry-surface refresh.
 
-**Next Action**: Complete #262 residual runtime/doc cleanup, rerun verification, then record and save the landed design state.
+**Next Action**: Select the next active issue and refresh project state from that issue before starting new implementation work.
 <!-- AGENT_CONTEXT_END -->
 
 ---
