@@ -114,19 +114,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-18T13:57:57.296Z
+**Last Updated**: 2026-04-19T03:13:14.132Z
 
-**Current Task**: Complete #262 concurrent runtime project resolution cleanup (status: completed)
+**Current Task**: Backlog reconciliation and stale issue closure (status: completed)
 
 **Active Items**:
-- Select the next active issue and refresh project state from that issue before starting new implementation work.
+- Create or triage the next real backlog item before starting new implementation work.
 
 **Recent Decisions**:
-- Treat #262 as completed merged work instead of an active implementation branch.
-- Preserve dated #262/#263 RCA and design artifacts as historical evidence rather than rewriting them into current-state truth.
-- Use the next issue selection as the handoff point for the next entry-surface refresh.
+- Treat issues #292 and #293 as stale open backlog items rather than starting duplicate implementation work.
+- Use merged PRs #270 and #278 plus targeted local verification as the closure evidence for those issues.
+- Leave the project in a no-active-issue state until a fresh backlog item is explicitly defined.
 
-**Next Action**: Select the next active issue and refresh project state from that issue before starting new implementation work.
+**Next Action**: Create or triage the next real backlog item before starting new implementation work.
 <!-- AGENT_CONTEXT_END -->
 
 ---

@@ -27,68 +27,71 @@ issue_bootstrap:
     recorded_at: 2026-04-10T08:45:19.949Z
 working_memory:
   facts:
-    - "Release 0.4.3 on 2026-04-10 already shipped the merged #260 and #262
-      runtime resolution fixes."
-    - "Historical #262 and #263 task artifacts remain useful as evidence but
-      should not drive current session state."
-    - The canonical session entry surfaces must not advertise stale in-progress
-      work after merge and release.
-    - "Updated standards/.context/quick-start.md and
-      standards/.context/state.yaml to mark the #262 cleanup as completed and
-      remove the stale in-progress messaging."
-    - Updated CLAUDE.md AGENT_CONTEXT block so adapter startup guidance matches
-      the refreshed project state.
-    - "Confirmed main already contains later merged work beyond #262 and that
-      the stale task snapshot was a context-drift problem, not an implementation
-      gap."
+    - "GitHub open issues for madlouse/AgenticOS returned empty on 2026-04-19
+      after closing #292 and #293."
+    - "Targeted verification for the continuity/transcript work passed on
+      2026-04-18: 64 tests passed across save, record, context-policy-plan, and
+      continuity-surface suites."
+    - The working tree is currently clean after the stale-issue reconciliation
+      pass.
+    - Verified targeted continuity/transcript behavior locally with 64 passing
+      tests across save, record, context-policy-plan, and continuity-surface
+      suites, plus passing TypeScript lint in mcp-server/.
+    - "Closed GitHub issues #292 and #293 with implementation references."
+    - Updated standards/.context entry surfaces and CLAUDE.md so startup context
+      now reflects an empty active issue queue.
   decisions:
-    - "Treat #262 as completed work on main rather than an active branch task."
-    - Preserve historical RCA and design artifacts as dated evidence instead of
-      rewriting them into present-tense truth.
-    - "Keep follow-up migration/audit work separate from #262 runtime semantics."
-    - "Treat #262 as completed merged work instead of an active implementation
-      branch."
-    - "Preserve dated #262/#263 RCA and design artifacts as historical evidence
-      rather than rewriting them into current-state truth."
-    - Use the next issue selection as the handoff point for the next
-      entry-surface refresh.
+    - "Treat issues #292 and #293 as stale open backlog items because their
+      acceptance criteria were already satisfied on main by merged PRs #270 and
+      #278."
+    - Refresh project entry surfaces to reflect an empty active issue queue once
+      the stale GitHub issues are closed.
+    - Do not invent a replacement active issue until a new backlog item is
+      explicitly defined.
+    - "Treat issues #292 and #293 as stale open backlog items rather than
+      starting duplicate implementation work."
+    - "Use merged PRs #270 and #278 plus targeted local verification as the
+      closure evidence for those issues."
+    - Leave the project in a no-active-issue state until a fresh backlog item is
+      explicitly defined.
   pending:
-    - Select the next active issue and refresh project state from that issue
-      before starting new implementation work.
+    - Create or triage the next real backlog item before starting new
+      implementation work.
 session:
-  last_backup: 2026-04-18T13:57:57.296Z
+  last_backup: 2026-04-19T03:13:14.132Z
   id: entry-refresh-2026-04-10
   started: 2026-04-10T10:58:11.098Z
   agent: agenticos-entry-refresh
-  last_entry_surface_refresh: 2026-04-18T13:56:18.893Z
+  last_entry_surface_refresh: 2026-04-19T03:11:27.367Z
 current_task:
-  title: "Complete #262 concurrent runtime project resolution cleanup"
+  title: Backlog reconciliation and stale issue closure
   status: completed
-  updated: 2026-04-18T13:57:46.200Z
-  next_step: "Select the next active issue and refresh the project state from that
-    issue instead of reusing the stale #262 task snapshot."
+  updated: 2026-04-19T03:12:50.449Z
+  next_step: Create or triage the next real backlog item before starting new
+    implementation work.
 loaded_context:
   - .project.yaml
   - standards/.context/quick-start.md
-  - tasks/issue-262-concurrent-runtime-project-resolution.md
-  - tasks/issue-262-submission-evidence.md
-  - tasks/issue-262-pr-draft.md
+  - tasks/issue-244-private-continuity-technical-design.md
+  - tasks/issue-245-public-raw-conversation-isolation-design.md
+  - tasks/triage-issue-backlog-2026-04-08.md
   - CHANGELOG.md
   - standards/knowledge/complete-design.md
 entry_surface_refresh:
-  refreshed_at: 2026-04-18T13:56:18.893Z
+  refreshed_at: 2026-04-19T03:11:27.367Z
   issue_id: null
-  summary: "Issue #262 concurrent runtime project resolution is complete on main
-    and shipped in release 0.4.3; entry surfaces were refreshed to stop
-    advertising the 2026-04-10 in-progress state."
+  summary: "Verified on 2026-04-19 that GitHub open issues are now empty after
+    closing stale issues #292 and #293, and refreshed the project entry surfaces
+    to reflect that there is no current active implementation issue."
   status: active
-  current_focus: "#262 is complete; session entry surfaces now reflect the
-    merged/shipped state and the project is ready for the next issue selection."
+  current_focus: The current backlog is cleared; the next work should start from a
+    fresh issue intake or backlog definition instead of reviving stale issue
+    snapshots.
   report_paths:
-    - tasks/issue-262-concurrent-runtime-project-resolution.md
-    - tasks/issue-262-submission-evidence.md
-    - tasks/issue-262-pr-draft.md
+    - tasks/issue-244-private-continuity-technical-design.md
+    - tasks/issue-245-public-raw-conversation-isolation-design.md
+    - tasks/triage-issue-backlog-2026-04-08.md
   recommended_entry_documents:
     - CHANGELOG.md
     - standards/knowledge/complete-design.md
-    - tasks/issue-262-submission-evidence.md
+    - tasks/triage-issue-backlog-2026-04-08.md
