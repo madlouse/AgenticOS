@@ -7,27 +7,27 @@ Self-hosting AgenticOS product project. Canonical operational context lives unde
 ## Current Status
 
 - **Status**: active
-- **Last Action**: Verified on 2026-04-19 that GitHub open issues are now empty after closing stale issues #292 and #293, and refreshed the project entry surfaces to reflect that there is no current active implementation issue.
-- **Current Focus**: The current backlog is cleared; the next work should start from a fresh issue intake or backlog definition instead of reviving stale issue snapshots.
-- **Resume Here**: Create or triage the next real backlog item before starting new implementation work.
-- **Refreshed At**: 2026-04-19T03:11:27.367Z
+- **Last Action**: Issue #302 merged — Created issue #302 to track release/install parity after confirming that main already contains post-0.4.3 continuity and transcript fixes while shipped/runtime distribution remains behind.
+- **Current Focus**: Issue #302 is now the active backlog item: ship the next release so installed/runtime AgenticOS catches up with post-0.4.3 continuity and transcript behavior.
+- **Resume Here**: Run issue-bootstrap and release-prep implementation flow for #302 in an isolated worktree.
+- **Refreshed At**: 2026-04-19T03:56:50.359Z
 
 ## Key Facts
-- GitHub open issues for madlouse/AgenticOS returned empty on 2026-04-19 after closing #292 and #293.
-- Targeted verification for the continuity/transcript work passed on 2026-04-18: 64 tests passed across save, record, context-policy-plan, and continuity-surface suites.
-- The working tree is currently clean after the stale-issue reconciliation pass.
+- GitHub issue #302 was created on 2026-04-19 for the post-0.4.3 runtime release parity gap.
+- Source main already contains merged PR #270 and PR #278, but releases still stop at v0.4.3 and the Homebrew formula still points to v0.4.2.
+- Targeted continuity/transcript verification passed locally on 2026-04-18 in the source tree.
 
 ## Latest Landed Reports
 
-- tasks/issue-244-private-continuity-technical-design.md
-- tasks/issue-245-public-raw-conversation-isolation-design.md
-- tasks/triage-issue-backlog-2026-04-08.md
+- tasks/issue-302-post-043-runtime-release-parity.md
+- tasks/issue-266-homebrew-runtime-session-local-release.md
+- tasks/issue-266-pr-draft.md
 
 ## Recommended Entry Documents
 
-1. CHANGELOG.md
-2. standards/knowledge/complete-design.md
-3. tasks/triage-issue-backlog-2026-04-08.md
+1. tasks/issue-302-post-043-runtime-release-parity.md
+2. CHANGELOG.md
+3. homebrew-tap/Formula/agenticos.rb
 
 ## Canonical Layers
 - Operational state: `standards/.context/state.yaml`
