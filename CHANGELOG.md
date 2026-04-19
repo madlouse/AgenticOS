@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.4] — 2026-04-19
+
+### Fixed
+- installed/runtime AgenticOS now includes the merged `private_continuity`
+  tracked-save behavior from `#244` / PR `#270`, so Git-backed private projects
+  can persist their tracked continuity surface instead of falling back to the
+  older narrow runtime-only save behavior
+- installed/runtime AgenticOS now includes the merged `public_distilled`
+  transcript-isolation behavior from `#245` / PR `#278`, so raw transcripts no
+  longer rely on tracked public conversation paths in the shipped runtime
+- Homebrew formula metadata is now aligned with the shipped release artifact
+  instead of pointing at the stale `v0.4.2` package
+
+### Changed
+- release artifact packaging is now prepared from `0.4.4`, which is the first
+  shipped version expected to carry the post-`0.4.3` continuity and transcript
+  behavior already merged on `main`
+
 ## [0.4.3] — 2026-04-10
 
 ### Fixed
