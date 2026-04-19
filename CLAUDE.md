@@ -114,19 +114,20 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-19T03:13:14.132Z
+**Last Updated**: 2026-04-19T04:04:43.522Z
 
-**Current Task**: Backlog reconciliation and stale issue closure (status: completed)
+**Current Task**: Prepare #302 post-0.4.3 runtime release parity (status: in_progress)
 
 **Active Items**:
-- Create or triage the next real backlog item before starting new implementation work.
+- Run issue-bootstrap and release-prep implementation flow for #302 in an isolated worktree.
+- Bump the release version, update changelog and formula metadata, and verify the installed runtime catches up.
 
 **Recent Decisions**:
-- Treat issues #292 and #293 as stale open backlog items rather than starting duplicate implementation work.
-- Use merged PRs #270 and #278 plus targeted local verification as the closure evidence for those issues.
-- Leave the project in a no-active-issue state until a fresh backlog item is explicitly defined.
+- Treat the next active backlog item as release/install parity work rather than another source-tree semantics redesign.
+- Use the observed quick-start save mismatch and stale Homebrew formula as concrete evidence that the installed runtime remains behind source main.
+- Start the next implementation flow under issue #302.
 
-**Next Action**: Create or triage the next real backlog item before starting new implementation work.
+**Next Action**: Run issue-bootstrap and release-prep implementation flow for #302 in an isolated worktree.
 <!-- AGENT_CONTEXT_END -->
 
 ---
