@@ -19,6 +19,7 @@ interface EditGuardArgs {
   repo_path?: string;
   project_path?: string;
   declared_target_files?: string[];
+  remote_base_branch?: string;
 }
 
 interface EditGuardResult {
@@ -72,6 +73,7 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
     repo_path,
     project_path,
     declared_target_files = [],
+    remote_base_branch = 'origin/main',
   } = args ?? {};
 
   const result: EditGuardResult = {
