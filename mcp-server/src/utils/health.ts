@@ -22,7 +22,7 @@ export interface HealthArgs {
 }
 
 export interface HealthGate {
-  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'issue_bootstrap_continuity' | 'worktree_topology' | 'standard_kit';
+  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'issue_bootstrap_continuity' | 'worktree_topology' | 'standard_kit' | 'version_freshness';
   status: 'PASS' | 'WARN' | 'BLOCK';
   summary: string;
 }
@@ -251,6 +251,66 @@ async function buildStandardKitGate(args: HealthArgs): Promise<HealthGate | null
   };
 }
 
+async function buildVersionFreshnessGate(args: HealthArgs): Promise<HealthGate | null> {
+  // Gate is only meaningful for canonical checkout role on github_versioned projects
+  if (args.checkout_role !== 'canonical') return null;
+
+  const lookupPath = args.project_path || args.repo_path;
+  if (!lookupPath) {
+    return {
+      gate: 'version_freshness',
+      status: 'WARN',
+      summary: 'Version freshness could not be checked because no project_path or repo_path was provided.',
+    };
+  }
+
+  let installedVersion: string | null = null;
+  let sourceVersion: string | null = null;
+
+  // 1. Installed runtime version — query npm registry for the published agenticos-mcp version
+  try {
+    const npmOutput = await execCommand('npm show agenticos-mcp version');
+    installedVersion = npmOutput.trim();
+  } catch {
+    // npm show fails when the package is installed from a local path (dev mode, not published)
+    installedVersion = null;
+  }
+
+  // 2. Source checkout version — read version from package.json at the project or repo root
+  const packageJsonPath = join(lookupPath, 'package.json');
+  try {
+    const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+    sourceVersion = typeof packageJson.version === 'string' ? packageJson.version.trim() : null;
+  } catch {
+    sourceVersion = null;
+  }
+
+  // Determine status
+  if (installedVersion === null || sourceVersion === null) {
+    // Dev mode or missing package.json — cannot determine freshness
+    return {
+      gate: 'version_freshness',
+      status: 'WARN',
+      summary: 'Version freshness could not be determined (runtime may be in dev mode or package.json is missing).',
+    };
+  }
+
+  if (installedVersion === sourceVersion) {
+    return {
+      gate: 'version_freshness',
+      status: 'PASS',
+      summary: `Installed runtime (${installedVersion}) matches source checkout version (${sourceVersion}).`,
+    };
+  }
+
+  // Versions differ — installed runtime may be stale or source is newer
+  return {
+    gate: 'version_freshness',
+    status: 'BLOCK',
+    summary: `Installed runtime (${installedVersion}) differs from source checkout version (${sourceVersion}).`,
+  };
+}
+
 async function resolveTrustedProjectPath(args: {
   repoPath: string;
   explicitProjectPath?: string;
@@ -389,6 +449,11 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
     gates.push(standardKitGate);
   }
 
+  const versionFreshnessGate = await buildVersionFreshnessGate(effectiveArgs);
+  if (versionFreshnessGate) {
+    gates.push(versionFreshnessGate);
+  }
+
   return {
     command: 'agenticos_health',
     status: combineHealthStatus(gates),
@@ -425,6 +490,9 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
         && worktreeTopologyGate.topology.inspection_errors.length > 0
         && !worktreeTopologyGate.topology.inspection_errors.some((error) => error.includes('missing meta.id'))
         ? ['inspect git worktree topology failures and restore accurate worktree visibility before trusting this checkout']
+        : []),
+      ...(versionFreshnessGate?.status === 'BLOCK'
+        ? ['upgrade agenticos-mcp to match the source checkout version, or pin the source checkout to match the installed runtime']
         : []),
     ],
   };

@@ -1,9 +1,10 @@
 import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises';
-import { basename, dirname, join, resolve, sep } from 'path';
+import { dirname, join, resolve } from 'path';
 import yaml from 'yaml';
-import { getAgenticOSHome, loadRegistry } from './registry.js';
+import { getAgenticOSHome } from './registry.js';
 import { detectCanonicalMainWriteProtection } from './canonical-main-guard.js';
-import { type ProjectYamlSchema, type PreflightResult, type StateYamlSchema } from './yaml-schemas.js';
+import { type PreflightResult, type StateYamlSchema } from './yaml-schemas.js';
+import { resolveProjectTarget } from './repo-boundary.js';
 
 export type GuardrailCommand =
   | 'agenticos_preflight'
@@ -87,32 +88,9 @@ interface PersistIssueBootstrapEvidenceArgs {
   payload: IssueBootstrapRecord;
 }
 
-interface ResolvedProjectTarget {
-  id: string;
-  path: string;
-  statePath: string;
-}
-
 interface LoadLatestGuardrailStateArgs {
   project_id: string;
   committed_state_path?: string;
-}
-
-function normalizePath(path: string): string {
-  return resolve(path);
-}
-
-function resolveProjectStatePath(projectPath: string, projectYaml: ProjectYamlSchema): string {
-  const configuredStatePath = projectYaml?.agent_context?.current_state;
-  if (typeof configuredStatePath === 'string' && configuredStatePath.trim().length > 0) {
-    return join(projectPath, configuredStatePath.trim());
-  }
-  return join(projectPath, '.context', 'state.yaml');
-}
-
-function isWithinProject(repoPath: string, projectPath: string): boolean {
-  if (repoPath === projectPath) return true;
-  return repoPath.startsWith(`${projectPath}${sep}`);
 }
 
 function getCommandSlot(command: GuardrailCommand): GuardrailEvidenceSlot {
@@ -257,122 +235,6 @@ function mergeGuardrailState(runtimeState: StateYaml, committedState: StateYaml 
     guardrail_evidence: mergeGuardrailEvidenceState(runtimeState?.guardrail_evidence, committedState?.guardrail_evidence),
     issue_bootstrap: runtimeState?.issue_bootstrap ?? committedState?.issue_bootstrap,
   };
-}
-
-async function findProjectRootFromRepoPath(repoPath: string): Promise<ResolvedProjectTarget | null> {
-  let currentPath = normalizePath(repoPath);
-
-  while (true) {
-    const projectYamlPath = join(currentPath, '.project.yaml');
-    const hasProjectYaml = await pathExists(projectYamlPath);
-
-    if (hasProjectYaml) {
-      let projectYaml: ProjectYamlSchema = {};
-      let projectId = currentPath.split(sep).filter(Boolean).pop() || 'unknown-project';
-      try {
-        projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
-        if (projectYaml?.meta?.id) {
-          projectId = String(projectYaml.meta.id);
-        }
-      } catch {
-        // Fall back to directory-derived project id.
-      }
-
-      const statePath = resolveProjectStatePath(currentPath, projectYaml);
-      const hasState = await pathExists(statePath);
-      if (!hasState) {
-        const parentPath = dirname(currentPath);
-        if (parentPath === currentPath) {
-          return null;
-        }
-        currentPath = parentPath;
-        continue;
-      }
-
-      return {
-        id: projectId,
-        path: currentPath,
-        statePath,
-      };
-    }
-
-    const parentPath = dirname(currentPath);
-    if (parentPath === currentPath) {
-      return null;
-    }
-    currentPath = parentPath;
-  }
-}
-
-async function resolveExplicitProjectTarget(projectPath: string): Promise<ResolvedProjectTarget | null> {
-  const normalizedProjectPath = normalizePath(projectPath);
-  const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
-  if (!(await pathExists(projectYamlPath))) {
-    return null;
-  }
-
-  let projectYaml: ProjectYamlSchema = {};
-  try {
-    projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
-  } catch {
-    projectYaml = {};
-  }
-
-  const statePath = resolveProjectStatePath(normalizedProjectPath, projectYaml);
-  if (!(await pathExists(statePath))) {
-    return null;
-  }
-
-  return {
-    id: String(projectYaml?.meta?.id || basename(normalizedProjectPath)),
-    path: normalizedProjectPath,
-    statePath,
-  };
-}
-
-async function resolveRegistryProjectTarget(projectPath: string, fallbackId: string): Promise<ResolvedProjectTarget | null> {
-  const normalizedProjectPath = normalizePath(projectPath);
-  const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
-
-  let projectYaml: ProjectYamlSchema = {};
-  if (await pathExists(projectYamlPath)) {
-    try {
-      projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
-    } catch {
-      projectYaml = {};
-    }
-  }
-
-  const statePath = resolveProjectStatePath(normalizedProjectPath, projectYaml);
-  if (!(await pathExists(statePath))) {
-    return null;
-  }
-
-  return {
-    id: String(projectYaml?.meta?.id || fallbackId || basename(normalizedProjectPath)),
-    path: normalizedProjectPath,
-    statePath,
-  };
-}
-
-async function resolveProjectTarget(repoPath: string, projectPath?: string): Promise<ResolvedProjectTarget | null> {
-  if (projectPath) {
-    return resolveExplicitProjectTarget(projectPath);
-  }
-
-  const registry = await loadRegistry();
-  const normalizedRepoPath = normalizePath(repoPath);
-  const matchingProjects = registry.projects
-    .map((project) => ({ ...project, path: normalizePath(project.path) }))
-    .filter((project) => isWithinProject(normalizedRepoPath, project.path))
-    .sort((a, b) => b.path.length - a.path.length);
-
-  const registryProject = matchingProjects[0];
-  if (registryProject) {
-    return resolveRegistryProjectTarget(registryProject.path, registryProject.id);
-  }
-
-  return findProjectRootFromRepoPath(normalizedRepoPath);
 }
 
 export async function loadLatestGuardrailState(
