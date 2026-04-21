@@ -1,7 +1,8 @@
 import { exec } from 'child_process';
 import { dirname, resolve } from 'path';
 import { promisify } from 'util';
-import { extractLatestIssueBootstrap, loadLatestGuardrailState } from '../utils/guardrail-evidence.js';
+import { extractLatestIssueBootstrap, loadLatestGuardrailState, type LoadedGuardrailState } from '../utils/guardrail-evidence.js';
+import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 import { assessIssueBootstrapContinuity } from '../utils/issue-bootstrap-continuity.js';
 import {
   isImplementationAffectingTask,
@@ -180,14 +181,14 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
     }
   }
 
-  let state: any = {};
+  let state: StateYamlSchema = {};
   if (result.target_project) {
     try {
       const loadedGuardrailState = await loadLatestGuardrailState({
         project_id: result.target_project.id,
         committed_state_path: result.target_project.state_path,
       });
-      state = loadedGuardrailState.state;
+      state = loadedGuardrailState.state as StateYamlSchema;
     } catch {
       result.block_reasons.push(`managed project guardrail state is missing or unreadable: ${result.target_project.state_path}`);
       result.recovery_actions.push('ensure the managed project guardrail state exists before using the edit guard');

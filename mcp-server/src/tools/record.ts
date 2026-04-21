@@ -10,6 +10,7 @@ import {
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
 import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
+import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 
 function parseArray(val: unknown): string[] {
   if (Array.isArray(val)) return val as string[];
@@ -101,10 +102,10 @@ export async function recordSession(args: any): Promise<string> {
   }
 
   // 2. Update state.yaml
-  let state: any = {};
+  let state: StateYamlSchema = {};
   try {
     const stateContent = await readFile(statePath, 'utf-8');
-    state = yaml.parse(stateContent) || {};
+    state = yaml.parse(stateContent) as StateYamlSchema || {};
   } catch {}
 
   if (!state.working_memory) state.working_memory = { facts: [], decisions: [], pending: [] };

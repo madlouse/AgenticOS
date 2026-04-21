@@ -3,8 +3,9 @@ import { basename, dirname, join, resolve, sep } from 'path';
 import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { detectCanonicalMainWriteProtection } from './canonical-main-guard.js';
+import { type ProjectYamlSchema, type PreflightResult, type StateYamlSchema } from './yaml-schemas.js';
 
-type GuardrailCommand =
+export type GuardrailCommand =
   | 'agenticos_preflight'
   | 'agenticos_branch_bootstrap'
   | 'agenticos_pr_scope_check';
@@ -42,7 +43,7 @@ export interface IssueBootstrapState {
 interface GuardrailEvidenceState {
   updated_at?: string;
   last_command?: GuardrailCommand;
-  preflight?: Record<string, unknown>;
+  preflight?: PreflightResult;
   branch_bootstrap?: Record<string, unknown>;
   pr_scope_check?: Record<string, unknown>;
 }
@@ -57,7 +58,11 @@ interface StateYaml {
 
 export interface LoadedGuardrailState {
   source: 'runtime' | 'committed' | null;
-  state: StateYaml;
+  state: {
+    guardrail_evidence?: GuardrailEvidenceState;
+    issue_bootstrap?: IssueBootstrapState;
+    [key: string]: unknown;
+  };
   state_path: string | null;
 }
 
@@ -97,7 +102,7 @@ function normalizePath(path: string): string {
   return resolve(path);
 }
 
-function resolveProjectStatePath(projectPath: string, projectYaml: any): string {
+function resolveProjectStatePath(projectPath: string, projectYaml: ProjectYamlSchema): string {
   const configuredStatePath = projectYaml?.agent_context?.current_state;
   if (typeof configuredStatePath === 'string' && configuredStatePath.trim().length > 0) {
     return join(projectPath, configuredStatePath.trim());
@@ -262,10 +267,10 @@ async function findProjectRootFromRepoPath(repoPath: string): Promise<ResolvedPr
     const hasProjectYaml = await pathExists(projectYamlPath);
 
     if (hasProjectYaml) {
-      let projectYaml: any = {};
+      let projectYaml: ProjectYamlSchema = {};
       let projectId = currentPath.split(sep).filter(Boolean).pop() || 'unknown-project';
       try {
-        projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+        projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
         if (projectYaml?.meta?.id) {
           projectId = String(projectYaml.meta.id);
         }
@@ -306,9 +311,9 @@ async function resolveExplicitProjectTarget(projectPath: string): Promise<Resolv
     return null;
   }
 
-  let projectYaml: any = {};
+  let projectYaml: ProjectYamlSchema = {};
   try {
-    projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+    projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
   } catch {
     projectYaml = {};
   }
@@ -329,10 +334,10 @@ async function resolveRegistryProjectTarget(projectPath: string, fallbackId: str
   const normalizedProjectPath = normalizePath(projectPath);
   const projectYamlPath = join(normalizedProjectPath, '.project.yaml');
 
-  let projectYaml: any = {};
+  let projectYaml: ProjectYamlSchema = {};
   if (await pathExists(projectYamlPath)) {
     try {
-      projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+      projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
     } catch {
       projectYaml = {};
     }
