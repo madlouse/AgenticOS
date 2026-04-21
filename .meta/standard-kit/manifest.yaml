@@ -100,8 +100,8 @@ layers:
 
 upgrade_rules:
   template_marker_version:
-    AGENTS.md: 10
-    CLAUDE.md: 10
+    AGENTS.md: 11
+    CLAUDE.md: 11
   compatibility_rule: >
     Generated files may be upgraded in place by distill when the template marker version changes.
   copied_template_rule: >
