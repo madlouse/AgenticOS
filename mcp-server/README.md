@@ -190,6 +190,44 @@ After any registration change, restart the agent, confirm the server appears in 
 This verification remains manual by design.
 `agenticos_health` is repo/project scoped and does not inspect or mutate per-agent MCP settings that live in user-owned config files.
 
+## Homebrew Installation
+
+The canonical macOS install path is Homebrew. Homebrew installs the `agenticos-mcp`
+binary only — it does not create a workspace, does not edit agent configuration,
+and does not restart the AI tool.
+
+### Fresh install
+
+```bash
+brew install agenticos
+```
+
+Then bootstrap your workspace and agent:
+
+```bash
+export AGENTICOS_HOME=/path/to/your/workspace   # any valid directory
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+```
+
+Restart your AI tool and verify with `agenticos_list`.
+
+### Repairing a stale Homebrew tap
+
+If `brew info agenticos` reports the wrong version or fails to find the formula,
+refresh the tap:
+
+```bash
+brew untap agenticos/tap
+brew tap agenticos/tap https://github.com/madlouse/agenticos-homebrew
+brew install agenticos
+```
+
+For agent-level MCP registration repair after any reinstall, see
+**Repairing Stale Registrations** above.
+
+On Apple Silicon macOS, the runtime home defaults to `/opt/homebrew/var/agenticos`
+— that is a workspace directory, not a source checkout path.
+
 ## Integration Modes
 
 AgenticOS does not treat every fallback as equal:
@@ -522,6 +560,107 @@ claude mcp get agenticos
 claude mcp remove agenticos -s user
 claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
+
+### Runtime version mismatch
+
+The installed `agenticos-mcp` binary may not match the source checkout version.
+Compare them directly:
+
+```bash
+npm show agenticos-mcp version   # installed package version
+cat package.json | jq .version   # source checkout version
+```
+
+If they differ, rebuild from source:
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+Then re-register the binary (the installed `agenticos-mcp` on PATH takes precedence over
+source-checkout paths regardless of how the MCP server was originally registered).
+
+### `branch_bootstrap BLOCKED`
+
+`agenticos_branch_bootstrap` requires a Git repository root. It fails when invoked
+outside a git worktree or in a directory that is not itself a git repo.
+
+Work inside `projects/agenticos/` or a registered AgenticOS worktree:
+
+```bash
+cd "$AGENTICOS_HOME/projects/agenticos"
+git worktree list   # confirm the current context is inside a worktree
+```
+
+Do not run `branch_bootstrap` at the root of the AgenticOS source checkout unless that
+checkout is itself a valid git repo and the intended worktree root.
+
+### Session binding lost after MCP server restart
+
+The MCP server is stateless per invocation. After a server restart (client restart,
+machine reboot), the session binding that existed in the previous server process is gone.
+
+To rebind:
+
+```bash
+agenticos_status        # confirms current binding; shows "no session project" if unbound
+agenticos_switch <project>   # rebind to the intended project
+```
+
+This is expected behavior, not a bug. `agenticos_status` + `agenticos_switch` is the
+correct recovery at every new session start.
+
+### Stale Homebrew registration (version mismatch)
+
+If Homebrew reports that the installed version does not match the tap version,
+the Homebrew formula is stale. Repair with:
+
+```bash
+brew upgrade agenticos     # fastest fix if a newer version exists in the tap
+```
+
+If `brew upgrade` reports nothing to upgrade but the version still mismatches, the
+local Homebrew tap cache is stale. Force a refresh:
+
+```bash
+brew untap agenticos/tap
+brew tap agenticos/tap https://github.com/madlouse/agenticos-homebrew
+brew install agenticos
+```
+
+After any Homebrew repair, restart your AI tool and verify `agenticos_list` succeeds.
+
+---
+
+## FAQ
+
+**What's the difference between `AGENTICOS_HOME` and the AgenticOS source checkout?**
+
+`AGENTICOS_HOME` is the runtime workspace — it holds managed projects, worktrees,
+state, and session history. The AgenticOS source checkout (typically
+`projects/agenticos/` inside `AGENTICOS_HOME`) is the product itself. They are
+separate: `AGENTICOS_HOME` is where AgenticOS operates; the source checkout is
+what AgenticOS is built from.
+
+**Why does `agenticos_status` show no session binding after restart?**
+
+The MCP server is stateless per invocation. After a client restart, machine reboot,
+or MCP server restart, the session binding from the previous process is gone.
+Run `agenticos_switch` to rebind the session to your project. This is normal
+behavior, not an error. See **Session binding lost after MCP server restart** in
+Troubleshooting for the full recovery flow.
+
+**How do I check if my installed runtime matches the source?**
+
+```bash
+npm show agenticos-mcp version   # installed binary version
+cat package.json | jq .version  # source checkout version
+```
+
+If they differ, rebuild from source with `npm run build` in the mcp-server
+directory. See **Runtime version mismatch** in Troubleshooting for details.
 
 ---
 
