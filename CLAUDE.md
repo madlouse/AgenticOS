@@ -114,17 +114,17 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-21T07:56:26.103Z
+**Last Updated**: 2026-04-21T08:05:19.839Z
 
-**Current Task**: Phase 2: PRs #323-325 merged, issues closed (status: completed)
+**Current Task**: All Phase 1-3 review fixes completed (status: completed)
 
 **Active Items**:
 - Close issue #315
 
 **Recent Decisions**:
-- Added new top-level Homebrew Installation section after Integration Modes consolidating all brew-related guidance into one canonical path with tap URL
 - Added FAQ section (3 questions) covering workspace home vs source, session binding loss, and version mismatch check
 - Main README Homebrew Bootstrap Contract was already consolidated; mcp-server/README.md received the new dedicated section
+- Combined #311 and #315 into single Phase 3 PR #327 for efficiency
 
 **Next Action**: Close issue #315
 <!-- AGENT_CONTEXT_END -->
