@@ -301,3 +301,38 @@ export async function resolveGuardrailProjectTarget(args: {
       : [`No project_path, repo_path proof, or session binding is available for ${commandName}.`],
   };
 }
+
+/**
+ * Canonical unified project resolution for guardrail commands.
+ *
+ * Resolves by:
+ *   1. explicit projectPath — resolves against the filesystem, validates topology
+ *   2. repoPath containment match — searches registry projects by path containment,
+ *      considering project path, declared source repo roots, and expected worktree root
+ *   3. session project binding — uses the current session's bound project
+ *
+ * Returns the same flat {id, path, statePath} shape used by guardrail-evidence.ts so that
+ * callers that only need those three fields can use this directly without a type adaptation step.
+ * For callers that need GuardrailProjectTarget fields (githubRepo, sourceRepoRoots,
+ * expectedWorktreeRoot, topology, etc.), use resolveGuardrailProjectTarget instead.
+ */
+export async function resolveProjectTarget(
+  repoPath: string,
+  projectPath?: string,
+): Promise<{ id: string; path: string; statePath: string } | null> {
+  const resolution = await resolveGuardrailProjectTarget({
+    commandName: 'resolveProjectTarget',
+    repoPath,
+    projectPath,
+  });
+
+  if (!resolution.targetProject) {
+    return null;
+  }
+
+  return {
+    id: resolution.targetProject.id,
+    path: resolution.targetProject.path,
+    statePath: resolution.targetProject.statePath,
+  };
+}
