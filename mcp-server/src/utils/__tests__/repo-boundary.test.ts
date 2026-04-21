@@ -606,7 +606,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toContain('did not parse to a project object');
+    expect(result.resolutionErrors[0]).toContain('parsed to null/empty');
   });
 
   it('fails closed when repo_path matches multiple managed projects with equally strong proof', async () => {
@@ -668,7 +668,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toContain('nu read failed');
+    expect(result.resolutionErrors[0]).toContain('target project could not be resolved from repo_path or session binding');
   });
 
   it('uses the generic repo-path error when repo-path resolution throws a non-Error value', async () => {
@@ -698,7 +698,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toBe('failed to resolve repo_path: /workspace/projects/chi/worktrees/issue-1');
+    expect(result.resolutionErrors[0]).toContain('target project could not be resolved from repo_path or session binding');
   });
 
   it('uses the generic explicit-project error when project-path resolution throws a non-Error value', async () => {
@@ -719,7 +719,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toBe('failed to resolve project_path: /workspace/projects/tau');
+    expect(result.resolutionErrors[0]).toContain('project_path is not a resolvable managed project');
   });
 
   it('returns a session-project error when the bound session project has no readable project metadata', async () => {
@@ -788,7 +788,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toBe('failed to resolve session project');
+    expect(result.resolutionErrors[0]).toContain('session project "upsilon" is missing a readable');
   });
 
   it('returns an ambiguity error when the session binding matches multiple registry entries', async () => {

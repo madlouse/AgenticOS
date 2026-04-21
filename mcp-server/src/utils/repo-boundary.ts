@@ -163,7 +163,7 @@ async function buildTargetFromProjectPath(
     return null;
   }
   if (metadata.topologyValidationError) {
-    return null;
+    throw new Error(metadata.topologyValidationError);
   }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { topologyValidationError: _te, ...target } = metadata;
