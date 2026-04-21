@@ -231,6 +231,24 @@ It proves the current issue packet, startup surfaces, and issue-bound repo/workt
 
 ---
 
+## Your First Project
+
+Once `agenticos_list` succeeds (after bootstrap and a restart), create your
+first managed project:
+
+1. **Create the project** — ask your AI tool to run
+   `agenticos_init` with a name and topology, e.g.
+   `agenticos_init(name: "my-project", topology: "local_directory_only")`
+2. **Switch to it** — ask the tool to run `agenticos_switch(project: "my-project")`
+3. **Do real work** — complete a task across two or more sessions
+4. **Verify persistence** — on the second session, ask the tool to run
+   `agenticos_status` and confirm it shows your previous context
+
+For the recommended bootstrap walkthrough, see the Quick Start section above
+and run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` first.
+
+---
+
 ## 🛠️ Tools Reference
 
 ### agenticos_init
@@ -446,6 +464,64 @@ Get complete context for the current session project.
 - Project configuration (.project.yaml)
 - Quick start guide
 - Current session state
+
+---
+
+## Troubleshooting
+
+### `agenticos_list` returns empty
+
+1. Confirm `AGENTICOS_HOME` is set in the current shell:
+   ```bash
+   echo $AGENTICOS_HOME
+   ```
+2. Run `agenticos-bootstrap --verify` to audit the current bootstrap state
+3. If the workspace was never initialized, run:
+   ```bash
+   agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+   ```
+4. Restart your AI tool, then try `agenticos_list` again
+
+### Agent started but tools don't appear
+
+1. Confirm the MCP server is registered: `claude mcp list` (or your agent's equivalent)
+2. If `agenticos` is missing, re-register it:
+   ```bash
+   claude mcp remove agenticos -s user
+   claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+   ```
+3. Restart the AI tool completely (not just the current session)
+4. Try `agenticos_list` again
+
+### `AGENTICOS_HOME` is not inherited by GUI tools
+
+GUI applications (Claude Code desktop, Cursor, etc.) run outside your shell and
+don't inherit shell profile variables. On macOS, `--first-run` sets up
+`launchctl` persistence for this:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+```
+
+If you set `AGENTICOS_HOME` manually, also add it to your shell profile
+(`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export AGENTICOS_HOME=/path/to/your/workspace
+```
+
+Then restart the GUI application.
+
+### Stale source-checkout registration
+
+If `claude mcp get agenticos` shows a path like `node /path/to/mcp-server/build/index.js`
+instead of `agenticos-mcp`, remove the stale entry and re-register:
+
+```bash
+claude mcp get agenticos
+claude mcp remove agenticos -s user
+claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+```
 
 ---
 
