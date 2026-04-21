@@ -114,20 +114,20 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-19T04:04:43.522Z
+**Last Updated**: 2026-04-21T07:12:05.832Z
 
-**Current Task**: Prepare #302 post-0.4.3 runtime release parity (status: in_progress)
+**Current Task**: Phase 2: PRs #323-325 merged, issues closed (status: completed)
 
 **Active Items**:
-- Run issue-bootstrap and release-prep implementation flow for #302 in an isolated worktree.
-- Bump the release version, update changelog and formula metadata, and verify the installed runtime catches up.
+- #311 Phase 3: Merge root .github/ and .gitignore into repo, then delete stale root duplicates
+- #315: Add troubleshooting + consolidate Homebrew caveats
 
 **Recent Decisions**:
-- Treat the next active backlog item as release/install parity work rather than another source-tree semantics redesign.
-- Use the observed quick-start save mismatch and stale Homebrew formula as concrete evidence that the installed runtime remains behind source main.
-- Start the next implementation flow under issue #302.
+- 3 parallel Phase 2 agents covered structural move enforcement, project resolution, and knowledge index
+- #312 agent hit rate limit but all changes were still in the working tree when we checked
+- structural_move preflight enforcement was manually added (agent draft had edit-guard changes but skipped preflight.ts)
 
-**Next Action**: Run issue-bootstrap and release-prep implementation flow for #302 in an isolated worktree.
+**Next Action**: #311 Phase 3: Merge root .github/ and .gitignore into repo, then delete stale root duplicates
 <!-- AGENT_CONTEXT_END -->
 
 ---
