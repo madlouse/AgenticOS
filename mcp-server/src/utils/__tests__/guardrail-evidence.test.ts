@@ -52,6 +52,8 @@ function defaultProjectYaml(id = 'agenticos', name = 'AgenticOS'): string {
   return JSON.stringify({
     meta: { id, name },
     agent_context: { current_state: 'standards/.context/state.yaml' },
+    source_control: { topology: 'github_versioned', context_publication_policy: 'public_distilled', github_repo: 'madlouse/AgenticOS', branch_strategy: 'github_flow' },
+    execution: { source_repo_roots: ['.'] },
   });
 }
 

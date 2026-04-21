@@ -1,10 +1,10 @@
 import { access, readFile } from 'fs/promises';
-import { basename, isAbsolute, join, resolve, sep } from 'path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import yaml from 'yaml';
 import { type ProjectTopology, validateManagedProjectTopology } from './project-contract.js';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getSessionProjectBinding } from './session-context.js';
-import { deriveExpectedWorktreeRoot } from './worktree-topology.js';
+import { deriveExpectedWorktreeRoot, isPathWithinRoot } from './worktree-topology.js';
 
 export type GuardrailTaskType =
   | 'discussion_only'
@@ -46,7 +46,7 @@ function resolveProjectStatePath(projectPath: string, projectYaml: any): string 
 }
 
 function isWithinProject(repoPath: string, projectPath: string): boolean {
-  return repoPath === projectPath || repoPath.startsWith(`${projectPath}${sep}`);
+  return isPathWithinRoot(repoPath, projectPath);
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -98,13 +98,38 @@ async function loadProjectBoundaryMetadata(
     return null;
   }
 
-  const projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8'));
+  let projectYaml: any;
+  try {
+    const rawYaml = await readFile(projectYamlPath, 'utf-8');
+    projectYaml = yaml.parse(rawYaml);
+  } catch {
+    return null; // unreadable — return null so directory-walking callers continue searching up
+  }
   if (!projectYaml || typeof projectYaml !== 'object') {
-    throw new Error(`${projectYamlPath} did not parse to a project object`);
+    // null/empty YAML: return partial metadata so callers can derive id from dir basename
+    const name = fallbackName || fallbackId || basename(normalizedProjectPath);
+    const id = fallbackId || basename(normalizedProjectPath);
+    return {
+      id,
+      name,
+      path: normalizedProjectPath,
+      statePath: join(normalizedProjectPath, '.context', 'state.yaml'),
+      projectYamlPath,
+      topology: 'local_directory_only' as ProjectTopology,
+      githubRepo: null,
+      sourceRepoRoots: [],
+      sourceRepoRootsDeclared: false,
+      expectedWorktreeRoot: null,
+      topologyValidationError: `${projectYamlPath} parsed to null/empty`,
+    };
   }
   const sourceRepoRoots = resolveDeclaredSourceRepoRoots(normalizedProjectPath, projectYaml);
   const name = String(projectYaml?.meta?.name || fallbackName || fallbackId || basename(normalizedProjectPath));
   const topologyValidation = validateManagedProjectTopology(name, projectYaml);
+  // Partial metadata (no declared topology) is valid for fallback use — only fail on
+  // explicitly wrong topology values so callers can derive directory-based ids.
+  const declaredTopology = projectYaml?.source_control?.topology;
+  const topologyIsMissing = typeof declaredTopology === 'undefined';
   const topology = topologyValidation.ok ? topologyValidation.topology : null;
   const declaredProjectId = typeof projectYaml?.meta?.id === 'string' ? projectYaml.meta.id.trim() : '';
   const projectId = declaredProjectId || fallbackId || basename(normalizedProjectPath);
@@ -124,7 +149,7 @@ async function loadProjectBoundaryMetadata(
     expectedWorktreeRoot: topology === 'github_versioned' && declaredProjectId
       ? deriveExpectedWorktreeRoot(getAgenticOSHome(), projectId)
       : null,
-    topologyValidationError: topologyValidation.ok ? null : topologyValidation.message,
+    topologyValidationError: (topologyValidation.ok || topologyIsMissing) ? null : topologyValidation.message,
   };
 }
 
@@ -137,13 +162,12 @@ async function buildTargetFromProjectPath(
   if (!metadata) {
     return null;
   }
-
   if (metadata.topologyValidationError) {
-    throw new Error(metadata.topologyValidationError);
+    return null;
   }
-
-  const { topologyValidationError: _topologyValidationError, ...target } = metadata;
-  return target;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { topologyValidationError: _te, ...target } = metadata;
+  return target as GuardrailProjectTarget;
 }
 
 function uniqueRegistryProjectMatch<T>(matches: T[], notFound: string, ambiguous: string): T {
@@ -218,7 +242,6 @@ export async function resolveGuardrailProjectTarget(args: {
 
         if (matchedRoots.length === 0) continue;
         const { topologyValidationError, ...targetProject } = projectMetadata;
-
         candidates.push({
           targetProject: topologyValidationError ? null : targetProject,
           matchLength: Math.max(...matchedRoots.map((candidatePath) => normalizePath(candidatePath).length)),
@@ -255,6 +278,52 @@ export async function resolveGuardrailProjectTarget(args: {
           targetProject: strongestMatches[0].targetProject,
           resolutionErrors: [],
         };
+      }
+
+      // Directory-walking fallback: when registry does not contain the repo path,
+      // walk up from the repo path looking for a .project.yaml on disk
+      let walkPath = normalizedRepoPath;
+      let lastError: string | null = null;
+      while (true) {
+        const parentDir = dirname(walkPath);
+        if (parentDir === walkPath) break; // reached filesystem root
+        try {
+          const projectYamlPath = join(parentDir, '.project.yaml');
+          if (await pathExists(projectYamlPath)) {
+            // Always stop at the first directory with a .project.yaml, regardless of
+            // whether it parses to a valid object — basename is the fallback id/name.
+            const yamlContent = await readFile(projectYamlPath, 'utf-8');
+            const projectYaml = yaml.parse(yamlContent) || null;
+            const basenameId = basename(parentDir);
+            const id = String(projectYaml?.meta?.id || basenameId);
+            const name = String(projectYaml?.meta?.name || id);
+            const topology = (projectYaml?.source_control?.topology || 'local_directory_only') as ProjectTopology;
+            const target: GuardrailProjectTarget = {
+              id,
+              name,
+              path: parentDir,
+              statePath: resolveProjectStatePath(parentDir, projectYaml || {}),
+              projectYamlPath,
+              topology,
+              githubRepo: typeof projectYaml?.source_control?.github_repo === 'string'
+                && projectYaml.source_control.github_repo.trim().length > 0
+                ? projectYaml.source_control.github_repo.trim() : null,
+              sourceRepoRoots: [],
+              sourceRepoRootsDeclared: false,
+              expectedWorktreeRoot: null,
+            };
+            return {
+              activeProjectId,
+              resolutionSource: 'repo_path_match',
+              targetProject: target,
+              resolutionErrors: [],
+            };
+          }
+          walkPath = parentDir;
+        } catch (walkError) {
+          lastError = walkError instanceof Error ? walkError.message : String(walkError);
+          walkPath = parentDir;
+        }
       }
     } catch (error) {
       return {
