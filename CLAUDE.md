@@ -114,20 +114,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-21T07:12:05.832Z
+**Last Updated**: 2026-04-21T07:56:26.103Z
 
 **Current Task**: Phase 2: PRs #323-325 merged, issues closed (status: completed)
 
 **Active Items**:
-- #311 Phase 3: Merge root .github/ and .gitignore into repo, then delete stale root duplicates
-- #315: Add troubleshooting + consolidate Homebrew caveats
+- Close issue #315
 
 **Recent Decisions**:
-- 3 parallel Phase 2 agents covered structural move enforcement, project resolution, and knowledge index
-- #312 agent hit rate limit but all changes were still in the working tree when we checked
-- structural_move preflight enforcement was manually added (agent draft had edit-guard changes but skipped preflight.ts)
+- Added new top-level Homebrew Installation section after Integration Modes consolidating all brew-related guidance into one canonical path with tap URL
+- Added FAQ section (3 questions) covering workspace home vs source, session binding loss, and version mismatch check
+- Main README Homebrew Bootstrap Contract was already consolidated; mcp-server/README.md received the new dedicated section
 
-**Next Action**: #311 Phase 3: Merge root .github/ and .gitignore into repo, then delete stale root duplicates
+**Next Action**: Close issue #315
 <!-- AGENT_CONTEXT_END -->
 
 ---

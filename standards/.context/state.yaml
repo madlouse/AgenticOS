@@ -91,6 +91,13 @@ working_memory:
     - "#313 fixed: 8 template markers added to .meta/templates/"
     - "#313 fixed: standards/knowledge/README.md index of 96 files"
     - "#311 partial: root-git-exit-plan-2026-04-21.md created"
+    - "4 new troubleshooting entries added: runtime version mismatch,
+      branch_bootstrap BLOCKED, session binding lost, stale Homebrew
+      registration"
+    - Homebrew Installation section added to mcp-server/README.md
+    - 3-question FAQ added to mcp-server/README.md
+    - npm run build passes (tsc succeeds)
+    - Commit 3439e19 on main
   decisions:
     - Treat the next real backlog item as a release/install parity issue, not
       another source-tree continuity redesign.
@@ -138,12 +145,21 @@ working_memory:
       when we checked"
     - structural_move preflight enforcement was manually added (agent draft had
       edit-guard changes but skipped preflight.ts)
+    - "Added 4 new troubleshooting entries to existing section: runtime version
+      mismatch (npm show vs package.json), branch_bootstrap BLOCKED (root not
+      git repo), session binding lost (stateless per invocation), stale Homebrew
+      registration (brew untap/tap cycle)"
+    - Added new top-level Homebrew Installation section after Integration Modes
+      consolidating all brew-related guidance into one canonical path with tap
+      URL
+    - Added FAQ section (3 questions) covering workspace home vs source, session
+      binding loss, and version mismatch check
+    - Main README Homebrew Bootstrap Contract was already consolidated;
+      mcp-server/README.md received the new dedicated section
   pending:
-    - "#311 Phase 3: Merge root .github/ and .gitignore into repo, then delete
-      stale root duplicates"
-    - "#315: Add troubleshooting + consolidate Homebrew caveats"
+    - "Close issue #315"
 session:
-  last_backup: 2026-04-21T07:12:05.832Z
+  last_backup: 2026-04-21T07:56:26.103Z
   id: entry-refresh-2026-04-10
   started: 2026-04-10T10:58:11.098Z
   agent: agenticos-entry-refresh
