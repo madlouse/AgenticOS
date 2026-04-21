@@ -1,46 +1,31 @@
 # AgenticOS
 
-AI-native project management that persists context across sessions for
-MCP-capable AI tools.
+AgenticOS gives AI coding assistants (Claude Code, Codex, Cursor, Gemini CLI,
+and any MCP-compatible tool) a persistent, structured memory of your
+projects. Every conversation, decision, and working state is saved so you can
+pick up exactly where you left off — even weeks later. No more re-explaining
+context at the start of every session.
 
-This directory is the canonical product-source project for AgenticOS. If you
-are changing AgenticOS itself, start here instead of treating the enclosing
-workspace root as the authoritative product repository.
+**If you use an AI coding assistant and want it to remember your project
+across sessions, you are the target user.**
 
-## Source Checkout vs Runtime Home
+## Get to `agenticos_list` in 3 Steps
 
-AgenticOS now distinguishes two different paths:
+```bash
+# 1. Install (macOS)
+brew install madlouse/tap/agenticos
 
-- `projects/agenticos/` is the canonical product-source checkout for developing AgenticOS itself
-- `AGENTICOS_HOME` is the runtime home used by installed binaries and managed projects
+# 2. Set up your workspace and bootstrap your AI tool
+export AGENTICOS_HOME=~/agenticos-workspace
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 
-Do not treat the runtime home as the product-source root.
-In the standard layout, the runtime home contains a `projects/` directory, and
-the AgenticOS source project lives at `"$AGENTICOS_HOME/projects/agenticos"`.
+# 3. Verify — restart your AI tool, then ask it to run agenticos_list
+```
 
-## Scope
+For full documentation, agent-specific setup, and advanced configuration,
+see [mcp-server/README.md](mcp-server/README.md).
 
-`projects/agenticos/` owns:
-
-- product documentation and operator contracts
-- MCP server source under `mcp-server/`
-- standards, templates, and downstream workflow kit
-- Homebrew distribution assets under `homebrew-tap/`
-
-The enclosing workspace root may still expose compatibility entrypoints while the root-Git split is in progress, but those root files are not the long-term authority path.
-
-This project now also carries the future repository shell needed for root-Git
-exit:
-
-- `.github/`
-- `.gitignore`
-- `CLAUDE.md`
-- `CHANGELOG.md`
-- `ROADMAP.md`
-- `LICENSE`
-- `scripts/`
-
-## Quick Start
+## Quick Start (from source)
 
 Requires: node.js >= 20.0.0
 
@@ -86,46 +71,46 @@ select a workspace, does **not** edit Claude Code, Codex, Cursor, or Gemini
 CLI configuration, does **not** restart the AI tool, and does **not** prove
 activation by itself.
 
-After installation, set `AGENTICOS_HOME` explicitly, bootstrap one supported
-agent manually or with `agenticos-bootstrap`, restart the current client, and
-explicitly verify `agenticos_list` before assuming project-intent routing is
-working.
+### Recommended: One-command bootstrap
 
-`AGENTICOS_HOME` may be any valid workspace home, including a long-term
-self-hosting AgenticOS workspace, as long as it is not the repo root of a
-project such as `projects/agenticos`.
-
-If you installed via Homebrew on Apple Silicon macOS, the default runtime-home
-example is:
+After Homebrew installation, the fastest path to a working setup is:
 
 ```bash
-export AGENTICOS_HOME=/opt/homebrew/var/agenticos
+export AGENTICOS_HOME=/absolute/path/to/your/workspace   # any valid workspace home
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 ```
 
-That path is a runtime home example, not the canonical product-source checkout.
-If you are developing AgenticOS itself, work in `projects/agenticos/` under the
-selected runtime home.
+On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
+inherit `AGENTICOS_HOME` across sessions. Then restart your AI tool and
+confirm `agenticos_list` succeeds.
 
-Requires: Node.js >= 20.0.0 for local build and packaged runtime workflows.
+Use `agenticos-bootstrap --verify` to audit the current state without
+mutating anything.
+
+### Alternative: Per-agent manual setup
+
+If you prefer to register the MCP server manually for each tool:
 
 ```bash
 export AGENTICOS_HOME=/absolute/path/to/your/workspace
 
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
-
+# Claude Code
 claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+
+# Codex
 codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+
+# Gemini CLI
 gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
 ```
-
-Verify with `agenticos-mcp --version`, then restart the target MCP client and
-confirm `agenticos_list` succeeds.
 
 For Cursor, add `agenticos` with explicit `env.AGENTICOS_HOME` to
 `~/.cursor/mcp.json`, then restart Cursor and verify `agenticos_list`.
 
+### Repairing a stale registration
+
 If a previous registration still points at a source checkout instead of
-`agenticos-mcp`, repair it manually:
+`agenticos-mcp`, repair it with:
 
 ```bash
 claude mcp get agenticos
@@ -136,6 +121,22 @@ codex mcp get agenticos
 codex mcp remove agenticos
 codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
 ```
+
+## Your First Project
+
+Once `agenticos_list` succeeds (after bootstrap and a restart), create your
+first managed project:
+
+1. **Create the project** — ask your AI tool to run
+   `agenticos_init` with a name and topology, e.g.
+   `agenticos_init(name: "my-project", topology: "local_directory_only")`
+2. **Switch to it** — ask the tool to run `agenticos_switch(project: "my-project")`
+3. **Do real work** — complete a task across two or more sessions
+4. **Verify persistence** — on the second session, ask the tool to run
+   `agenticos_status` and confirm it shows your previous context
+
+For a full walkthrough with `agenticos-bootstrap --first-run`, see
+[mcp-server/README.md](mcp-server/README.md).
 
 ## Canonical Documents
 
@@ -149,14 +150,6 @@ codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
   [standards/knowledge/](standards/knowledge/)
 - product-root shell readiness:
   [standards/knowledge/product-root-shell-readiness-2026-04-07.md](standards/knowledge/product-root-shell-readiness-2026-04-07.md)
-
-## Current Boundary Rule
-
-- `projects/agenticos/` is the only canonical AgenticOS product-source project under `projects/`
-- the enclosing `AgenticOS/` path is the workspace home; product source lives under `projects/agenticos/`
-- issue worktrees live under `$AGENTICOS_HOME/worktrees/<project-id>/` as
-  helper execution checkouts, not as managed project roots
-- root-level `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` currently remain as compatibility entrypoints during that migration
 
 ## Managed Project Contract
 
@@ -175,3 +168,30 @@ Current save/recovery contract:
 - `local_private`: Git is not the continuity recovery mechanism
 - `private_continuity`: `agenticos_save` is expected to persist the tracked continuity core for Git-backed restore
 - `public_distilled`: `agenticos_save` persists a distilled tracked continuity core for Git-backed restore, while raw transcripts route to a private sidecar such as `.private/conversations/`
+
+---
+
+## For Developers
+
+This directory is the canonical product-source project for AgenticOS. If you
+are changing AgenticOS itself, start here instead of treating the enclosing
+workspace root as the authoritative product repository.
+
+AgenticOS distinguishes two different paths:
+
+- `projects/agenticos/` is the canonical product-source checkout for developing AgenticOS itself
+- `AGENTICOS_HOME` is the runtime home used by installed binaries and managed projects
+
+In the standard layout, the runtime home contains a `projects/` directory, and
+the AgenticOS source project lives at `"$AGENTICOS_HOME/projects/agenticos"`.
+
+`projects/agenticos/` owns:
+
+- product documentation and operator contracts
+- MCP server source under `mcp-server/`
+- standards, templates, and downstream workflow kit
+- Homebrew distribution assets under `homebrew-tap/`
+
+This project also carries the repository shell for root-Git exit:
+
+- `.github/`, `.gitignore`, `CLAUDE.md`, `CHANGELOG.md`, `ROADMAP.md`, `LICENSE`, `scripts/`

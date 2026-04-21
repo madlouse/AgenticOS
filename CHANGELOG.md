@@ -57,6 +57,23 @@ _No unreleased changes._
 - generated `AGENTS.md` and `CLAUDE.md` adapter surfaces now ship with truthful
   `standards/.context/*` navigation for the self-hosting product project
 
+## [0.4.0] — 2026-04-06
+
+### Added
+- task intake rule: codified operator-intent recovery before treating named
+  methods or workflow fragments as the full plan
+- standard-kit adoption and upgrade-check tooling for downstream projects
+- distilled conversation surface with configurable truncation
+- `distill.ts` utility improvements: stronger truncation, word-boundary respect,
+  ellipsis placement
+
+### Changed
+- Homebrew formula updated to reflect new release artifact layout and artifact
+  naming conventions
+- standard-kit manifest updated with revised inheritance rules
+- template and documentation improvements across `issue-design-brief.md` and
+  Homebrew README
+
 ## [0.4.1] — 2026-04-07
 
 ### Fixed
@@ -73,6 +90,39 @@ _No unreleased changes._
 - CI now uses `npm install` instead of `npm ci` where lock-file drift made
   release and verification brittle
 - release workflow now matches the same install contract
+
+## [0.2.2] — 2026-04-01
+
+### Changed
+- Homebrew formula now provisions a workspace in `post_install` for a smoother
+  first-run experience; no user-facing API changes
+
+## [0.3.0] — 2026-04-01
+
+### Added
+- fail-fast `AGENTICOS_HOME` enforcement: AgenticOS now requires an explicit
+  `AGENTICOS_HOME` to be set and refuses to operate without it
+- `agenticos_edit_guard` tool: fail-closed project boundary enforcement before
+  implementation edits
+- `agenticos_standard_kit_conformance_check` and
+  `agenticos_standard_kit_upgrade_check` tools for downstream project audits
+- cross-agent policy freeze: codified boundaries between MCP-native, MCP +
+  Skills Assist, CLI Wrapper, and Skills-only guidance modes
+- `agenticos_non_code_evaluate` tool: rubric-backed non-code evaluation
+- `agenticos_health` command: canonical checkout freshness evaluation
+- `agenticos_refresh_entry_surfaces` command: deterministic quick-start and
+  state refresh from merged-work inputs
+- `agenticos_archive_import_evaluate` tool: archive import classification
+- guardrail summary now surfaces in `agenticos_status` and `agenticos_switch`
+  output
+
+### Fixed
+- `agenticos_pr_scope_check` now correctly preserves literal dots in path
+  matching instead of treating them as wildcards
+
+### Changed
+- distribution now via GitHub Releases and Homebrew
+- narrowed scope: deferred `memory.jsonl` and project-level changelog surfaces
 
 ## [0.2.0] — 2026-03-22
 
