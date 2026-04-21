@@ -1,3 +1,4 @@
+# <!-- agenticos-template: v1 -->
 # Sub-Agent Handoff
 
 ## Project Identity

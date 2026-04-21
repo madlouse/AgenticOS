@@ -1,3 +1,4 @@
+# <!-- agenticos-template: v1 -->
 # Global Review Log
 
 ## Purpose

@@ -1,3 +1,4 @@
+# <!-- agenticos-template: v1 -->
 version: 0.1
 name: non-code-evaluation-rubric
 purpose: Evaluate protocol, documentation, design, or analysis outputs before submission.
