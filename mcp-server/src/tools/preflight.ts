@@ -305,9 +305,37 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
         result.block_reasons.push('structural_move requires a clean_reproducibility_gate');
       } else {
         result.reproducibility_gate_defined = true;
+        // Active structural_move enforcement: detect renames and execute gate commands
+        try {
+          const diffOutput = await runGit(repo_path, `diff --name-status --diff-filter=R ${remote_base_branch} HEAD`);
+          const renamedFiles = normalizeLines(diffOutput).filter((line) => line.startsWith('R'));
+          if (renamedFiles.length > 0) {
+            for (const cmd of clean_reproducibility_gate) {
+              try {
+                await execAsync(cmd, { cwd: repo_path });
+              } catch (gateError: unknown) {
+                result.block_reasons.push(
+                  `clean_reproducibility_gate failed for command "${cmd}": ${gateError instanceof Error ? gateError.message : String(gateError)}`,
+                );
+              }
+            }
+          }
+        } catch (gitError: unknown) {
+          result.block_reasons.push(`failed to detect renamed files: ${gitError instanceof Error ? gitError.message : String(gitError)}`);
+        }
       }
     } else {
       result.reproducibility_gate_defined = clean_reproducibility_gate.length > 0 || !structural_move;
+      // structural_move not declared — check for accidental renames and block if found
+      try {
+        const diffOutput = await runGit(repo_path, `diff --name-status --diff-filter=R ${remote_base_branch} HEAD`);
+        const renamedFiles = normalizeLines(diffOutput).filter((line) => line.startsWith('R'));
+        if (renamedFiles.length > 0) {
+          result.block_reasons.push('Structural move detected but not declared');
+        }
+      } catch {
+        // git diff for renames failed — non-fatal, continue
+      }
     }
 
     result.scope_ok = declared_target_files.length > 0;
