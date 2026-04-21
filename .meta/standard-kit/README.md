@@ -121,10 +121,6 @@ The rule is intentionally compact in downstream runtime surfaces:
 
 Downstream projects should inherit the intake rule, not the whole standards-history discussion by default.
 
-The canonical rationale lives in:
-
-- `projects/agenticos/standards/knowledge/operator-intent-interpretation-protocol-2026-04-04.md`
-
 ## Package Contents
 
 See:
