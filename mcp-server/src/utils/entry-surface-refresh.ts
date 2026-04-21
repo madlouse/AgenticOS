@@ -7,6 +7,7 @@ import {
 } from './agent-context-paths.js';
 import { resolveConversationRoutingPlan } from './conversation-routing.js';
 import { resolveContextPolicyPlan } from './context-policy-plan.js';
+import { type ProjectYamlSchema, type StateYamlSchema } from './yaml-schemas.js';
 
 export interface EntrySurfaceRefreshArgs {
   project_path: string;
@@ -41,7 +42,7 @@ export interface EntrySurfaceRefreshResult {
 interface ResolvedProjectIdentity {
   projectName: string;
   projectDescription: string;
-  projectYaml: any;
+  projectYaml: ProjectYamlSchema;
 }
 
 function normalizeList(value: unknown): string[] {
@@ -67,7 +68,7 @@ function uniqueOrdered(values: string[]): string[] {
 
 async function readProjectIdentity(projectPath: string, args: EntrySurfaceRefreshArgs): Promise<ResolvedProjectIdentity> {
   try {
-    const parsed = yaml.parse(await readFile(join(projectPath, '.project.yaml'), 'utf-8')) as any;
+    const parsed = yaml.parse(await readFile(join(projectPath, '.project.yaml'), 'utf-8')) as ProjectYamlSchema;
     return {
       projectName: args.project_name || parsed?.meta?.name || basename(projectPath),
       projectDescription: args.project_description || parsed?.meta?.description || '',
@@ -82,11 +83,11 @@ async function readProjectIdentity(projectPath: string, args: EntrySurfaceRefres
   }
 }
 
-async function readState(statePath: string): Promise<any> {
+async function readState(statePath: string): Promise<StateYamlSchema> {
   try {
-    return yaml.parse(await readFile(statePath, 'utf-8')) || {};
+    return yaml.parse(await readFile(statePath, 'utf-8')) as StateYamlSchema || {};
   } catch {
-    return {};
+    return {} as StateYamlSchema;
   }
 }
 
@@ -174,10 +175,10 @@ function buildQuickStart(
 
 function buildState(
   args: EntrySurfaceRefreshArgs,
-  existingState: any,
+  existingState: StateYamlSchema,
   refreshedAt: string,
   contextPaths: ReturnType<typeof resolveManagedProjectContextDisplayPaths>,
-): any {
+): StateYamlSchema {
   const facts = normalizeList(args.facts);
   const decisions = normalizeList(args.decisions);
   const pending = normalizeList(args.pending);

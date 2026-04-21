@@ -8,6 +8,7 @@ import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { matchesRuntimeReviewExcludedPath, resolveRuntimeReviewSurfacePaths } from '../utils/runtime-review-surface.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 import { classifyUnrelatedCommitSubjects } from '../utils/issue-commit-scope.js';
+import { type ProjectYamlSchema } from '../utils/yaml-schemas.js';
 
 const execAsync = promisify(exec);
 
@@ -42,8 +43,8 @@ async function runGit(repoPath: string, args: string): Promise<string> {
   return stdout.trim();
 }
 
-async function loadProjectYaml(projectYamlPath: string): Promise<any> {
-  return yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
+async function loadProjectYaml(projectYamlPath: string): Promise<ProjectYamlSchema> {
+  return yaml.parse(await readFile(projectYamlPath, 'utf-8')) as ProjectYamlSchema || {};
 }
 
 function normalizeLines(content: string): string[] {

@@ -13,6 +13,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
+import { type ProjectYamlSchema } from '../utils/yaml-schemas.js';
 
 async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
@@ -70,7 +71,7 @@ function toGitRelativePath(gitWorktreeRoot: string, absolutePath: string, option
   return options?.directory && !relativePath.endsWith('/') ? `${relativePath}/` : relativePath;
 }
 
-function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: any): string[] {
+function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: ProjectYamlSchema): string[] {
   if (!Array.isArray(projectYaml?.execution?.source_repo_roots)) {
     return [];
   }
@@ -116,7 +117,7 @@ async function validateGitBackedContinuityRepoBinding(args: {
   projectName: string;
   policy: 'private_continuity' | 'public_distilled' | 'local_private';
   projectPath: string;
-  projectYaml: any;
+  projectYaml: ProjectYamlSchema;
   gitWorktreeRoot: string | null;
   gitCommonRepoRoot: string | null;
 }): Promise<string[]> {
