@@ -1,3 +1,4 @@
+# <!-- agenticos-template: v1 -->
 # Quick Start
 
 > Contract: concise project-level orientation for fast resume.

@@ -1,3 +1,4 @@
+# <!-- agenticos-template: v1 -->
 # Contract:
 # - Mutable operational working state only
 # - Keep current task, working memory, and latest guardrail evidence here

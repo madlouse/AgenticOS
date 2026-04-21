@@ -1,3 +1,4 @@
+# <!-- agenticos-template: v1 -->
 version: 0.2
 name: agent-preflight-checklist
 purpose: Preflight gate before any issue-driven work proceeds to editing or submission.
