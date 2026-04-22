@@ -52,6 +52,8 @@ function defaultProjectYaml(id = 'agenticos', name = 'AgenticOS'): string {
   return JSON.stringify({
     meta: { id, name },
     agent_context: { current_state: 'standards/.context/state.yaml' },
+    source_control: { topology: 'github_versioned', context_publication_policy: 'public_distilled', github_repo: 'madlouse/AgenticOS', branch_strategy: 'github_flow' },
+    execution: { source_repo_roots: ['.'] },
   });
 }
 
@@ -451,7 +453,7 @@ describe('guardrail runtime persistence', () => {
     expect(result.project_id).toBe('explicit');
   });
 
-  it('falls back to empty project yaml metadata when registry project yaml cannot be parsed', async () => {
+  it('fails closed when registry project yaml is unreadable and no readable parent yaml exists', async () => {
     readFileMock.mockImplementation(async (path: string) => {
       if (path.endsWith('/workspace/projects/agenticos/.project.yaml') || path.endsWith('/workspace/projects/agenticos/.project.yaml'.replace('/workspace', ''))) {
         throw new Error('bad yaml');
@@ -470,8 +472,8 @@ describe('guardrail runtime persistence', () => {
       },
     });
 
-    expect(result.persisted).toBe(true);
-    expect(result.project_id).toBe('agenticos');
+    expect(result.persisted).toBe(false);
+    expect(result.reason).toContain('not within a resolvable AgenticOS project');
   });
 
   it('falls back to the registry project id when registry project metadata parses to null', async () => {
@@ -539,7 +541,7 @@ describe('guardrail runtime persistence', () => {
     expect(result.project_id).toBe('agenticos');
   });
 
-  it('fails when registry project metadata resolves to a state path that does not exist', async () => {
+  it('persists successfully when registry project metadata is valid even if committed state is absent', async () => {
     accessMock.mockImplementation(async (path: string) => {
       if (String(path).endsWith('/.project.yaml')) {
         return undefined;
@@ -561,8 +563,8 @@ describe('guardrail runtime persistence', () => {
       },
     });
 
-    expect(result.persisted).toBe(false);
-    expect(result.reason).toContain('not within a resolvable AgenticOS project');
+    expect(result.persisted).toBe(true);
+    expect(result.project_id).toBe('agenticos');
   });
 
   it('does not write runtime state when repo_path is outside managed projects', async () => {

@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.5] — 2026-04-21
+
+### Fixed
+- standard-kit: template marker version registry corrected (v10 to v11 for AGENTS.md and CLAUDE.md), enabling `agenticos_standard_kit_upgrade_check` to detect content drift accurately
+- standard-kit: legacy `.meta/agent-guide.md` and `.meta/rules.md` retired with legacy banners, eliminating conflicts with the canonical standard-kit
+- standard-kit: `tools/audit-product-root-shell.sh` stub created, removing dead-end documentation references
+- mcp-server: `agenticos_switch` now has 14 tests covering explicit selection, session binding, registry fallback, missing/invalid/archived projects
+- mcp-server: all `any`-typed YAML parsing replaced with typed `ProjectYamlSchema` and `StateYamlSchema` interfaces across 6 files
+
+### Added
+- mcp-server: `preflight` actively enforces `structural_move` — detects renamed files via `git diff --name-status --diff-filter=R`; blocks if undeclared, executes gate commands if declared
+- mcp-server: `edit_guard` post-edit scope advisory — logs files outside `declared_target_files` as recovery_action warnings
+- mcp-server: `resolveProjectTarget()` canonical unified function in `repo-boundary.ts`, eliminating ~120 duplicate lines in `guardrail-evidence.ts`
+- mcp-server: new `version_freshness` health gate — compares installed npm version vs source checkout; WARN in dev mode, BLOCK if stale
+- standard-kit: template version markers (`<!-- agenticos-template: v1 -->`) added to all 8 copied templates
+- standard-kit: `standards/knowledge/README.md` index of all 96 knowledge files with LIVE/SPEC/SUPERSEDED markers
+- docs: mcp-server/README.md rewritten with user value proposition, "Your First Project" tutorial, Troubleshooting (4 failure modes), FAQ (3 questions)
+- docs: CHANGELOG.md filled for versions 0.2.2, 0.3.0, and 0.4.0
+
+### Changed
+- architecture: root-Git exit complete — `projects/agenticos/` is now the sole canonical product source; workspace root has only pointer docs
+
 ## [0.4.4] — 2026-04-19
 
 ### Fixed

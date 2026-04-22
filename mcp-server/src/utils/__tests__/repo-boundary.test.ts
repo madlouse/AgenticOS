@@ -594,7 +594,7 @@ describe('resolveGuardrailProjectTarget', () => {
     expect(result.targetProject?.path).toBe('/workspace/projects/sigma');
   });
 
-  it('fails closed when project yaml parses to a non-object value', async () => {
+  it('falls back to directory-derived id and topology when project yaml parses to a non-object value', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: null,
       projects: [],
@@ -605,8 +605,11 @@ describe('resolveGuardrailProjectTarget', () => {
       projectPath: '/workspace/projects/phi',
     });
 
-    expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toContain('did not parse to a project object');
+    expect(result.targetProject).not.toBeNull();
+    expect(result.targetProject?.id).toBe('phi');
+    expect(result.targetProject?.name).toBe('phi');
+    expect(result.targetProject?.topology).toBe('local_directory_only');
+    expect(result.resolutionErrors).toHaveLength(0);
   });
 
   it('fails closed when repo_path matches multiple managed projects with equally strong proof', async () => {
@@ -641,7 +644,7 @@ describe('resolveGuardrailProjectTarget', () => {
     expect(result.resolutionErrors[0]).toContain('matches multiple managed projects');
   });
 
-  it('returns the underlying repo-path resolution error when project metadata loading throws', async () => {
+  it('returns null when registry project yaml is unreadable and no readable parent yaml exists', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: null,
       projects: [
@@ -668,10 +671,10 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toContain('nu read failed');
+    expect(result.resolutionErrors[0]).toContain('target project could not be resolved from repo_path or session binding');
   });
 
-  it('uses the generic repo-path error when repo-path resolution throws a non-Error value', async () => {
+  it('returns null when registry project yaml throws a non-Error', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: null,
       projects: [
@@ -698,10 +701,10 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toBe('failed to resolve repo_path: /workspace/projects/chi/worktrees/issue-1');
+    expect(result.resolutionErrors[0]).toContain('target project could not be resolved from repo_path or session binding');
   });
 
-  it('uses the generic explicit-project error when project-path resolution throws a non-Error value', async () => {
+  it('returns null when explicit project yaml throws a non-Error', async () => {
     loadRegistryMock.mockResolvedValue({
       active_project: null,
       projects: [],
@@ -719,7 +722,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toBe('failed to resolve project_path: /workspace/projects/tau');
+    expect(result.resolutionErrors[0]).toContain('project_path is not a resolvable managed project');
   });
 
   it('returns a session-project error when the bound session project has no readable project metadata', async () => {
@@ -757,7 +760,7 @@ describe('resolveGuardrailProjectTarget', () => {
     expect(result.resolutionErrors[0]).toContain('session project "omega" is missing a readable .project.yaml');
   });
 
-  it('uses the generic session-project error when session resolution throws a non-Error value', async () => {
+  it('returns null when session project yaml throws a non-Error', async () => {
     bindSessionProject({
       projectId: 'upsilon',
       projectName: 'Upsilon Project',
@@ -788,7 +791,7 @@ describe('resolveGuardrailProjectTarget', () => {
     });
 
     expect(result.targetProject).toBeNull();
-    expect(result.resolutionErrors[0]).toBe('failed to resolve session project');
+    expect(result.resolutionErrors[0]).toContain('session project "upsilon" is missing a readable');
   });
 
   it('returns an ambiguity error when the session binding matches multiple registry entries', async () => {

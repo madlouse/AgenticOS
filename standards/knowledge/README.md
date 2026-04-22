@@ -1,10 +1,10 @@
+# AgenticOS Standards Knowledge Index
+
 ---
 status: live
 date: 2026-04-21
 issue: "#313"
 ---
-
-# AgenticOS Standards Knowledge Index
 
 Index of all documents in `standards/knowledge/`. Status markers:
 - **LIVE** — current guidance, use as reference
