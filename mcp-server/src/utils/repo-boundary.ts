@@ -105,8 +105,10 @@ async function loadProjectBoundaryMetadata(
   } catch {
     return null; // unreadable — return null so directory-walking callers continue searching up
   }
+
+  // null/empty YAML is valid fallback material — fall back to local_directory_only
+  // topology and let callers derive id/name from the directory basename.
   if (!projectYaml || typeof projectYaml !== 'object') {
-    // null/empty YAML: return partial metadata so callers can derive id from dir basename
     const name = fallbackName || fallbackId || basename(normalizedProjectPath);
     const id = fallbackId || basename(normalizedProjectPath);
     return {
@@ -120,7 +122,7 @@ async function loadProjectBoundaryMetadata(
       sourceRepoRoots: [],
       sourceRepoRootsDeclared: false,
       expectedWorktreeRoot: null,
-      topologyValidationError: `${projectYamlPath} parsed to null/empty`,
+      topologyValidationError: null,
     };
   }
   const sourceRepoRoots = resolveDeclaredSourceRepoRoots(normalizedProjectPath, projectYaml);

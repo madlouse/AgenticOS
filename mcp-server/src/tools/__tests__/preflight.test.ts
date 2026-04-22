@@ -1037,6 +1037,7 @@ describe('runPreflight', () => {
       'merge-base HEAD origin/main': 'base999\n',
       'worktree list --porcelain': 'worktree /main\nHEAD deadbeef\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc123\nbranch refs/heads/feat/40-self-hosting\n',
       'log --format=%s origin/main..HEAD': '',
+      'diff --name-status --diff-filter=R origin/main HEAD': '',
     });
     loadLatestGuardrailStateMock.mockResolvedValue({
       source: 'runtime',
