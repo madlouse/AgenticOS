@@ -114,19 +114,20 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-21T08:05:19.839Z
+**Last Updated**: 2026-04-22T02:28:21.545Z
 
-**Current Task**: All Phase 1-3 review fixes completed (status: completed)
+**Current Task**: Close issue #315 (status: completed)
 
 **Active Items**:
-- Close issue #315
+- Restart Claude Code session to pick up agenticos-mcp 0.4.5
+- Refresh AgenticOS project state.yaml with #329 closure
 
 **Recent Decisions**:
-- Added FAQ section (3 questions) covering workspace home vs source, session binding loss, and version mismatch check
-- Main README Homebrew Bootstrap Contract was already consolidated; mcp-server/README.md received the new dedicated section
-- Combined #311 and #315 into single Phase 3 PR #327 for efficiency
+- Pre-existing structural-move test failure was caused by missing git diff mock, not a code bug
+- The `topologyValidationError: null` fix in repo-boundary.ts was already applied in the prior session
+- guardrail-evidence.ts does not need try/catch around resolveProjectTarget because directory-walking fallback prevents throws in the test scenarios
 
-**Next Action**: Close issue #315
+**Next Action**: Restart Claude Code session to pick up agenticos-mcp 0.4.5
 <!-- AGENT_CONTEXT_END -->
 
 ---
