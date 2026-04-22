@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'url';
+import { realpathSync } from 'fs';
 
 export function buildHelpLines(version: string): string[] {
   return [
@@ -45,6 +46,13 @@ export function isDirectExecution(argv: string[] = process.argv, moduleUrl: stri
   if (!entry) {
     return false;
   }
-
-  return pathToFileURL(entry).href === moduleUrl;
+  // Resolve symlinks so /tmp/... paths match the resolved real path in import.meta.url
+  // Shebang invocations via symlinks: argv[1] = symlink path, import.meta.url = resolved path
+  let resolvedEntry;
+  try {
+    resolvedEntry = realpathSync(entry);
+  } catch {
+    resolvedEntry = entry;
+  }
+  return pathToFileURL(resolvedEntry).href === moduleUrl;
 }
