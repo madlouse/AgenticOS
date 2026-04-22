@@ -27,195 +27,66 @@ issue_bootstrap:
     recorded_at: 2026-04-10T08:45:19.949Z
 working_memory:
   facts:
-    - "GitHub issue #302 was created on 2026-04-19 for the post-0.4.3 runtime
-      release parity gap."
-    - "Source main already contains merged PR #270 and PR #278, but releases
-      still stop at v0.4.3 and the Homebrew formula still points to v0.4.2."
-    - Targeted continuity/transcript verification passed locally on 2026-04-18
-      in the source tree.
-    - "Created GitHub issue #302: Ship release so installed runtime includes
-      post-0.4.3 continuity and transcript fixes."
-    - Added tasks/issue-302-post-043-runtime-release-parity.md as the local
-      execution note for the new issue.
-    - "Refreshed standards/.context entry surfaces and CLAUDE.md to point
-      project startup context at issue #302."
-    - "preflight.ts: Active structural_move enforcement added in
-      implementation-affecting task branch — renames detected via git diff
-      --name-status --diff-filter=R, blocks if not declared, executes gate
-      commands if declared"
-    - "preflight.ts: clean_reproducibility_gate is now executed at preflight
-      time when structural_move is true and renamed files are present (replaces
-      passive storage-only behavior)"
-    - "edit-guard.ts: Post-edit scope creep advisory added — after all guard
-      checks pass, git diff --name-only is run and undeclared edited files are
-      warned via recovery_actions (advisory, not blocking)"
-    - "edit-guard.ts: New optional remote_base_branch field added to
-      EditGuardArgs interface"
-    - npm run build passes with no TypeScript errors
-    - "Root audit complete: 15+ items classified across 3 categories"
-    - "All overlapping directories compared: mcp-server, scripts, tools,
-      AGENTS.md, CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md,
-      ROADMAP.md, LICENSE, .gitignore, .github/ — root is consistently stale vs
-      repo"
-    - root-git-exit-plan-2026-04-21.md created at standards/knowledge/ with full
-      4-phase migration plan
-    - Created standards/knowledge/README.md with full index of 96 knowledge
-      files grouped by 7 categories, each with one-line description and status
-      marker
-    - "Added <!-- agenticos-template: v1 --> markers to 8 templates:
-      agent-preflight-checklist.yaml, non-code-evaluation-rubric.yaml,
-      global-review-log.md, issue-design-brief.md, quick-start.md, state.yaml,
-      sub-agent-handoff.md, submission-evidence.md"
-    - "#314 fixed: structural_move actively enforced via git diff --name-status
-      --diff-filter=R"
-    - "#314 fixed: post-edit scope advisory added to edit-guard"
-    - "#312 fixed: resolveProjectTarget() canonical function + ~120 lines
-      removed from guardrail-evidence"
-    - "#312 fixed: version_freshness health gate comparing npm installed vs
-      source package.json version"
-    - "#313 fixed: 8 template markers (<!-- agenticos-template: v1 -->) added to
-      .meta/templates/"
-    - "#313 fixed: standards/knowledge/README.md index of 96 files with
-      LIVE/SPEC/SUPERSEDED markers"
-    - "#311 partially: root-git-exit-plan-2026-04-21.md created, execution
-      deferred"
-    - "#314 fixed: structural_move actively detected via git diff --name-status
-      --diff-filter=R, clean_reproducibility_gate executed when declared, BLOCK
-      when not declared but renames detected"
-    - "#314 fixed: edit-guard post-edit scope advisory — undeclared files in
-      recovery_actions warnings"
-    - "#312 fixed: resolveProjectTarget() canonical function in repo-boundary.ts"
-    - "#312 fixed: ~120 lines removed from guardrail-evidence.ts via import"
-    - "#312 fixed: version_freshness health gate comparing npm runtime vs source
-      package.json"
-    - "#313 fixed: 8 template markers added to .meta/templates/"
-    - "#313 fixed: standards/knowledge/README.md index of 96 files"
-    - "#311 partial: root-git-exit-plan-2026-04-21.md created"
-    - "4 new troubleshooting entries added: runtime version mismatch,
-      branch_bootstrap BLOCKED, session binding lost, stale Homebrew
-      registration"
-    - Homebrew Installation section added to mcp-server/README.md
-    - 3-question FAQ added to mcp-server/README.md
-    - npm run build passes (tsc succeeds)
-    - Commit 3439e19 on main
-    - "#311 fixed: root deleted of all stale product source duplicates
-      (mcp-server/, scripts/, tools/, AGENTS.md, CLAUDE.md, README.md,
-      CHANGELOG.md, CONTRIBUTING.md, ROADMAP.md, LICENSE, .gitignore, .github/)"
-    - "#311 fixed: workspace-pointer docs created at root (minimal CLAUDE.md,
-      AGENTS.md pointer, README.md install guide)"
-    - "#311 fixed: root .gitignore entries merged into repo .gitignore
-      (worktrees/, .private/, .runtime/)"
-    - "#315 fixed: Troubleshooting section added to mcp-server/README.md (4
-      failure modes)"
-    - "#315 fixed: Homebrew caveats consolidated into canonical path"
-    - "#315 fixed: FAQ section added (3 questions)"
-    - All 561 tests passing (49 test files)
-    - "PR #329 merged (fix/release-0.4.5 → main)"
-    - Homebrew tap formula updated to v0.4.5 in madlouse/homebrew-agenticos
-    - Local agenticos 0.4.3 → 0.4.5 upgrade complete
+    - "PR #329 merged: fix/release-0.4.5 → main, all CI green, 561/561 tests
+      passing"
+    - "Root-Git Exit plan executed: root directory stale product-source files
+      already removed, workspace pointer files (AGENTS.md, CLAUDE.md, README.md)
+      are lightweight redirects, no action needed"
+    - Homebrew tap updated to v0.4.5 in madlouse/homebrew-agenticos, local
+      agenticos 0.4.3 → 0.4.5 upgrade complete
+    - "Issue #302 (release/install parity) is DONE — v0.4.4 and v0.4.5 cover
+      post-0.4.3 continuity and transcript fixes"
+    - "Issue #328 (AGENTICOS_HOME UX) filed as agent-cli-api issue #82 — not an
+      AgenticOS product source issue"
+    - "Root-Git Exit already executed in prior work: .github/, mcp-server/,
+      scripts/, tools/, CHANGELOG.md, CONTRIBUTING.md, ROADMAP.md, LICENSE,
+      .gitignore already deleted from root"
+    - "Project state.yaml refreshed — reflects v0.4.5 release, Root-Git Exit
+      status, #82 filed in agent-cli-api"
+    - quick-start.md updated with accurate post-release status
+    - "All AgenticOS project concerns addressed: Root-Git Exit DONE, v0.4.5
+      shipped, only open issue is #328 which is agent-cli-api territory"
+    - "AgenticOS v0.4.5: shipped, all 561 tests green, Root-Git Exit confirmed
+      complete"
+    - Project state.yaml and quick-start.md refreshed to accurate post-release
+      status
+    - "agent-cli-api issue #82 filed for #328 AGENTICOS_HOME UX with full
+      implementation guidance"
   decisions:
-    - Treat the next real backlog item as a release/install parity issue, not
-      another source-tree continuity redesign.
-    - Use the observed quick-start save mismatch as live evidence that the
-      active installed runtime is still behind mainline continuity behavior.
-    - "Track the next work under GitHub issue #302 and a matching local task
-      file."
-    - Treat the next active backlog item as release/install parity work rather
-      than another source-tree semantics redesign.
-    - Use the observed quick-start save mismatch and stale Homebrew formula as
-      concrete evidence that the installed runtime remains behind source main.
-    - "Start the next implementation flow under issue #302."
-    - structural_move detection uses `git diff --name-status --diff-filter=R
-      <remote_base> HEAD` filtered to R-prefix lines
-    - "When structural_move=false and renames detected: BLOCK with 'Structural
-      move detected but not declared'"
-    - "When structural_move=true and renames detected: execute
-      clean_reproducibility_gate commands, block on any command failure"
-    - edit-guard post-edit scope check uses `git diff --name-only <base> HEAD`
-      and logs undeclared edits as advisory warnings to recovery_actions only
-      (not hard blocks)
-    - edit-guard gained optional remote_base_branch parameter to support diff
-      comparison
-    - "Knowledge directory index: created standards/knowledge/README.md with
-      frontmatter (status + date) and grouped tables (Architecture, Guardrail
-      Design, Memory Layer, Agent Protocol, Standards, Reviews, Implementation
-      Reports)"
-    - "Status semantics: LIVE = current guidance, SPEC = design draft under
-      consideration, SUPERSEDED = replaced by newer docs"
-    - agent-friendly-readme-research marked SUPERSEDED (supplanted by spec),
-      open-source-workflow-research marked SUPERSEDED
-    - "Template version markers: added <!-- agenticos-template: v1 --> to all 8
-      .meta/templates/ files so agenticos_standard_kit_upgrade_check can detect
-      content drift"
-    - "PR1 #323: preflight structural_move active detection + edit-guard
-      advisory scope check"
-    - "PR2 #324: unified resolveProjectTarget() + version_freshness health gate"
-    - "PR3 #325: 8 template markers + knowledge index README + root-Git exit
-      plan doc"
-    - "PR4 #311: root-Git plan doc created, actual deletion deferred to Phase 3
-      (requires .github/ merge first)"
-    - 3 parallel Phase 2 agents covered structural move enforcement, project
-      resolution, and knowledge index
-    - "#312 agent hit rate limit but all changes were still in the working tree
-      when we checked"
-    - structural_move preflight enforcement was manually added (agent draft had
-      edit-guard changes but skipped preflight.ts)
-    - "Added 4 new troubleshooting entries to existing section: runtime version
-      mismatch (npm show vs package.json), branch_bootstrap BLOCKED (root not
-      git repo), session binding lost (stateless per invocation), stale Homebrew
-      registration (brew untap/tap cycle)"
-    - Added new top-level Homebrew Installation section after Integration Modes
-      consolidating all brew-related guidance into one canonical path with tap
-      URL
-    - Added FAQ section (3 questions) covering workspace home vs source, session
-      binding loss, and version mismatch check
-    - Main README Homebrew Bootstrap Contract was already consolidated;
-      mcp-server/README.md received the new dedicated section
-    - "Combined #311 and #315 into single Phase 3 PR #327 for efficiency"
-    - Pre-existing structural-move test failure was caused by missing git diff
-      mock, not a code bug
-    - "The `topologyValidationError: null` fix in repo-boundary.ts was already
-      applied in the prior session"
-    - guardrail-evidence.ts does not need try/catch around resolveProjectTarget
-      because directory-walking fallback prevents throws in the test scenarios
+    - "Root-Git Exit: no further action needed — plan was already executed
+      before this session"
+    - "Issue #328 AGENTICOS_HOME UX: belongs to agent-cli-api, issue #82 filed
+      there with detailed implementation guidance"
+    - "After v0.4.5 release, the next meaningful work is: (a) v0.5.x planning,
+      or (b) any new backlog items the user wants to prioritize"
+    - This session's state.yaml is being refreshed to reflect the actual
+      post-release status
+    - Keep stale issue_bootstrap (#260 from 2026-04-10) — next bootstrap
+      deferred until a real implementation-affecting issue is started
   pending:
-    - Restart Claude Code session to pick up agenticos-mcp 0.4.5
-    - "Refresh AgenticOS project state.yaml with #329 closure"
+    - Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
+    - Set next active backlog item (user direction needed)
 session:
-  last_backup: 2026-04-22T02:28:21.545Z
+  last_backup: 2026-04-22T05:46:43.885Z
   id: entry-refresh-2026-04-10
   started: 2026-04-10T10:58:11.098Z
   agent: agenticos-entry-refresh
-  last_entry_surface_refresh: 2026-04-19T03:56:50.359Z
+  last_entry_surface_refresh: 2026-04-22T05:43:35.171Z
 current_task:
-  title: "Close issue #315"
+  title: Post-v0.4.5 project state refresh
   status: completed
-  updated: 2026-04-22T02:28:07.823Z
-  next_step: "Run issue-bootstrap and release-prep implementation flow for #302 in
-    an isolated worktree."
+  updated: 2026-04-22T05:46:32.688Z
+  next_step: Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
 loaded_context:
   - .project.yaml
   - standards/.context/quick-start.md
-  - tasks/issue-302-post-043-runtime-release-parity.md
-  - tasks/issue-266-homebrew-runtime-session-local-release.md
-  - tasks/issue-266-pr-draft.md
-  - CHANGELOG.md
-  - homebrew-tap/Formula/agenticos.rb
 entry_surface_refresh:
-  refreshed_at: 2026-04-19T03:56:50.359Z
-  issue_id: "302"
-  summary: "Created issue #302 to track release/install parity after confirming
-    that main already contains post-0.4.3 continuity and transcript fixes while
-    shipped/runtime distribution remains behind."
+  refreshed_at: 2026-04-22T05:43:35.171Z
+  issue_id: null
+  summary: "PR #329 merged, all 561 tests green, v0.4.5 released, Root-Git Exit
+    executed, agent-cli-api issue #82 filed for #328 AGENTICOS_HOME UX"
   status: active
-  current_focus: "Issue #302 is now the active backlog item: ship the next release
-    so installed/runtime AgenticOS catches up with post-0.4.3 continuity and
-    transcript behavior."
-  report_paths:
-    - tasks/issue-302-post-043-runtime-release-parity.md
-    - tasks/issue-266-homebrew-runtime-session-local-release.md
-    - tasks/issue-266-pr-draft.md
-  recommended_entry_documents:
-    - tasks/issue-302-post-043-runtime-release-parity.md
-    - CHANGELOG.md
-    - homebrew-tap/Formula/agenticos.rb
+  current_focus: "AgenticOS v0.4.5 shipped. Root-Git Exit completed. #82 filed for
+    AGENTICOS_HOME UX fix in agent-cli-api."
+  report_paths: []
+  recommended_entry_documents: []
