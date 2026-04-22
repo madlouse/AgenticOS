@@ -52,6 +52,16 @@ working_memory:
       status
     - "agent-cli-api issue #82 filed for #328 AGENTICOS_HOME UX with full
       implementation guidance"
+    - structural-move test 验证通过：1 passed | 31 skipped
+    - "v0.4.5 quick-start.md 已刷新，包含 Root-Git Exit + #82 filed 状态"
+    - 14 项目合规审查结果已汇总
+    - "360teams: 12/13 PASS — adopt standard-kit + 补字段 + transcript phrases"
+    - "qifu-web-opencli: 12/13 PASS — adopt standard-kit + 补字段 + transcript
+      phrases + memory_contract"
+    - "ghostty-optimization: 12/13 PASS — adopt standard-kit + 补字段 + transcript
+      phrases + memory_contract"
+    - 所有 YELLOW 项目的 WIP 占位符已清理
+    - 所有 3 项目均保留 divergent 状态（custom .project.yaml 和 state.yaml 符合项目实际需求）
   decisions:
     - "Root-Git Exit: no further action needed — plan was already executed
       before this session"
@@ -63,19 +73,26 @@ working_memory:
       post-release status
     - Keep stale issue_bootstrap (#260 from 2026-04-10) — next bootstrap
       deferred until a real implementation-affecting issue is started
+    - structural-move preflight test fix 已确认完成（prior session 已应用）
+    - 14 项目合规审查已完成，3 个 RED（目录不存在），5 个 YELLOW（WIP + 缺 standards/knowledge）
+    - 3 个 RED 项目（agentic-devops/okr-management/2025-review）已归档，目录不存在
+    - YELLOW 项目统一用 adopt 工具 + 手动补字段方式处理
+    - 所有 YELLOW 项目的 public_transcript_isolation_contract 行为检查持续
+      FAIL，但文本要求（transcript isolation phrases）均已满足——这是 MCP 工具级问题
   pending:
-    - Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
-    - Set next active backlog item (user direction needed)
+    - 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
+    - "agent-cli-api #82 等待用户处理"
+    - T5T/dev-report/workforce-analytics 不需要 git，但可选择性补 knowledge/ 和 standards/
 session:
-  last_backup: 2026-04-22T05:46:43.885Z
+  last_backup: 2026-04-22T07:11:50.602Z
   id: entry-refresh-2026-04-10
   started: 2026-04-10T10:58:11.098Z
   agent: agenticos-entry-refresh
   last_entry_surface_refresh: 2026-04-22T05:43:35.171Z
 current_task:
-  title: Post-v0.4.5 project state refresh
+  title: 14 项目合规审查 + YELLOW 项目修复
   status: completed
-  updated: 2026-04-22T05:46:32.688Z
+  updated: 2026-04-22T07:11:01.526Z
   next_step: Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
 loaded_context:
   - .project.yaml

@@ -114,20 +114,21 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-22T05:46:43.885Z
+**Last Updated**: 2026-04-22T07:11:50.602Z
 
-**Current Task**: Post-v0.4.5 project state refresh (status: completed)
+**Current Task**: 14 项目合规审查 + YELLOW 项目修复 (status: completed)
 
 **Active Items**:
-- Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
-- Set next active backlog item (user direction needed)
+- 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
+- agent-cli-api #82 等待用户处理
+- T5T/dev-report/workforce-analytics 不需要 git，但可选择性补 knowledge/ 和 standards/
 
 **Recent Decisions**:
-- After v0.4.5 release, the next meaningful work is: (a) v0.5.x planning, or (b) any new backlog items the user wants to prioritize
-- This session's state.yaml is being refreshed to reflect the actual post-release status
-- Keep stale issue_bootstrap (#260 from 2026-04-10) — next bootstrap deferred until a real implementation-affecting issue is started
+- 3 个 RED 项目（agentic-devops/okr-management/2025-review）已归档，目录不存在
+- YELLOW 项目统一用 adopt 工具 + 手动补字段方式处理
+- 所有 YELLOW 项目的 public_transcript_isolation_contract 行为检查持续 FAIL，但文本要求（transcript isolation phrases）均已满足——这是 MCP 工具级问题
 
-**Next Action**: Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
+**Next Action**: 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
 <!-- AGENT_CONTEXT_END -->
 
 ---
