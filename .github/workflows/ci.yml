@@ -30,3 +30,65 @@ jobs:
       - name: Run tests
         run: npm test
         working-directory: mcp-server
+
+  mcp-symlink-integration:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install
+        working-directory: mcp-server
+      - name: Build
+        run: npm run build
+        working-directory: mcp-server
+      - name: Create symlink directory (simulates Homebrew bin/ install)
+        run: |
+          mkdir -p /tmp/agenticos-symlink-test/bin
+          # ln -s creates symlink; chmod +x ensures shebang execution works
+          ln -s "$(pwd)/mcp-server/build/index.js" /tmp/agenticos-symlink-test/bin/agenticos-mcp
+          chmod +x /tmp/agenticos-symlink-test/bin/agenticos-mcp
+          ls -la /tmp/agenticos-symlink-test/bin/
+      - name: Run MCP handshake test via symlink
+        run: |
+          node -e "
+            const { spawn } = require('child_process');
+            const path = '/tmp/agenticos-symlink-test/bin/agenticos-mcp';
+            const proc = spawn(path, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+            let timedOut = false;
+            const timer = setTimeout(() => {
+              timedOut = true;
+              console.error('TIMEOUT: server did not respond to initialize in 10s');
+              proc.kill();
+              process.exit(1);
+            }, 10000);
+            proc.stdout.on('data', (d) => {
+              const line = d.toString().trim();
+              if (!line) return;
+              try {
+                const msg = JSON.parse(line);
+                if (msg.result && msg.result.serverInfo) {
+                  clearTimeout(timer);
+                  console.log('SUCCESS: server responded via symlink path');
+                  console.log('Server:', JSON.stringify(msg.result.serverInfo));
+                  proc.kill();
+                }
+              } catch {}
+            });
+            proc.on('exit', (code) => {
+              if (!timedOut && code !== null) {
+                console.error('UNEXPECTED EXIT: server exited with code', code);
+                process.exit(1);
+              }
+            });
+            proc.stdin.write(JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'initialize',
+              params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'ci-test', version: '1.0.0' } }
+            }) + '\n');
+          "
