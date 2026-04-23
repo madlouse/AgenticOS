@@ -39,6 +39,10 @@ vi.mock('../../utils/distill.js', () => ({
   updateClaudeMdState: vi.fn().mockResolvedValue({ updated: true, created: false }),
 }));
 
+vi.mock('../../utils/canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(),
+}));
+
 // Mock child_process before the module imports it
 // Mock child_process before the module imports it
 vi.mock('child_process', () => ({
@@ -51,6 +55,7 @@ import * as registry from '../../utils/registry.js';
 import * as childProcess from 'child_process';
 import { updateClaudeMdState } from '../../utils/distill.js';
 import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
+import { detectCanonicalMainWriteProtection } from '../../utils/canonical-main-guard.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -60,6 +65,7 @@ const fsPromisesMock = fsPromises as typeof fsPromises & {
 const registryMock = registry as typeof registry & { loadRegistry: ReturnType<typeof vi.fn> };
 const childProcessMock = childProcess as typeof childProcess & { exec: ReturnType<typeof vi.fn> };
 const updateClaudeMdStateMock = updateClaudeMdState as unknown as ReturnType<typeof vi.fn>;
+const detectCanonicalMainWriteProtectionMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
 function buildRegistry(overrides: Record<string, unknown> = {}) {
   return {
@@ -123,6 +129,14 @@ describe('saveState', () => {
     // saveRegistry is not a mock - no need to clear
     yamlMock.parse.mockReset();
     yamlMock.stringify.mockReset();
+    // Default: canonical-main guard does NOT block (isolated worktree)
+    detectCanonicalMainWriteProtectionMock.mockReset();
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: false,
+      git_worktree_root: '/test/path',
+      current_branch: 'feat/test',
+      workspace_type: 'isolated_worktree',
+    });
     // Default exec mock: call callback with error (no git repo)
     childProcessMock.exec.mockReset();
     childProcessMock.exec.mockImplementation(
@@ -1280,5 +1294,72 @@ describe('saveState', () => {
     expect(statusCommand).toContain('"projects/app/runtime/conversations/"');
     expect(result).toContain('agenticos_save blocked');
     expect(result).toContain('runtime/conversations/');
+  });
+
+  it('blocks save on a canonical main checkout to protect the trusted baseline', async () => {
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: true,
+      reason: 'canonical main checkout is write-protected',
+      git_worktree_root: '/repo',
+      current_branch: 'main',
+      workspace_type: 'main',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/repo/projects/test-project',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    }));
+
+    await bindSessionProject({ projectId: 'test-project', projectName: 'Test Project', projectPath: '/repo/projects/test-project' });
+
+    const result = await saveState({ message: 'should be blocked on canonical main' });
+
+    expect(result).toContain('agenticos_save blocked');
+    expect(result).toContain('canonical main checkout');
+    expect(detectCanonicalMainWriteProtection).toHaveBeenCalledWith('/repo/projects/test-project');
+  });
+
+  it('allows save on an isolated worktree (guard passes)', async () => {
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: false,
+      git_worktree_root: '/worktrees/test-project',
+      current_branch: 'feat/test-issue',
+      workspace_type: 'isolated_worktree',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/worktrees/test-project',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    }));
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/worktrees/test-project\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/repo/.git\n', ''); return; }
+      if (cmd.includes('worktree list')) {
+        cb(null, `/worktrees/test-project (bare)\n/worktrees/test-project (isolated)`, '');
+        return;
+      }
+      if (cmd.includes('remote get-url')) { cb(null, 'https://github.com/test/project.git\n', ''); return; }
+      if (cmd.includes('add -A')) { cb(null, '', ''); return; }
+      if (cmd.includes('commit')) { cb(null, '', ''); return; }
+      if (cmd.includes('push')) { cb(new Error('push failed'), '', 'push failed'); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    await bindSessionProject({ projectId: 'test-project', projectName: 'Test Project', projectPath: '/worktrees/test-project' });
+
+    const result = await saveState({ message: 'should succeed on isolated worktree' });
+
+    expect(result).not.toContain('blocked');
+    expect(result).toContain('State saved locally');
   });
 });

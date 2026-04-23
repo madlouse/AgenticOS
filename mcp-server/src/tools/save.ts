@@ -5,6 +5,7 @@ import { existsSync } from 'fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import yaml from 'yaml';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
+import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
 import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
 import { resolveContinuitySurfacePlan } from '../utils/continuity-surface.js';
@@ -189,6 +190,17 @@ export async function saveState(args: any): Promise<string> {
   }
 
   const { project, projectPath, projectYaml, statePath } = resolved;
+
+  // Canonical-main guard: block save on canonical main checkouts to protect the trusted baseline
+  const writeProtection = await detectCanonicalMainWriteProtection(projectPath);
+  if (writeProtection.blocked) {
+    return `❌ agenticos_save blocked for "${project.name}" because canonical main checkout runtime persistence is write-protected.\n\n` +
+      `Canonical main checkout: ${writeProtection.reason ?? writeProtection.git_worktree_root}\n` +
+      'Recovery:\n' +
+      '- run agenticos_record first (runtime surfaces only — does not touch git)\n' +
+      '- keep runtime recording out of the canonical main checkout so future issue flow starts from a trusted baseline\n' +
+      '- initiate new work inside isolated issue worktrees created via agenticos_preflight or agenticos_branch_bootstrap';
+  }
 
   try {
     // Find git root from the project path (works regardless of AGENTICOS_HOME)
