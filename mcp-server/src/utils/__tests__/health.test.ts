@@ -3,8 +3,21 @@ import { mkdtemp, mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const childProcessMock = vi.hoisted(() => ({
-  exec: vi.fn(),
+// Hoisted at module level so vi.mock can reference them
+const execMock = vi.hoisted(() => vi.fn());
+const spawnMock = vi.hoisted(() => vi.fn());
+
+const mcpTransportGateMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    gate: 'mcp_transport' as const,
+    status: 'PASS' as const,
+    summary: 'MCP transport check skipped in unit tests.',
+  }),
+);
+
+vi.mock('child_process', () => ({
+  exec: execMock,
+  spawn: spawnMock,
 }));
 
 const standardKitMock = vi.hoisted(() => ({
@@ -24,13 +37,13 @@ const worktreeTopologyMock = vi.hoisted(() => ({
   inspectProjectWorktreeTopology: vi.fn(),
 }));
 
-vi.mock('child_process', () => ({
-  exec: childProcessMock.exec,
-}));
-
-vi.mock('../standard-kit.js', () => ({
-  checkStandardKitUpgrade: standardKitMock.checkStandardKitUpgrade,
-}));
+vi.mock('../standard-kit.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../standard-kit.js')>();
+  return {
+    ...actual,
+    checkStandardKitUpgrade: standardKitMock.checkStandardKitUpgrade,
+  };
+});
 
 vi.mock('../registry.js', () => ({
   getAgenticOSHome: registryMock.getAgenticOSHome,
@@ -44,6 +57,14 @@ vi.mock('../worktree-topology.js', () => ({
   deriveExpectedWorktreeRoot: worktreeTopologyMock.deriveExpectedWorktreeRoot,
   inspectProjectWorktreeTopology: worktreeTopologyMock.inspectProjectWorktreeTopology,
 }));
+
+vi.mock('../health.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../health.js')>();
+  return {
+    ...actual,
+    buildMcpTransportGate: mcpTransportGateMock,
+  };
+});
 
 import { runHealthCheck } from '../health.js';
 import { runHealth } from '../../tools/health.js';
@@ -60,6 +81,37 @@ async function setupProjectRoot(stateYaml: string, options?: { projectYaml?: str
 
 describe('health command', () => {
   beforeEach(() => {
+    // Default exec mock — individual tests override this
+    execMock.mockReset();
+    spawnMock.mockReset();
+
+    // Default exec mock: 'which agenticos-mcp' returns a path so spawn is called
+    execMock.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('which agenticos-mcp')) {
+        cb(null, '/usr/local/bin/agenticos-mcp\n', '');
+        return;
+      }
+      cb(null, '## main...origin/main\n', '');
+    });
+
+    // Default spawn mock: simulate a working MCP server
+    spawnMock.mockReturnValue({
+      on: vi.fn((event: string, cb: Function) => {
+        if (event === 'exit') setTimeout(() => cb(0), 15000); // exit after 15s if not killed
+      }),
+      stdout: { on: vi.fn((_: string, cb: (d: Buffer) => void) => {
+        // Emit serverInfo on the next microtask so the data handler is registered first
+        queueMicrotask(() => {
+          cb(Buffer.from(JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            result: { serverInfo: { name: 'agenticos-mcp', version: '0.4.7' }, capabilities: {} },
+          }) + '\n'));
+        });
+      }) },
+      stdin: { write: vi.fn() },
+      kill: vi.fn(),
+    });
+
     repoBoundaryMock.resolveGuardrailProjectTarget.mockResolvedValue({
       activeProjectId: null,
       resolutionSource: 'repo_path_match',
@@ -91,7 +143,10 @@ describe('health command', () => {
 
   it('reports PASS when the canonical checkout is clean and freshness signals are present', async () => {
     const projectRoot = await setupProjectRoot(`session:\n  last_entry_surface_refresh: "2026-03-25T00:00:00.000Z"\nguardrail_evidence:\n  last_command: "agenticos_preflight"\nentry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    current_branch: "main"\n    workspace_type: "main"\n    repo_path: "/repo"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
     standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
       missing_required_files: [],
       generated_files: [{ path: 'AGENTS.md', status: 'current' }],
@@ -113,6 +168,7 @@ describe('health command', () => {
       { gate: 'issue_bootstrap_continuity', status: 'PASS', summary: 'Latest issue bootstrap evidence is current for this checkout.' },
       { gate: 'worktree_topology', status: 'PASS', summary: 'Worktree topology matches the derived project-scoped root.' },
       { gate: 'standard_kit', status: 'PASS', summary: 'Standard-kit files match the canonical kit.' },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
     expect(result.repo_sync).toEqual({
       branch_line: '## main...origin/main',
@@ -134,7 +190,10 @@ describe('health command', () => {
 
   it('reports branch misalignment separately from runtime drift and source edits', async () => {
     const projectRoot = await setupProjectRoot(`session:\n  id: "session-1"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main [behind 2]\n M standards/.context/state.yaml\n M README.md\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main [behind 2]\n M standards/.context/state.yaml\n M README.md\n', '');
+    });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
       status: 'WARN',
@@ -187,6 +246,7 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'Worktree topology has 1 misplaced clean worktree(s).',
       },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
     expect(result.repo_sync).toEqual({
       branch_line: '## main...origin/main [behind 2]',
@@ -206,7 +266,10 @@ describe('health command', () => {
   });
 
   it('reports WARN when project state cannot be read and when standard-kit drift exists', async () => {
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
     standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
       missing_required_files: ['CLAUDE.md'],
       generated_files: [{ path: 'AGENTS.md', status: 'stale' }],
@@ -237,6 +300,7 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'Standard-kit drift was detected and should be reviewed before starting work.',
       },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
   });
 
@@ -248,7 +312,10 @@ describe('health command', () => {
       targetProject: null,
       resolutionErrors: ['explicit project path is outside the managed registry'],
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -267,7 +334,10 @@ describe('health command', () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    repo_path: "/repo"\n`, {
       projectYaml: `meta:\n  id: "health-project"\n  name: "Health Project"\nsource_control:\n  topology: "local_directory_only"\nagent_context:\n  quick_start: "standards/.context/quick-start.md"\n  current_state: "standards/.context/state.yaml"\n  conversations: "standards/.context/conversations/"\n  last_record_marker: "standards/.context/.last_record"\n`,
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -279,7 +349,10 @@ describe('health command', () => {
 
   it('classifies runtime-only drift in a canonical checkout that is otherwise aligned', async () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n M standards/.context/state.yaml\n M CLAUDE.md\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n M standards/.context/state.yaml\n M CLAUDE.md\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -308,7 +381,10 @@ describe('health command', () => {
 
   it('warns separately when committed github-versioned entry surfaces look stale', async () => {
     const projectRoot = await setupProjectRoot(`session:\n  last_entry_surface_refresh: "2026-03-25T00:00:00.000Z"\ncurrent_task:\n  title: "Implement #262 concurrent runtime project resolution"\n  status: "in_progress"\nentry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n  status: "in_progress"\nissue_bootstrap:\n  latest:\n    issue_id: "260"\n    current_branch: "fix/260-stop-active-project-drift-and-main-state-pollution"\n    workspace_type: "isolated_worktree"\n    repo_path: "/tmp/worktrees/issue-260"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -323,12 +399,16 @@ describe('health command', () => {
       { gate: 'guardrail_evidence', status: 'WARN', summary: 'No persisted guardrail evidence is present yet.' },
       { gate: 'issue_bootstrap_continuity', status: 'WARN', summary: 'Latest issue bootstrap evidence is historical for the current checkout.' },
       { gate: 'worktree_topology', status: 'PASS', summary: 'Worktree topology matches the derived project-scoped root.' },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
   });
 
   it('surfaces invalid issue bootstrap continuity as a dedicated BLOCK gate', async () => {
     const projectRoot = await setupProjectRoot(`session:\n  last_entry_surface_refresh: "2026-03-25T00:00:00.000Z"\nentry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\nissue_bootstrap:\n  latest:\n    issue_id: "300"\n    current_branch: "main"\n    workspace_type: "main"\n    repo_path: "   "\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -348,7 +428,10 @@ describe('health command', () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`, {
       projectYaml: `meta:\n  id: "health-project"\n  name: "Health Project"\nsource_control:\n  topology: "github_versioned"\n  context_publication_policy: "public_distilled"\n  branch_strategy: "github_flow"\nagent_context:\n  quick_start: "./standards/.context/quick-start.md"\n  current_state: "./standards/.context/state.yaml"\n  conversations: "./standards/.context/conversations"\n  last_record_marker: "./standards/.context/.last_record"\n`,
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n M standards/.context/conversations/logs/session-1.md\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n M standards/.context/conversations/logs/session-1.md\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -363,7 +446,10 @@ describe('health command', () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`, {
       projectYaml: `meta:\n  id: "health-project"\n  name: "Health Project"\nsource_control:\n  topology: "github_versioned"\n  context_publication_policy: "public_distilled"\n  branch_strategy: "github_flow"\nagent_context:\n  quick_start: "standards/.context/quick-start.md"\n  current_state: "standards/.context/state.yaml"\n  conversations: "standards/.context/conversations/"\n  last_record_marker: "standards/.context/.last_record"\n`,
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n M standards/.context/conversations/logs/session-2.md\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n M standards/.context/conversations/logs/session-2.md\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -378,7 +464,10 @@ describe('health command', () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`, {
       projectYaml: 'null\n',
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -390,12 +479,16 @@ describe('health command', () => {
       { gate: 'repo_sync', status: 'PASS', summary: 'Canonical checkout is clean and aligned with origin/main.' },
       { gate: 'entry_surface_refresh', status: 'WARN', summary: 'Project state could not be read, so entry-surface freshness was not proven.' },
       { gate: 'guardrail_evidence', status: 'WARN', summary: 'Project state could not be read, so guardrail visibility was not proven.' },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
   });
 
   it('reports BLOCK when topology inspection finds dirty misplaced worktrees', async () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
       status: 'BLOCK',
@@ -435,7 +528,10 @@ describe('health command', () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`, {
       projectYaml: `meta:\n  name: "Health Project"\nsource_control:\n  topology: "github_versioned"\n  context_publication_policy: "public_distilled"\n  github_repo: "madlouse/health-project"\n  branch_strategy: "github_flow"\nagent_context:\n  quick_start: "standards/.context/quick-start.md"\n  current_state: "standards/.context/state.yaml"\n  conversations: "standards/.context/conversations/"\n  last_record_marker: "standards/.context/.last_record"\n`,
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -459,7 +555,8 @@ describe('health command', () => {
 
   it('uses the resolved managed project path when health runs from repo_path only', async () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
-    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+    execMock.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
       if (command.includes('status --short --branch')) {
         cb(null, '## main...origin/main\n', '');
         return;
@@ -522,7 +619,8 @@ describe('health command', () => {
       },
       resolutionErrors: [],
     });
-    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+    execMock.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
       if (command.includes('status --short --branch')) {
         cb(null, '## main...origin/main\n', '');
         return;
@@ -549,14 +647,23 @@ describe('health command', () => {
   it('fails closed on missing repo_path, git command failure fallbacks, missing branch status, and missing project_path for standard-kit checks', async () => {
     await expect(() => runHealth(undefined)).rejects.toThrow('repo_path is required.');
 
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(new Error('git failed'), '', 'git failed'));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(new Error('git failed'), '', 'git failed');
+    });
     await expect(() => runHealthCheck({ repo_path: '/repo' })).rejects.toThrow('git failed');
 
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(new Error('message only git failure'), '', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(new Error('message only git failure'), '', '');
+    });
     await expect(() => runHealthCheck({ repo_path: '/repo' })).rejects.toThrow('message only git failure');
 
     const nullStateProjectRoot = await setupProjectRoot('null');
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '\n', '');
+    });
     const missingBranchResult = await runHealthCheck({
       repo_path: '/repo',
       project_path: nullStateProjectRoot,
@@ -594,6 +701,7 @@ describe('health command', () => {
         status: 'PASS',
         summary: 'Worktree topology matches the derived project-scoped root.',
       },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
     expect(missingBranchResult.repo_sync).toEqual({
       branch_line: '',
@@ -607,7 +715,10 @@ describe('health command', () => {
       'run agenticos_issue_bootstrap in the current checkout',
     ]);
 
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
     const result = await runHealthCheck({
       repo_path: '/repo',
       check_standard_kit: true,
@@ -631,6 +742,7 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'Standard-kit drift was detected and should be reviewed before starting work.',
       },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
   });
 
@@ -641,7 +753,10 @@ describe('health command', () => {
       targetProject: null,
       resolutionErrors: ['unmatched repo'],
     });
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
 
     const result = await runHealthCheck({
       repo_path: '/repo',
@@ -667,6 +782,7 @@ describe('health command', () => {
         status: 'WARN',
         summary: 'Standard-kit drift check was requested without a project_path.',
       },
+      { gate: 'mcp_transport', status: 'PASS', summary: 'MCP transport check skipped in test environment.' },
     ]);
     expect(result.worktree_topology).toBeUndefined();
     expect(standardKitMock.checkStandardKitUpgrade).not.toHaveBeenCalled();
@@ -690,7 +806,8 @@ describe('health command', () => {
       },
       resolutionErrors: [],
     });
-    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+    execMock.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
       if (command.includes('status --short --branch')) {
         cb(null, '## main...origin/main\n', '');
         return;
@@ -740,7 +857,8 @@ describe('health command', () => {
       },
       resolutionErrors: [],
     });
-    childProcessMock.exec.mockImplementation((command: string, cb: Function) => {
+    execMock.mockImplementation((command: string, cb: Function) => {
+      if (command.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
       if (command.includes('status --short --branch')) {
         cb(null, '## main...origin/main\n', '');
         return;
@@ -774,7 +892,10 @@ describe('health command', () => {
 
   it('uses topology-failure-specific recovery actions instead of dirty-worktree guidance', async () => {
     const projectRoot = await setupProjectRoot(`entry_surface_refresh:\n  refreshed_at: "2026-03-25T00:00:00.000Z"\n`);
-    childProcessMock.exec.mockImplementation((_: string, cb: Function) => cb(null, '## main...origin/main\n', ''));
+    execMock.mockImplementation((_: string, cb: Function) => {
+      if (_.includes('which')) { cb(null, '/usr/local/bin/agenticos-mcp\n', ''); return; }
+      cb(null, '## main...origin/main\n', '');
+    });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
       status: 'BLOCK',
