@@ -28,6 +28,7 @@ mcp-server/build/
 
 # Agent-specific temporary files
 .context/sessions/
+.context/delegations/
 
 # Runtime-only state
 .runtime/
