@@ -15,6 +15,43 @@ export function getAgenticOSHome(): string {
   return configuredHome;
 }
 
+/**
+ * Returns the confirmed canonical AGENTICOS_HOME for this machine.
+ *
+ * Resolution order:
+ * 1. AGENTICOS_HOME environment variable (already confirmed by operator)
+ * 2. Registry's last-used workspace (persisted canonical home)
+ * 3. null (no confirmed home — operator must bootstrap)
+ *
+ * Once confirmed, the canonical home persists until explicitly migrated.
+ * Install/upgrade surfaces must NOT redefine this value silently.
+ */
+export function pickMostRecentlyAccessedPath(projects: Project[]): string | null {
+  const sorted = [...projects].sort(
+    (a, b) => new Date(b.last_accessed).getTime() - new Date(a.last_accessed).getTime(),
+  );
+  return sorted[0]?.path ?? null;
+}
+
+export async function getCanonicalAgenticosHome(): Promise<string | null> {
+  // Priority 1: AGENTICOS_HOME env var — always confirmed by operator when set
+  const configuredHome = process.env.AGENTICOS_HOME;
+  if (configuredHome !== undefined && configuredHome.trim() !== '') {
+    return configuredHome.trim();
+  }
+
+  // Priority 2: Registry — last-used project path (canonical home persists here)
+  try {
+    const registry = await loadRegistryFresh();
+    if (registry.projects.length === 0) return null;
+    return pickMostRecentlyAccessedPath(registry.projects);
+  } catch {
+    // loadRegistryFresh returns defaultRegistry on ENOENT/no-parse,
+    // so only unexpected errors reach here
+    return null;
+  }
+}
+
 /** Convert an absolute path under AGENTICOS_HOME to a relative path for storage */
 function toRelative(absPath: string): string {
   const home = getAgenticOSHome();
@@ -90,6 +127,8 @@ async function loadRegistryFresh(): Promise<Registry> {
 export async function loadRegistry(): Promise<Registry> {
   return await loadRegistryFresh();
 }
+
+export { loadRegistryFresh };
 
 function toStoredRegistry(registry: Registry): Registry {
   return {
