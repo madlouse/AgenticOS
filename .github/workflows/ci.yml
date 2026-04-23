@@ -49,7 +49,9 @@ jobs:
       - name: Create symlink directory (simulates Homebrew bin/ install)
         run: |
           mkdir -p /tmp/agenticos-symlink-test/bin
+          # ln -s creates symlink; chmod +x ensures shebang execution works
           ln -s "$(pwd)/mcp-server/build/index.js" /tmp/agenticos-symlink-test/bin/agenticos-mcp
+          chmod +x /tmp/agenticos-symlink-test/bin/agenticos-mcp
           ls -la /tmp/agenticos-symlink-test/bin/
       - name: Run MCP handshake test via symlink
         run: |
