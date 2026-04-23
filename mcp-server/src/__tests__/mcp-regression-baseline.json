@@ -1,0 +1,38 @@
+{
+  "capturedAt": "2026-04-23T07:33:59.449Z",
+  "version": "0.4.7",
+  "serverInfo": {
+    "name": "agenticos-mcp",
+    "version": "0.4.7"
+  },
+  "protocolVersion": "2025-11-25",
+  "capabilities": {
+    "tools": {},
+    "resources": {}
+  },
+  "toolNames": [
+    "agenticos_init",
+    "agenticos_switch",
+    "agenticos_list",
+    "agenticos_record",
+    "agenticos_record_case",
+    "agenticos_list_cases",
+    "agenticos_save",
+    "agenticos_config",
+    "agenticos_status",
+    "agenticos_preflight",
+    "agenticos_edit_guard",
+    "agenticos_issue_bootstrap",
+    "agenticos_branch_bootstrap",
+    "agenticos_pr_scope_check",
+    "agenticos_health",
+    "agenticos_canonical_sync",
+    "agenticos_refresh_entry_surfaces",
+    "agenticos_standard_kit_adopt",
+    "agenticos_standard_kit_upgrade_check",
+    "agenticos_standard_kit_conformance_check",
+    "agenticos_non_code_evaluate",
+    "agenticos_archive_import_evaluate"
+  ],
+  "toolCount": 22
+}
