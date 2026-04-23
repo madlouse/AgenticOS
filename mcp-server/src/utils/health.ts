@@ -22,7 +22,7 @@ export interface HealthArgs {
 }
 
 export interface HealthGate {
-  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'issue_bootstrap_continuity' | 'worktree_topology' | 'standard_kit' | 'version_freshness';
+  gate: 'repo_sync' | 'entry_surface_refresh' | 'versioned_entry_surface_state' | 'guardrail_evidence' | 'issue_bootstrap_continuity' | 'worktree_topology' | 'standard_kit' | 'version_freshness' | 'mcp_transport';
   status: 'PASS' | 'WARN' | 'BLOCK';
   summary: string;
 }
@@ -311,6 +311,104 @@ async function buildVersionFreshnessGate(args: HealthArgs): Promise<HealthGate |
   };
 }
 
+async function buildMcpTransportGate(): Promise<HealthGate> {
+  // Find the agenticos-mcp binary — check common install paths
+  const binaryPaths = [
+    // Homebrew
+    '/opt/homebrew/bin/agenticos-mcp',
+    '/usr/local/bin/agenticos-mcp',
+    // npx / npm global
+    ...process.env.PATH?.split(':')
+      .map((p) => `${p}/agenticos-mcp`)
+      .filter((p, i, arr) => arr.indexOf(p) === i) ?? [],
+  ];
+
+  // Try to find agenticos-mcp in PATH
+  const whichOut = await execCommand('which agenticos-mcp 2>/dev/null').catch(() => '');
+  const mcpBin = whichOut.trim() || null;
+
+  if (!mcpBin) {
+    return {
+      gate: 'mcp_transport',
+      status: 'WARN',
+      summary: 'agenticos-mcp not found in PATH — MCP transport cannot be checked.',
+    };
+  }
+
+  // Test MCP handshake via the binary
+  return new Promise<HealthGate>((resolve) => {
+    const proc = (require('child_process') as typeof import('child_process')).spawn(mcpBin, [], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10000,
+    });
+
+    let stdoutData = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill();
+      resolve({
+        gate: 'mcp_transport',
+        status: 'BLOCK',
+        summary: `MCP server timed out (10s) — server did not respond to initialize handshake. Binary: ${mcpBin}`,
+      });
+    }, 10000);
+
+    proc.on('error', (err: Error) => {
+      clearTimeout(timer);
+      resolve({
+        gate: 'mcp_transport',
+        status: 'BLOCK',
+        summary: `Failed to spawn MCP server: ${err.message}. Binary: ${mcpBin}`,
+      });
+    });
+
+    proc.on('exit', (code: number | null) => {
+      if (timedOut) return;
+      clearTimeout(timer);
+      resolve({
+        gate: 'mcp_transport',
+        status: 'BLOCK',
+        summary: `MCP server exited with code ${code ?? '(null)'} before responding to initialize. This usually means process.exit() is called before StdioServerTransport delivers messages. Binary: ${mcpBin}`,
+      });
+    });
+
+    proc.stdout.on('data', (d: Buffer) => {
+      stdoutData += d.toString();
+      try {
+        const lines = stdoutData.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.id === 1 && msg.result?.serverInfo) {
+            clearTimeout(timer);
+            proc.kill();
+            resolve({
+              gate: 'mcp_transport',
+              status: 'PASS',
+              summary: `MCP server responded correctly. Binary: ${mcpBin}, ServerInfo: ${JSON.stringify(msg.result.serverInfo)}`,
+            });
+          }
+        }
+      } catch {
+        // Not parseable yet, keep accumulating
+      }
+    });
+
+    proc.stdin.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'agenticos-health-check', version: '1.0.0' },
+      },
+    }) + '\n');
+  });
+}
+
 async function resolveTrustedProjectPath(args: {
   repoPath: string;
   explicitProjectPath?: string;
@@ -453,6 +551,10 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   if (versionFreshnessGate) {
     gates.push(versionFreshnessGate);
   }
+
+  // D7: MCP transport health check — verifies server can respond to initialize
+  const mcpTransportGate = await buildMcpTransportGate();
+  gates.push(mcpTransportGate);
 
   return {
     command: 'agenticos_health',

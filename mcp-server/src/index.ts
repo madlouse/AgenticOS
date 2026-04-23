@@ -515,9 +515,9 @@ export async function main(
 }
 
 if (isDirectExecution(process.argv, import.meta.url)) {
-  main().then((exitCode) => {
-    process.exit(exitCode);
-  }).catch((error) => {
+  // Keep process alive — main() blocks until transport closes.
+  // Only exit on unrecoverable errors.
+  main().catch((error) => {
     console.error(error);
     process.exit(1);
   });
