@@ -15,3 +15,7 @@ export { runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConforma
 export { runNonCodeEvaluate } from './non-code-evaluate.js';
 export { runArchiveImportEvaluate } from './archive-import-evaluate.js';
 export { runRecordCase, runListCases } from './case.js';
+export { runValidateDelegation } from './validate-delegation.js';
+export { runCoverageCheck, runCoverageGenerate } from './coverage-check.js';
+export { runMultiAgentReview } from './multi-agent-review.js';
+export { runEnforceGitPolicy } from './git-policy-enforce.js';
