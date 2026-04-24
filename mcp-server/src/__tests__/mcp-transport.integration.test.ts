@@ -76,7 +76,7 @@ describe('MCP transport lifecycle integration tests', () => {
   });
 
   afterAll(() => {
-    try { unlinkSync(symlinkPath); } catch { /* ignore */ }
+    if (symlinkPath) { try { unlinkSync(symlinkPath); } catch { /* ignore */ } }
     try {
       const entries = require('fs').readdirSync(workDir);
       for (const entry of entries) {
