@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -406,6 +406,56 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['project_path', 'candidate_paths'],
       },
     },
+    {
+      name: 'agenticos_validate_delegation',
+      description: 'Validate that a delegated task follows AgenticOS delegation protocol: coverage, evidence, and formal closure.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          delegation_evidence_path: { type: 'string', description: 'Path to delegation evidence JSON file.' },
+          coverage_threshold: { type: 'number', description: 'Minimum coverage percentage (default: 80).' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_coverage_check',
+      description: 'Check test coverage threshold compliance. Use runCoverageGenerate first if no evidence file exists.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          threshold: { type: 'number', description: 'Minimum coverage percentage (default: 80).' },
+          evidence_path: { type: 'string', description: 'Path to coverage evidence JSON.' },
+          format: { type: 'string', enum: ['markdown', 'json'], description: 'Output format.' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_multi_agent_review',
+      description: 'Run parallel sub-agent reviews on a PR using 5 specialized agents: code-reviewer, security-auditor, qa-expert, architecture-reviewer, performance-engineer.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pr_number: { type: 'number', description: 'PR number to review.' },
+          agents: { type: 'array', items: { type: 'string' }, description: 'Agent types to use (default: code-reviewer, security-auditor, qa-expert).' },
+          repo_path: { type: 'string', description: 'Repository path (default: cwd).' },
+          format: { type: 'string', enum: ['markdown', 'json'], description: 'Output format.' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_enforce_git_policy',
+      description: 'Enforce Git policy on a PR/MR: CI passing, not draft, minimum approvals. Works with GitHub (gh) and GitLab (glab).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pr_url: { type: 'string', description: 'Full PR/MR URL.' },
+          repo: { type: 'string', description: 'Repository in owner/repo format.' },
+          pr_number: { type: 'number', description: 'PR/MR number.' },
+          provider: { type: 'string', enum: ['github', 'gitlab'], description: 'Git host provider.' },
+          required_approvals: { type: 'number', description: 'Minimum approvals (default: 1).' },
+        },
+      },
+    },
   ],
 }));
 
@@ -458,6 +508,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
     case 'agenticos_archive_import_evaluate':
       return { content: [{ type: 'text', text: await runArchiveImportEvaluate(args ?? {}) }] };
+    case 'agenticos_validate_delegation':
+      return { content: [{ type: 'text', text: await runValidateDelegation(args ?? {}) }] };
+    case 'agenticos_coverage_check':
+      return { content: [{ type: 'text', text: await runCoverageCheck(args ?? {}) }] };
+    case 'agenticos_multi_agent_review':
+      return { content: [{ type: 'text', text: await runMultiAgentReview(args ?? {}) }] };
+    case 'agenticos_enforce_git_policy':
+      return { content: [{ type: 'text', text: await runEnforceGitPolicy(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
