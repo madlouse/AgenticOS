@@ -1,0 +1,56 @@
+name: Bump Homebrew Formula (Template)
+
+# Reusable workflow — called by individual managed projects via workflow_call.
+# PAT lives in the CALLER repo (principle of least privilege; template holds no secrets).
+#
+# Usage from caller:
+#   jobs:
+#     call-homebrew-bump:
+#       uses: madlouse/agenticos/.github/workflows/homebrew-bump.yml@main
+#       with:
+#         formula-name: mytool
+#         formula-path: Formula/mytool.rb   # optional; empty = root
+#         homebrew-tap: myuser/homebrew-mytool
+#       secrets:
+#         committer-token: ${{ secrets.MY_HOMEBREW_TAP_PAT }}
+
+on:
+  workflow_call:
+    inputs:
+      formula-name:
+        required: true
+        type: string
+        description: "Homebrew formula name (e.g. agent-cli-api)"
+      formula-path:
+        required: false
+        type: string
+        default: ""
+        description: "Path to formula.rb inside the tap repo. Empty = root."
+      homebrew-tap:
+        required: true
+        type: string
+        description: "Full tap path, e.g. madlouse/homebrew-agent-cli-api"
+    secrets:
+      committer-token:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bump-formula:
+    runs-on: ubuntu-latest
+    # Skip prerelease tags (containing "-") to avoid polluting stable formula
+    if: "!contains(github.ref_name, '-')"
+    steps:
+      - name: Bump Homebrew formula
+        uses: mislav/bump-homebrew-formula-action@v4
+        with:
+          formula-name: ${{ inputs.formula-name }}
+          formula-path: ${{ inputs.formula-path }}
+          homebrew-tap: ${{ inputs.homebrew-tap }}
+          tag-name: ${{ github.ref_name }}
+        env:
+          # mislav/action reads this env var for API calls and PR creation
+          COMMITTER_TOKEN: ${{ secrets.committer-token }}
