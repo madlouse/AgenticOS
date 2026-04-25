@@ -194,12 +194,12 @@ export async function saveState(args: any): Promise<string> {
   // Canonical-main guard: block save on canonical main checkouts to protect the trusted baseline
   const writeProtection = await detectCanonicalMainWriteProtection(projectPath);
   if (writeProtection.blocked) {
-    return `❌ agenticos_save blocked for "${project.name}" because canonical main checkout runtime persistence is write-protected.\n\n` +
+    return `❌ agenticos_save blocked for "${project.name}" — git persistence is not allowed on the canonical main checkout.\n\n` +
       `Canonical main checkout: ${writeProtection.reason ?? writeProtection.git_worktree_root}\n` +
       'Recovery:\n' +
-      '- run agenticos_record first (runtime surfaces only — does not touch git)\n' +
-      '- keep runtime recording out of the canonical main checkout so future issue flow starts from a trusted baseline\n' +
-      '- initiate new work inside isolated issue worktrees created via agenticos_preflight or agenticos_branch_bootstrap';
+      '- use agenticos_record inside the canonical main checkout (runtime surfaces only — does not touch git)\n' +
+      '- switch to an isolated issue worktree to commit and push: agenticos_preflight or agenticos_branch_bootstrap\n' +
+      '- keep runtime recording out of the canonical main checkout so future issue flow starts from a trusted baseline';
   }
 
   try {

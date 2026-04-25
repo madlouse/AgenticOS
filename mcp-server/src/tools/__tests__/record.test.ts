@@ -39,16 +39,11 @@ vi.mock('../../utils/distill.js', () => ({
   updateClaudeMdState: vi.fn().mockResolvedValue({ updated: true, created: false }),
 }));
 
-vi.mock('../../utils/canonical-main-guard.js', () => ({
-  detectCanonicalMainWriteProtection: vi.fn(),
-}));
 
 import { recordSession } from '../record.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
-import { detectCanonicalMainWriteProtection } from '../../utils/canonical-main-guard.js';
-
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
   writeFile: ReturnType<typeof vi.fn>;
@@ -58,7 +53,6 @@ const registryMock = registry as typeof registry & {
   loadRegistry: ReturnType<typeof vi.fn>;
   patchProjectMetadata: ReturnType<typeof vi.fn>;
 };
-const canonicalMainGuardMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
 function buildRegistry(overrides: Record<string, unknown> = {}) {
   return {
@@ -147,7 +141,6 @@ describe('recordSession', () => {
       projects: [],
     });
     registryMock.patchProjectMetadata.mockResolvedValue(undefined);
-    canonicalMainGuardMock.mockResolvedValue({ blocked: false });
     mockProjectFiles();
   });
 
@@ -190,20 +183,15 @@ describe('recordSession', () => {
     expect(result).toContain('No project provided and no session project is bound');
   });
 
-  it('blocks canonical main runtime persistence before any file writes occur', async () => {
+  it('allows recordSession on canonical main checkout (no git writes, runtime-only)', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
-    canonicalMainGuardMock.mockResolvedValue({
-      blocked: true,
-      reason: 'canonical main checkout is write-protected for runtime persistence: /test/path',
-    });
+    // Guard is not called by recordSession — it writes runtime surfaces only, no git commits
+    const result = await recordSession({ summary: 'runtime-only record on canonical main' });
 
-    const result = await recordSession({ summary: 'blocked write' });
-
-    expect(result).toContain('agenticos_record blocked');
-    expect(result).toContain('canonical main checkout is write-protected for runtime persistence: /test/path');
-    expect(fsPromisesMock.mkdir).not.toHaveBeenCalled();
-    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
-    expect(registryMock.patchProjectMetadata).not.toHaveBeenCalled();
+    expect(result).toContain('Session recorded');
+    expect(fsPromisesMock.writeFile).toHaveBeenCalled();
+    expect(fsPromisesMock.mkdir).toHaveBeenCalled();
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
   });
 
   it('creates conversation file with correct date-based filename', async () => {
