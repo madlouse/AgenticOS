@@ -39,7 +39,7 @@ export async function detectCanonicalMainWriteProtection(repoPath: string): Prom
     if (currentBranch === 'main' && workspaceType === 'main') {
       return {
         blocked: true,
-        reason: `canonical main checkout is write-protected for runtime persistence: ${gitWorktreeRoot}`,
+        reason: `canonical main checkout is not a supported runtime workspace — runtime persistence writes must happen inside isolated issue worktrees`,
         git_worktree_root: gitWorktreeRoot,
         current_branch: currentBranch,
         workspace_type: workspaceType,

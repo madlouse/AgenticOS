@@ -1,9 +1,9 @@
 {
-  "capturedAt": "2026-04-23T07:33:59.449Z",
-  "version": "0.4.7",
+  "capturedAt": "2026-04-25T15:16:06.271Z",
+  "version": "0.4.10",
   "serverInfo": {
     "name": "agenticos-mcp",
-    "version": "0.4.7"
+    "version": "0.4.10"
   },
   "protocolVersion": "2025-11-25",
   "capabilities": {
@@ -32,7 +32,11 @@
     "agenticos_standard_kit_upgrade_check",
     "agenticos_standard_kit_conformance_check",
     "agenticos_non_code_evaluate",
-    "agenticos_archive_import_evaluate"
+    "agenticos_archive_import_evaluate",
+    "agenticos_validate_delegation",
+    "agenticos_coverage_check",
+    "agenticos_multi_agent_review",
+    "agenticos_enforce_git_policy"
   ],
-  "toolCount": 22
+  "toolCount": 26
 }

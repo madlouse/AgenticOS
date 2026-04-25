@@ -1299,7 +1299,7 @@ describe('saveState', () => {
   it('blocks save on a canonical main checkout to protect the trusted baseline', async () => {
     detectCanonicalMainWriteProtectionMock.mockResolvedValue({
       blocked: true,
-      reason: 'canonical main checkout is write-protected',
+      reason: 'canonical main checkout is not a supported runtime workspace — runtime persistence writes must happen inside isolated issue worktrees',
       git_worktree_root: '/repo',
       current_branch: 'main',
       workspace_type: 'main',
