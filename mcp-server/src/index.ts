@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runRecordStandardKitUpgrade, runCheckStaleProjects, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -379,6 +379,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_record_upgrade_version',
+      description: 'Record the current standard-kit version as the last-upgrade-version. Call this after upgrading AgenticOS to enable incremental stale-project detection on project switch.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'agenticos_check_stale_projects',
+      description: 'Check if standard-kit has upgraded since last record, and if so, detect all stale downstream projects. Use after recording an upgrade version.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
       name: 'agenticos_non_code_evaluate',
       description: 'Validate a completed non-code evaluation rubric against the canonical contract and persist the latest structured evidence into project state.',
       inputSchema: {
@@ -504,6 +514,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runStandardKitUpgradeCheck(args ?? {}) }] };
     case 'agenticos_standard_kit_conformance_check':
       return { content: [{ type: 'text', text: await runStandardKitConformanceCheck(args ?? {}) }] };
+    case 'agenticos_record_upgrade_version':
+      return { content: [{ type: 'text', text: await runRecordStandardKitUpgrade(args ?? {}) }] };
+    case 'agenticos_check_stale_projects':
+      return { content: [{ type: 'text', text: await runCheckStaleProjects(args ?? {}) }] };
     case 'agenticos_non_code_evaluate':
       return { content: [{ type: 'text', text: await runNonCodeEvaluate(args ?? {}) }] };
     case 'agenticos_archive_import_evaluate':

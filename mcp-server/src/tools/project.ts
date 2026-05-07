@@ -25,6 +25,7 @@ import {
   type IssueBootstrapContinuityAssessment,
 } from '../utils/issue-bootstrap-continuity.js';
 import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../utils/worktree-topology.js';
+import { needsStandardKitUpgradeDetection, adoptStandardKit, checkProjectStaleness } from '../utils/standard-kit.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -460,7 +461,40 @@ export async function switchProject(args: any): Promise<string> {
     committedSnapshotAssessment,
   });
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  // Auto-adopt standard-kit if upgrade was recorded and project is stale
+  const upgradeAdoptNotes: string[] = [];
+  try {
+    const detection = await needsStandardKitUpgradeDetection();
+    if (detection.needsCheck) {
+      const staleness = await checkProjectStaleness(found.path, found.name, description);
+      if (staleness) {
+        // Auto-adopt: upgrade the project to current standard-kit
+        const adoptResult = await adoptStandardKit({
+          project_path: found.path,
+          project_name: found.name,
+          project_description: description,
+        });
+
+        upgradeAdoptNotes.push('');
+        upgradeAdoptNotes.push(`🔄 Standard-kit auto-upgraded during switch`);
+        upgradeAdoptNotes.push(`   ${detection.reason}`);
+        if (adoptResult.created_files.length > 0) {
+          upgradeAdoptNotes.push(`   + Created: ${adoptResult.created_files.join(', ')}`);
+        }
+        if (adoptResult.upgraded_generated_files.length > 0) {
+          upgradeAdoptNotes.push(`   ↑ Upgraded: ${adoptResult.upgraded_generated_files.join(', ')}`);
+        }
+        if (adoptResult.skipped_existing_templates.length > 0) {
+          upgradeAdoptNotes.push(`   = Skipped existing templates: ${adoptResult.skipped_existing_templates.length}`);
+        }
+      }
+    }
+  } catch (error: any) {
+    upgradeAdoptNotes.push(`⚠️ Standard-kit upgrade check failed: ${error.message}`);
+  }
+
+  const upgradeNote = upgradeAdoptNotes.length > 0 ? '\n' + upgradeAdoptNotes.join('\n') : '';
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}${upgradeNote}`;
 }
 
 export async function listProjects(): Promise<string> {

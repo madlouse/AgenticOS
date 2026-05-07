@@ -115,6 +115,113 @@ export interface StandardKitConformanceResult {
   adapter_checks: ConformanceAdapterStatus[];
 }
 
+// Helper to get runtime directory
+function getRuntimePath(): string {
+  return join(getAgenticOSHome(), '.runtime');
+}
+
+// Helper to get last upgrade version
+async function getLastUpgradeVersion(): Promise<string | null> {
+  const versionFile = join(getRuntimePath(), 'last-upgrade-version');
+  if (!existsSync(versionFile)) return null;
+  try {
+    return (await readFile(versionFile, 'utf-8')).trim();
+  } catch {
+    return null;
+  }
+}
+
+// Helper to set last upgrade version
+async function setLastUpgradeVersion(version: string): Promise<void> {
+  const runtimePath = getRuntimePath();
+  await mkdir(runtimePath, { recursive: true });
+  await writeFile(join(runtimePath, 'last-upgrade-version'), version, 'utf-8');
+}
+
+// Export function to record an upgrade
+export async function recordStandardKitUpgrade(): Promise<{ recorded: boolean; version: string }> {
+  const manifest = await loadStandardKitManifest();
+  await setLastUpgradeVersion(manifest.kit_version);
+  return { recorded: true, version: manifest.kit_version };
+}
+
+interface UpgradeDetectionResult {
+  needsCheck: boolean;
+  reason: string;
+  lastVersion: string | null;
+  currentVersion: string;
+}
+
+// Check if project needs upgrade detection (compares last-upgrade-version vs current manifest)
+export async function needsStandardKitUpgradeDetection(): Promise<UpgradeDetectionResult> {
+  const lastVersion = await getLastUpgradeVersion();
+  const manifest = await loadStandardKitManifest();
+
+  if (!lastVersion) {
+    // First time tracking, initialize and don't prompt (user just adopted the kit)
+    await setLastUpgradeVersion(manifest.kit_version);
+    return {
+      needsCheck: false,
+      reason: 'first-time initialization',
+      lastVersion: null,
+      currentVersion: manifest.kit_version
+    };
+  }
+
+  if (lastVersion !== manifest.kit_version) {
+    return {
+      needsCheck: true,
+      reason: `standard-kit upgraded: ${lastVersion} → ${manifest.kit_version}`,
+      lastVersion,
+      currentVersion: manifest.kit_version
+    };
+  }
+
+  return {
+    needsCheck: false,
+    reason: 'up-to-date',
+    lastVersion,
+    currentVersion: manifest.kit_version
+  };
+}
+
+interface StaleProjectSummary {
+  projectId: string;
+  projectName: string;
+  projectPath: string;
+  hasStaleGeneratedFiles: boolean;
+  hasDivergedTemplates: boolean;
+  failedBehaviorCount: number;
+}
+
+// Check if a specific project is stale
+export async function checkProjectStaleness(projectPath: string, projectName?: string, projectDescription?: string): Promise<StaleProjectSummary | null> {
+  try {
+    const upgrade = await checkStandardKitUpgrade({ project_path: projectPath, project_name: projectName, project_description: projectDescription });
+    const conformance = await checkStandardKitConformance({ project_path: projectPath, project_name: projectName, project_description: projectDescription });
+
+    const projectIdentity = await resolveProjectIdentity(projectPath, projectName, projectDescription);
+    const hasStaleGeneratedFiles = upgrade.generated_files.some(f => f.status === 'stale');
+    const hasDivergedTemplates = upgrade.copied_templates.some(t => t.status === 'diverged_from_canonical');
+    const failedBehaviorCount = conformance.behavior_checks.filter(b => b.status === 'FAIL').length;
+
+    if (!hasStaleGeneratedFiles && !hasDivergedTemplates && failedBehaviorCount === 0) {
+      return null; // Project is fresh
+    }
+
+    return {
+      projectId: projectIdentity.projectId,
+      projectName: projectIdentity.projectName,
+      projectPath,
+      hasStaleGeneratedFiles,
+      hasDivergedTemplates,
+      failedBehaviorCount
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadStandardKitManifest(): Promise<StandardKitManifest> {
   const manifestPath = resolveAgenticOSProductPath('.meta', 'standard-kit', 'manifest.yaml');
   const content = await readFile(manifestPath, 'utf-8');
