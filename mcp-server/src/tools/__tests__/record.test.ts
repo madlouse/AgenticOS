@@ -39,11 +39,15 @@ vi.mock('../../utils/distill.js', () => ({
   updateClaudeMdState: vi.fn().mockResolvedValue({ updated: true, created: false }),
 }));
 
+vi.mock('../../utils/canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(),
+}));
 
 import { recordSession } from '../record.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
+import { detectCanonicalMainWriteProtection } from '../../utils/canonical-main-guard.js';
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
   writeFile: ReturnType<typeof vi.fn>;
@@ -53,6 +57,7 @@ const registryMock = registry as typeof registry & {
   loadRegistry: ReturnType<typeof vi.fn>;
   patchProjectMetadata: ReturnType<typeof vi.fn>;
 };
+const canonicalMainGuardMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
 function buildRegistry(overrides: Record<string, unknown> = {}) {
   return {
@@ -141,6 +146,7 @@ describe('recordSession', () => {
       projects: [],
     });
     registryMock.patchProjectMetadata.mockResolvedValue(undefined);
+    canonicalMainGuardMock.mockResolvedValue({ blocked: false });
     mockProjectFiles();
   });
 
@@ -183,15 +189,37 @@ describe('recordSession', () => {
     expect(result).toContain('No project provided and no session project is bound');
   });
 
-  it('allows recordSession on canonical main checkout (no git writes, runtime-only)', async () => {
+  it('captures only on canonical main without writing tracked continuity surfaces', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
-    // Guard is not called by recordSession — it writes runtime surfaces only, no git commits
-    const result = await recordSession({ summary: 'runtime-only record on canonical main' });
+    canonicalMainGuardMock.mockResolvedValue({
+      blocked: true,
+      reason: 'canonical main checkout is write-protected for runtime persistence: /test/path',
+    });
 
-    expect(result).toContain('Session recorded');
-    expect(fsPromisesMock.writeFile).toHaveBeenCalled();
-    expect(fsPromisesMock.mkdir).toHaveBeenCalled();
-    expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
+    const result = await recordSession({ summary: 'blocked write' });
+
+    expect(result).toContain('RECORDED_CAPTURE_ONLY');
+    expect(result).toContain('canonical main checkout is write-protected for runtime persistence: /test/path');
+    expect(fsPromisesMock.mkdir).toHaveBeenCalledWith('/home/testuser/AgenticOS/.agent-workspace/projects/test-project/captures/conversations', { recursive: true });
+    expect(fsPromisesMock.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('/.agent-workspace/projects/test-project/captures/conversations/'),
+      expect.stringContaining('blocked write'),
+      'utf-8',
+    );
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('state.yaml'))).toBe(false);
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('.last_record'))).toBe(false);
+    expect(registryMock.patchProjectMetadata).not.toHaveBeenCalled();
+  });
+
+  it('captures only on canonical main even when the guard omits a reason', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    canonicalMainGuardMock.mockResolvedValue({ blocked: true });
+
+    const result = await recordSession({ summary: 'captured without reason' });
+
+    expect(result).toContain('RECORDED_CAPTURE_ONLY');
+    expect(result).not.toContain('Reason:');
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('state.yaml'))).toBe(false);
   });
 
   it('creates conversation file with correct date-based filename', async () => {
@@ -480,6 +508,33 @@ describe('recordSession', () => {
     expect(result).toContain('Git recovery is distilled-only');
   });
 
+  it('blocks when public_distilled raw transcript routing is misconfigured', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        agent_context: {
+          conversations: '.private/conversations/',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } },
+    });
+
+    const result = await recordSession({ summary: 'test session' });
+
+    expect(result).toContain('public transcript routing is misconfigured');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+  });
+
   it('continues when quick-start.md is missing during enrichment', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     fsPromisesMock.readFile.mockImplementation(async (path: string) => {
@@ -705,6 +760,39 @@ describe('recordSession', () => {
         last_recorded: expect.any(String),
       }),
     );
+  });
+
+  it('uses project_path override as the writable checkout for explicit project records', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/worktree/path/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
+        });
+      }
+      if (path === '/worktree/path/.context/state.yaml') {
+        return JSON.stringify({
+          session: {},
+          working_memory: { decisions: [], facts: [], pending: [] },
+        });
+      }
+      if (path.includes('/worktree/path/.context/conversations/') && path.endsWith('.md')) {
+        return '';
+      }
+      return '';
+    });
+
+    const result = await recordSession({
+      project: 'test-project',
+      project_path: '/worktree/path',
+      summary: 'worktree record',
+      decisions: ['use worktree'],
+    });
+
+    expect(result).toContain('Session recorded for "Test Project"');
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).startsWith('/worktree/path/.context/conversations/'))).toBe(true);
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]) === '/worktree/path/.context/state.yaml')).toBe(true);
   });
 
   it('uses the session-local bound project when no explicit project is provided', async () => {

@@ -345,6 +345,22 @@ List all projects with status.
 
 **Returns**: Formatted list with the current session project highlighted when one is bound
 
+### agenticos_record
+Capture session activity and, when allowed, distill it into project continuity.
+
+**Parameters**:
+- `project` (optional) - Project ID, name, or registered path. Defaults to the current session project.
+- `project_path` (optional) - Absolute project checkout path to write into. Use the issue worktree path when recording from an isolated worktree.
+- `summary` (required) - What happened in this session.
+- `decisions`, `outcomes`, `pending` (optional) - Structured continuity updates.
+- `current_task` (optional) - `{ title, status }`.
+
+**Behavior**:
+- capture is attempted first so meaningful session facts are not lost
+- when project-tree writes are allowed, record also updates distilled continuity (`state.yaml`, `CLAUDE.md`, marker, and registry metadata)
+- when tracked writes are protected, record returns `RECORDED_CAPTURE_ONLY` with recovery actions instead of treating the block as the end state
+- raw capture sidecars are runtime/private surfaces and must not be staged by `agenticos_save`
+
 ### agenticos_save
 Save state and backup to Git.
 

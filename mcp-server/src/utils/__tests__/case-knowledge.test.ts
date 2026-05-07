@@ -1,7 +1,12 @@
 import { mkdtemp, mkdir, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(),
+}));
+
 import {
   buildCaseContextSection,
   ensureCaseKnowledgeDirectories,
@@ -18,6 +23,9 @@ import {
   renderCaseListMarkdown,
   type CaseProjectTarget,
 } from '../case-knowledge.js';
+import { detectCanonicalMainWriteProtection } from '../canonical-main-guard.js';
+
+const canonicalMainGuardMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
 
 async function createProject(name: string, id: string): Promise<CaseProjectTarget> {
   const projectPath = await mkdtemp(join(tmpdir(), `agenticos-case-${id}-`));
@@ -35,6 +43,11 @@ async function createProject(name: string, id: string): Promise<CaseProjectTarge
 }
 
 describe('case-knowledge', () => {
+  beforeEach(() => {
+    canonicalMainGuardMock.mockReset();
+    canonicalMainGuardMock.mockResolvedValue({ blocked: false });
+  });
+
   it('creates case directories and records collision-safe case files', async () => {
     const project = await createProject('Alpha Project', 'alpha');
 
@@ -64,10 +77,18 @@ describe('case-knowledge', () => {
       tags: ['Git', 'Retry'],
       timestamp: '2026-04-14T10:10:00.000Z',
     });
+    const fallbackSlug = await recordCaseKnowledge(project, {
+      type: 'corner',
+      title: '!!!',
+      trigger: 'Punctuation-only title',
+      behavior: 'Slug fallback should still allocate a stable path',
+      timestamp: '2026-04-14T10:15:00.000Z',
+    });
 
     expect(first.relativePath).toBe('knowledge/corner-cases/2026-04-14-retry-loop.md');
     expect(second.relativePath).toBe('knowledge/corner-cases/2026-04-14-retry-loop-2.md');
     expect(third.relativePath).toBe('knowledge/corner-cases/2026-04-14-retry-loop-3.md');
+    expect(fallbackSlug.relativePath).toBe('knowledge/corner-cases/2026-04-14-untitled-case.md');
     expect(getCaseTypeLabel('corner')).toBe('corner-case');
     expect(getCaseDirectoryName('bad')).toBe('bad-cases');
 
@@ -80,6 +101,22 @@ describe('case-knowledge', () => {
     expect(parsed.tags).toEqual(['corner-case', 'git', 'retry']);
     expect(parsed.rootCause).toBeNull();
     expect(parsed.behavior).toContain('retried the same failing command');
+  });
+
+  it('blocks tracked case knowledge writes on canonical main', async () => {
+    const project = await createProject('Alpha Project', 'alpha');
+    canonicalMainGuardMock.mockResolvedValue({
+      blocked: true,
+      reason: `canonical main checkout is write-protected for runtime persistence: ${project.projectPath}`,
+    });
+
+    await expect(recordCaseKnowledge(project, {
+      type: 'bad',
+      title: 'Canonical Write',
+      trigger: 'Recording a case on main',
+      behavior: 'The tool tried to write tracked knowledge directly',
+      timestamp: '2026-04-14T10:00:00.000Z',
+    })).rejects.toThrow('agenticos_record_case blocked');
   });
 
   it('validates types, filters, tags, timestamps, and malformed case documents', async () => {
@@ -119,6 +156,12 @@ describe('case-knowledge', () => {
       behavior: 'y',
       timestamp: 'not-an-iso-date',
     })).toThrow('timestamp must be a valid ISO-8601 string when provided.');
+    expect(renderCaseDocument({
+      type: 'corner',
+      title: 'Default Timestamp',
+      trigger: 'x',
+      behavior: 'y',
+    })).toContain('# corner-case: Default Timestamp');
 
     expect(() => parseCaseDocument('## Timestamp\n2026-04-14T12:00:00.000Z\n', project, join(project.projectPath, 'broken.md')))
       .toThrow(`Case document ${join(project.projectPath, 'broken.md')} is missing the title heading.`);
@@ -239,6 +282,16 @@ describe('case-knowledge', () => {
       tags: ['router'],
       timestamp: '2026-04-13T09:00:00.000Z',
     });
+    await recordCaseKnowledge(project, {
+      type: 'bad',
+      title: 'Recovery Binding Leak',
+      trigger: 'Session recovery after a branch switch',
+      behavior: 'The wrong project binding was reused',
+      rootCause: 'Global binding leaked into the recovered session',
+      prevention: 'Prefer session-local binding during recovery',
+      tags: ['recovery'],
+      timestamp: '2026-04-09T09:00:00.000Z',
+    });
 
     const noCasesProject = await createProject('No Cases', 'nocases');
     expect(await buildCaseContextSection(noCasesProject, {})).toContain('No recorded corner or bad cases.');
@@ -272,5 +325,12 @@ describe('case-knowledge', () => {
     expect(tiedRelevantSection.indexOf('Deferred Context Load')).toBeLessThan(
       tiedRelevantSection.indexOf('Aged Session State'),
     );
+
+    const rootCauseAndPreventionSection = await buildCaseContextSection(project, {
+      current_task: { title: 'global binding session-local' },
+      working_memory: { pending: [] },
+    }, 1);
+    expect(rootCauseAndPreventionSection).toContain('## Relevant Cases');
+    expect(rootCauseAndPreventionSection).toContain('Recovery Binding Leak');
   });
 });

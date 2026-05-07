@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import yaml from 'yaml';
 import { patchProjectMetadata } from '../utils/registry.js';
 import { updateClaudeMdState } from '../utils/distill.js';
@@ -9,6 +9,12 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
+import { resolvePersistenceWritePlan } from '../utils/persistence-write-policy.js';
+import {
+  appendRecordCapture,
+  getRuntimeCaptureConversationDir,
+  type RecordCapturePayload,
+} from '../utils/record-capture.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 
 function parseArray(val: unknown): string[] {
@@ -20,6 +26,74 @@ function parseArray(val: unknown): string[] {
     } catch {}
   }
   return [];
+}
+
+async function applyTrackedContinuityPatch(args: {
+  projectId: string;
+  projectName: string;
+  projectPath: string;
+  statePath: string;
+  markerPath: string;
+  currentTask: any;
+  now: Date;
+  decisions: string[];
+  outcomes: string[];
+  pending: string[];
+}): Promise<void> {
+  let state: StateYamlSchema = {};
+  try {
+    const stateContent = await readFile(args.statePath, 'utf-8');
+    state = yaml.parse(stateContent) as StateYamlSchema || {};
+  } catch {}
+
+  if (!state.working_memory) state.working_memory = { facts: [], decisions: [], pending: [] };
+  if (!state.session) state.session = {};
+
+  if (args.decisions.length > 0) {
+    const existing_decisions = state.working_memory.decisions || [];
+    state.working_memory.decisions = [...existing_decisions, ...args.decisions];
+  }
+  if (args.pending.length > 0) {
+    state.working_memory.pending = args.pending;
+  }
+  if (args.outcomes.length > 0) {
+    const existing_facts = state.working_memory.facts || [];
+    state.working_memory.facts = [...existing_facts, ...args.outcomes];
+  }
+  if (args.currentTask) {
+    state.current_task = {
+      ...(state.current_task || {}),
+      title: args.currentTask.title || state.current_task?.title,
+      status: args.currentTask.status || 'in_progress',
+      updated: args.now.toISOString(),
+    };
+  }
+
+  state.session.last_backup = args.now.toISOString();
+  await writeFile(args.statePath, yaml.stringify(state), 'utf-8');
+
+  const claudeMdPath = `${args.projectPath}/CLAUDE.md`;
+  await updateClaudeMdState(claudeMdPath, state, args.projectName);
+  await writeFile(args.markerPath, args.now.toISOString(), 'utf-8');
+  await patchProjectMetadata(args.projectId, {
+    last_recorded: args.now.toISOString(),
+  });
+}
+
+function renderCaptureOnlyResponse(args: {
+  projectName: string;
+  capturePath: string;
+  planReason?: string;
+  nextActions: string[];
+}): string {
+  const nextActions = `\nNext actions:\n${args.nextActions.map((action) => `- ${action}`).join('\n')}`;
+
+  return `✅ Session captured for "${args.projectName}"\n\n` +
+    'Status: RECORDED_CAPTURE_ONLY\n' +
+    `📝 Capture: ${args.capturePath}\n` +
+    '📊 Distill: skipped because tracked project writes are protected in this checkout\n' +
+    (args.planReason ? `Reason: ${args.planReason}\n` : '') +
+    nextActions;
 }
 
 export async function recordSession(args: any): Promise<string> {
@@ -36,6 +110,7 @@ export async function recordSession(args: any): Promise<string> {
   try {
     resolved = await resolveManagedProjectTarget({
       project: args.project,
+      projectPath: args.project_path,
       commandName: 'agenticos_record',
     });
   } catch (error: any) {
@@ -43,7 +118,6 @@ export async function recordSession(args: any): Promise<string> {
   }
 
   const { project, projectPath, projectYaml, statePath, markerPath } = resolved;
-
   const contextPolicyPlan = resolveContextPolicyPlan({
     projectName: project.name,
     projectPath,
@@ -54,88 +128,56 @@ export async function recordSession(args: any): Promise<string> {
   if (legacyTranscriptStatus === 'misconfigured_public_raw_target') {
     return `❌ agenticos_record blocked for "${project.name}" because public transcript routing is misconfigured. Raw transcript destination must remain sidecar-only for public_distilled projects.`;
   }
-  const convDir = conversationRoutingPlan.raw_conversations_dir;
+
+  const persistencePlan = await resolvePersistenceWritePlan({
+    command: 'agenticos_record',
+    projectPath,
+    writes: [
+      'sidecar_capture',
+      'project_tree_runtime',
+      'project_tree_continuity',
+      'runtime_registry',
+    ],
+  });
+
   const now = new Date();
   const today = now.toISOString().split('T')[0];
-  const time = now.toISOString().substring(11, 16);
+  const payload: RecordCapturePayload = {
+    summary,
+    decisions,
+    outcomes,
+    pending,
+  };
 
-  // 1. Append to conversations/YYYY-MM-DD.md
-  await mkdir(convDir, { recursive: true });
-  const convFile = `${convDir}/${today}.md`;
+  const captureDir = persistencePlan.mode === 'capture_only'
+    ? getRuntimeCaptureConversationDir(project.id)
+    : conversationRoutingPlan.raw_conversations_dir;
+  const capture = await appendRecordCapture({
+    dir: captureDir,
+    now,
+    ...payload,
+  });
 
-  let existing = '';
-  try { existing = await readFile(convFile, 'utf-8'); } catch {}
-
-  const sections: string[] = [];
-  sections.push(`### ${time} — Session Record\n`);
-  sections.push(`**Summary**: ${summary}\n`);
-  if (outcomes.length > 0) {
-    sections.push('**Outcomes**:');
-    for (const o of outcomes) sections.push(`- ${o}`);
-    sections.push('');
-  }
-  if (decisions.length > 0) {
-    sections.push('**Decisions**:');
-    for (const d of decisions) sections.push(`- ${d}`);
-    sections.push('');
-  }
-  if (pending.length > 0) {
-    sections.push('**Pending**:');
-    for (const p of pending) sections.push(`- ${p}`);
-    sections.push('');
+  if (persistencePlan.mode === 'capture_only') {
+    return renderCaptureOnlyResponse({
+      projectName: project.name,
+      capturePath: capture.filePath,
+      planReason: persistencePlan.writeProtectionReason,
+      nextActions: persistencePlan.nextActions,
+    });
   }
 
-  const entry = sections.join('\n');
-
-  if (existing) {
-    await writeFile(convFile, existing + '\n\n' + entry, 'utf-8');
-  } else {
-    await writeFile(convFile, `# Sessions — ${today}\n\n${entry}`, 'utf-8');
-  }
-
-  // 2. Update state.yaml
-  let state: StateYamlSchema = {};
-  try {
-    const stateContent = await readFile(statePath, 'utf-8');
-    state = yaml.parse(stateContent) as StateYamlSchema || {};
-  } catch {}
-
-  if (!state.working_memory) state.working_memory = { facts: [], decisions: [], pending: [] };
-  if (!state.session) state.session = {};
-
-  if (decisions.length > 0) {
-    const existing_decisions = state.working_memory.decisions || [];
-    state.working_memory.decisions = [...existing_decisions, ...decisions];
-  }
-  if (pending.length > 0) {
-    state.working_memory.pending = pending; // replace — pending is current state, not history
-  }
-  if (outcomes.length > 0) {
-    const existing_facts = state.working_memory.facts || [];
-    state.working_memory.facts = [...existing_facts, ...outcomes];
-  }
-  if (current_task) {
-    state.current_task = {
-      ...(state.current_task || {}),
-      title: current_task.title || state.current_task?.title,
-      status: current_task.status || 'in_progress',
-      updated: now.toISOString(),
-    };
-  }
-
-  state.session.last_backup = now.toISOString();
-  await writeFile(statePath, yaml.stringify(state), 'utf-8');
-
-  // 3. Sync CLAUDE.md Current State
-  const claudeMdPath = `${projectPath}/CLAUDE.md`;
-  await updateClaudeMdState(claudeMdPath, state, project.name);
-
-  // 4. Touch marker file for hook-based reminder system
-  await writeFile(markerPath, now.toISOString(), 'utf-8');
-
-  // 5. Update registry with last_recorded timestamp
-  await patchProjectMetadata(project.id, {
-    last_recorded: now.toISOString(),
+  await applyTrackedContinuityPatch({
+    projectId: project.id,
+    projectName: project.name,
+    projectPath,
+    statePath,
+    markerPath,
+    currentTask: current_task,
+    now,
+    decisions,
+    outcomes,
+    pending,
   });
 
   const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
