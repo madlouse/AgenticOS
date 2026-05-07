@@ -53,24 +53,30 @@ export async function runRecordCase(args: any): Promise<string> {
   try {
     resolved = await resolveManagedProjectTarget({
       project: args?.project,
+      projectPath: args?.project_path,
       commandName: 'agenticos_record_case',
     });
   } catch (error: any) {
     return `❌ ${error.message}`;
   }
 
-  const entry = await recordCaseKnowledge(toCaseProjectTarget(resolved), {
-    type: normalizeCaseType(args?.type),
-    title: args?.title,
-    trigger: args?.trigger,
-    behavior: args?.behavior,
-    rootCause: args?.rootCause ?? args?.root_cause,
-    impact: args?.impact,
-    workaround: args?.workaround,
-    prevention: args?.prevention,
-    tags: parseCaseTags(args?.tags),
-    timestamp: args?.timestamp,
-  });
+  let entry;
+  try {
+    entry = await recordCaseKnowledge(toCaseProjectTarget(resolved), {
+      type: normalizeCaseType(args?.type),
+      title: args?.title,
+      trigger: args?.trigger,
+      behavior: args?.behavior,
+      rootCause: args?.rootCause ?? args?.root_cause,
+      impact: args?.impact,
+      workaround: args?.workaround,
+      prevention: args?.prevention,
+      tags: parseCaseTags(args?.tags),
+      timestamp: args?.timestamp,
+    });
+  } catch (error: any) {
+    return `❌ ${error.message}`;
+  }
 
   return JSON.stringify({
     command: 'agenticos_record_case',

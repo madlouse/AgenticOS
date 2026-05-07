@@ -18,6 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // In compiled form, __dirname = mcp-server/build/__tests__
 const MONOREPO_ROOT = join(__dirname, '..', '..', '..');
 const SNAPSHOT_PATH = join(__dirname, 'mcp-regression-baseline.json');
+const LOCAL_SERVER_PATH = join(MONOREPO_ROOT, 'mcp-server', 'build', 'index.js');
 
 interface JsonRpcMessage {
   jsonrpc: '2.0';
@@ -73,10 +74,15 @@ async function sendMessage(
 }
 
 function spawnServer() {
-  const proc = spawn('agenticos-mcp', [], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, AGENTICOS_HOME: MONOREPO_ROOT },
-  });
+  const useLocalBuild = existsSync(LOCAL_SERVER_PATH);
+  const proc = spawn(
+    useLocalBuild ? process.execPath : 'agenticos-mcp',
+    useLocalBuild ? [LOCAL_SERVER_PATH] : [],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, AGENTICOS_HOME: MONOREPO_ROOT },
+    },
+  );
   return proc as ReturnType<typeof spawn> & { stdin: { write: (data: string) => void }; stdout: { on: (event: string, cb: (data: Buffer) => void) => void; off: (event: string, cb: (data: Buffer) => void) => void }; kill: () => boolean; killed: boolean; exitCode: number | null };
 }
 

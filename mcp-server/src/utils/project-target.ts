@@ -27,6 +27,7 @@ export interface ResolvedManagedProjectTarget {
 
 interface ResolveManagedProjectTargetArgs {
   project?: string;
+  projectPath?: string;
   commandName: string;
 }
 
@@ -68,7 +69,7 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     throw new Error(`No project provided and no session project is bound. Use agenticos_switch first or pass project to ${args.commandName}.`);
   }
 
-  let project: Project | null = null;
+  let project: Project;
   if (requestedProject) {
     const matches = registry.projects.filter((candidate) =>
       candidate.id === requestedProject ||
@@ -80,23 +81,23 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
       `Project "${requestedProject}" not found in registry.`,
       `Project "${requestedProject}" is ambiguous in registry.`
     );
-  } else if (sessionProject) {
+  } else {
+    const boundProject = sessionProject!;
     project = uniqueMatch(
       registry.projects.filter((candidate) =>
-        candidate.id === sessionProject.projectId || candidate.path === sessionProject.projectPath
+        candidate.id === boundProject.projectId || candidate.path === boundProject.projectPath
       ),
-      `Session project "${sessionProject.projectId}" not found in registry.`,
-      `Session project "${sessionProject.projectId}" is ambiguous in registry.`,
+      `Session project "${boundProject.projectId}" not found in registry.`,
+      `Session project "${boundProject.projectId}" is ambiguous in registry.`,
     );
-  }
-
-  if (!project) {
-    throw new Error(`No project provided and no session project is bound. Use agenticos_switch first or pass project to ${args.commandName}.`);
   }
 
   assertRegistryUniqueness(registry, project, requestedProject || undefined);
 
-  const projectYamlPath = join(project.path, '.project.yaml');
+  const targetProjectPath = typeof args.projectPath === 'string' && args.projectPath.trim().length > 0
+    ? args.projectPath.trim()
+    : project.path;
+  const projectYamlPath = join(targetProjectPath, '.project.yaml');
   let projectYaml: any;
   try {
     projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
@@ -132,7 +133,7 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     throw new Error(`${topologyValidation.message} ${args.commandName} only works with normalized managed projects.`);
   }
 
-  const contextPaths = resolveManagedProjectContextPaths(project.path, projectYaml);
+  const contextPaths = resolveManagedProjectContextPaths(targetProjectPath, projectYaml);
 
   return {
     registry,
@@ -140,7 +141,7 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     projectYaml,
     projectId: project.id,
     projectName: project.name,
-    projectPath: project.path,
+    projectPath: targetProjectPath,
     projectYamlPath,
     quickStartPath: contextPaths.quickStartPath,
     statePath: contextPaths.statePath,

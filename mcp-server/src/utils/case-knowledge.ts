@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import { join, relative } from 'path';
 import { resolveManagedProjectContextPaths } from './agent-context-paths.js';
+import { formatBlockedProjectTreeWrite, resolvePersistenceWritePlan } from './persistence-write-policy.js';
 
 export type CaseType = 'corner' | 'bad';
 export type CaseFilterType = CaseType | 'all';
@@ -203,8 +204,6 @@ function parseRequiredSection(value: string | undefined, label: string): string 
 }
 
 function scoreCaseAgainstKeywords(entry: CaseEntry, keywords: string[]): number {
-  if (keywords.length === 0) return 0;
-
   let score = 0;
   for (const keyword of keywords) {
     if (entry.tags.some((tag) => tag.includes(keyword))) score += 3;
@@ -377,6 +376,20 @@ export async function recordCaseKnowledge(
   input: CaseRecordInput,
 ): Promise<CaseEntry> {
   const type = normalizeCaseType(input.type);
+  const persistencePlan = await resolvePersistenceWritePlan({
+    command: 'agenticos_record_case',
+    projectPath: project.projectPath,
+    writes: ['project_tree_knowledge'],
+  });
+  if (persistencePlan.mode === 'blocked') {
+    throw new Error(formatBlockedProjectTreeWrite({
+      command: 'agenticos_record_case',
+      projectName: project.projectName,
+      writeKind: 'project_tree_knowledge',
+      reason: persistencePlan.writeProtectionReason,
+    }));
+  }
+
   await ensureCaseKnowledgeDirectories(project.projectPath, project.projectYaml);
 
   const content = renderCaseDocument({ ...input, type });

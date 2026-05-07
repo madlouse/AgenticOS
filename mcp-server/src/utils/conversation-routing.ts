@@ -1,5 +1,5 @@
 import { readdir } from 'fs/promises';
-import { relative } from 'path';
+import { relative, resolve } from 'path';
 import { type ContextPolicyPlan } from './context-policy-plan.js';
 
 export type TrackedRecoveryContract = 'local_only' | 'git_full' | 'git_distilled';
@@ -24,12 +24,16 @@ interface DetectLegacyTrackedTranscriptStatusOptions {
   tracked_transcript_dirty?: boolean;
 }
 
-function toProjectRelativePath(projectRoot: string, absolutePath: string, directory = false): string {
+function toProjectRelativeDirectoryPath(projectRoot: string, absolutePath: string): string {
   const relativePath = relative(projectRoot, absolutePath).replace(/\\/g, '/');
   if (!relativePath || relativePath.startsWith('..')) {
     throw new Error(`Path escapes project root: ${absolutePath}`);
   }
-  return directory && !relativePath.endsWith('/') ? `${relativePath}/` : relativePath;
+  return `${relativePath}/`;
+}
+
+function samePath(left: string, right: string): boolean {
+  return resolve(left) === resolve(right);
 }
 
 async function directoryContainsTranscriptFiles(path: string): Promise<boolean> {
@@ -50,7 +54,7 @@ async function directoryContainsTranscriptFiles(path: string): Promise<boolean> 
 }
 
 export function resolveConversationRoutingPlan(plan: ContextPolicyPlan): ConversationRoutingPlan {
-  const rawDisplayDir = toProjectRelativePath(plan.projectRoot, plan.rawConversationsDir, true);
+  const rawDisplayDir = toProjectRelativeDirectoryPath(plan.projectRoot, plan.rawConversationsDir);
   const trackedDisplayDir = plan.trackedContextDisplayPaths.conversations;
   const trackedRecoveryContract: TrackedRecoveryContract = plan.policy === 'private_continuity'
     ? 'git_full'
@@ -88,7 +92,7 @@ export async function detectLegacyTrackedTranscriptStatus(
 
   const rawRelative = relative(plan.projectRoot, plan.rawConversationsDir).replace(/\\/g, '/');
   if (!rawRelative || rawRelative.startsWith('..')
-    || plan.rawConversationsDir === plan.trackedContextPaths.conversations) {
+    || samePath(plan.rawConversationsDir, plan.trackedContextPaths.conversations)) {
     return 'misconfigured_public_raw_target';
   }
 
