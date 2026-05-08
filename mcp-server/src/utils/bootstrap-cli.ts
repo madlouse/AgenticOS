@@ -1,4 +1,5 @@
 import yaml from 'yaml';
+import { readFileSync } from 'fs';
 import { detectDefaultShellProfile, detectDefaultWorkspace, detectSupportedAgents, detectWorkspaceCandidates, formatCommand, mergeCursorMcpConfig, parseAgentSelection, renderBootstrapCommand, renderCursorConfigSnippet, renderRepairRemoveCommand, upsertAgenticOSEnvExport, type DetectedAgent, type SupportedAgentId } from './bootstrap-helper.js';
 
 export interface CliOptions {
@@ -553,9 +554,19 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
     }
     case 'codex': {
       const result = deps.runCommand('codex', ['mcp', 'get', 'agenticos'], true);
-      return result.ok && hasExpectedWorkspaceEnv(result.detail, workspace)
-        ? { ok: true, detail: 'registration verified via `codex mcp get agenticos` (workspace env matches)' }
-        : { ok: false, detail: result.detail };
+      if (result.ok && hasExpectedWorkspaceEnv(result.detail, workspace)) {
+        return { ok: true, detail: 'registration verified via `codex mcp get agenticos` (workspace env matches)' };
+      }
+      // CLI output may redact env (AGENTICOS_HOME=*****)
+      // Fall back to config file check if CLI shows redaction
+      if (result.detail.includes('AGENTICOS_HOME=*****')) {
+        const configMatch = verifyCodexConfigMatch(workspace, deps.homeDir);
+        if (configMatch) {
+          return { ok: true, detail: 'registration verified via `~/.codex/config.toml` (CLI output redacted)' };
+        }
+        return { ok: false, detail: 'agenticos registered in config but workspace path mismatch' };
+      }
+      return { ok: false, detail: result.detail };
     }
     case 'gemini-cli': {
       const result = deps.runCommand('gemini', ['mcp', 'list'], true);
@@ -577,6 +588,13 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
 }
 
 function hasExpectedWorkspaceEnv(detail: string, workspace: string): boolean {
+  // Check for redacted env (e.g., AGENTICOS_HOME=*****)
+  const redactedMatch = detail.match(/AGENTICOS_HOME=\*+/);
+  if (redactedMatch) {
+    // Config value is redacted - fall through to config file check in verifyAgent
+    return false;
+  }
+
   if (!detail.includes('AGENTICOS_HOME')) {
     return false;
   }
@@ -584,4 +602,15 @@ function hasExpectedWorkspaceEnv(detail: string, workspace: string): boolean {
   return detail.includes(`AGENTICOS_HOME=${workspace}`)
     || detail.includes(`AGENTICOS_HOME: ${workspace}`)
     || detail.includes(`AGENTICOS_HOME="${workspace}"`);
+}
+
+function verifyCodexConfigMatch(workspace: string, homeDir: string): boolean {
+  const configPath = `${homeDir}/.codex/config.toml`;
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    // Check if agenticos is registered and workspace is in the config
+    return content.includes('agenticos') && content.includes(workspace.replace(/\\/g, '/'));
+  } catch {
+    return false;
+  }
 }
