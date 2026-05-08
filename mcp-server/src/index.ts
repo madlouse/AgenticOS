@@ -55,7 +55,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_switch',
-      description: 'Bind the current MCP session to an existing AgenticOS project',
+      description: 'Bind the current MCP session to an existing AgenticOS project. When the user asks to switch, enter, or continue a project, call this before shell path discovery.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -71,11 +71,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_record',
-      description: 'Record session activity — conversations, decisions, outcomes. Call this after completing meaningful work and before ending any session. This is how the Agent maintains project memory.',
+      description: 'Record session activity — conversations, decisions, outcomes. Capture is attempted first; tracked continuity is distilled only when the target checkout can receive project-tree writes. If the response is capture-only or blocked, follow its next actions before ending the session.',
       inputSchema: {
         type: 'object',
         properties: {
           project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path to write/distill into. Use the issue worktree path when recording from an isolated worktree.' },
           summary: { type: 'string', description: 'What happened in this session (required)' },
           decisions: { type: 'array', items: { type: 'string' }, description: 'Key decisions made during this session' },
           outcomes: { type: 'array', items: { type: 'string' }, description: 'What was accomplished' },
@@ -94,11 +95,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_record_case',
-      description: 'Record a structured corner case or bad case under the current project knowledge surface.',
+      description: 'Record a structured corner case or bad case under the current project knowledge surface. Tracked knowledge writes are blocked on canonical main; use an isolated worktree for durable case knowledge.',
       inputSchema: {
         type: 'object',
         properties: {
           project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path to write case knowledge into. Use the issue worktree path when recording from an isolated worktree.' },
           type: { type: 'string', enum: ['corner', 'bad'], description: 'Case type.' },
           title: { type: 'string', description: 'Short case title.' },
           trigger: { type: 'string', description: 'What action or input triggered this case.' },

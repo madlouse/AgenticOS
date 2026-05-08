@@ -63,13 +63,16 @@ Call the MCP tool `agenticos_record` with:
 - `outcomes`: What was accomplished
 - `pending`: What remains to be done
 - `current_task`: { title, status } to update current task
+- `project_path`: optional absolute issue worktree path when the session is operating outside the registered canonical checkout
+
+`agenticos_record` is capture-first. If tracked continuity writes are protected, it must still preserve a safe capture when possible and return `RECORDED_CAPTURE_ONLY` with next actions. Do not treat capture-only as a terminal failure; follow the returned recovery path before ending the session.
 
 ### When to Record
 
 1. After completing any meaningful unit of work
 2. Before ending the session (MANDATORY — context is lost otherwise)
 
-After recording, call `agenticos_save` to commit to Git.
+After recording, call `agenticos_save` to commit distilled continuity to Git when the current checkout is allowed to save.
 
 ### Session Start
 

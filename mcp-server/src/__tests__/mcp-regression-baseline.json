@@ -36,7 +36,9 @@
     "agenticos_validate_delegation",
     "agenticos_coverage_check",
     "agenticos_multi_agent_review",
-    "agenticos_enforce_git_policy"
+    "agenticos_enforce_git_policy",
+    "agenticos_record_upgrade_version",
+    "agenticos_check_stale_projects"
   ],
-  "toolCount": 26
+  "toolCount": 28
 }
