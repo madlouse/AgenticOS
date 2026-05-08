@@ -1,4 +1,4 @@
-<!-- agenticos-template: v11 -->
+<!-- agenticos-template: v12 -->
 # AGENTS.md — AgenticOS
 
 ## Adapter Role
@@ -33,9 +33,15 @@ If your runtime supports local stop hooks or command reminders, the preferred in
 This remains an optional local reminder layer rather than a canonical guardrail.
 ## Task Intake Rule
 
-- At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.
-- Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.
-- Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
+**Before writing any code or plan, verify three things:**
+
+1. **Intent**: What is the operator actually trying to achieve? (Not what they said — what they mean)
+2. **Data Source**: What source should I trust? Do not assume; verify.
+3. **Scope**: Can this be done in one session? If not, where are the checkpoints?
+
+If any of these cannot be answered clearly, **stop and ask**. Do not proceed with fuzzy assumptions.
+
+Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.
 ## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with `agenticos_status`; if no session project is bound or the bound project is not the intended one, call `agenticos_switch`.
@@ -85,10 +91,38 @@ On session start, align the runtime before meaningful work:
 
 Then greet the user with: project name, last progress, current pending items, suggested next step.
 
-## Project
+## Design Philosophy
 
-**Name**: AgenticOS
-**Description**: Self-hosting AgenticOS product project. Canonical operational context lives under standards/.context while the root .context files remain compatibility shims.
+### Why AgenticOS Exists
+
+AI-assisted development has a fundamental problem: **context loss**.
+
+When an AI agent starts a task:
+- Session interruption → context gone
+- Switch to another agent/tool → cannot resume
+- Need to trace a decision → no record
+
+AgenticOS's goal: **make AI development traceable, resumable, and collaborative**.
+
+### Core Mechanisms
+
+1. **Persistent Context**: Write decisions to disk via MCP tools, not just memory
+2. **Isolated Execution**: Each issue uses an independent Git worktree for reproducibility
+3. **Progressive Disclosure**: Universal patterns in canonical docs, contextual knowledge loaded on demand
+
+### Ultimate Effects
+
+| Effect | What Users Get |
+|--------|---------------|
+| **Continuity** | Resume work in 30 seconds after any interruption |
+| **Agent Interoperability** | Claude Code, Codex, Cursor collaborate on the same project |
+| **Zero Loss** | Every decision is recorded, every task has checkpoints |
+
+### What This Means for You
+
+- Every session ends with `agenticos_record` + `agenticos_save` — or context is lost forever
+- Every implementation starts with guardrail checks — not as bureaucracy, but as reproducibility infrastructure
+- Task intake is not formality — it is the moment to verify intent, data source, and scope before building the wrong thing
 
 ## Directory Structure
 
