@@ -100,8 +100,8 @@ layers:
 
 upgrade_rules:
   template_marker_version:
-    AGENTS.md: 11
-    CLAUDE.md: 11
+    AGENTS.md: 14
+    CLAUDE.md: 14
   compatibility_rule: >
     Generated files may be upgraded in place by distill when the template marker version changes.
   copied_template_rule: >
@@ -126,6 +126,7 @@ adoption:
     - public_transcript_isolation_contract
     - cross_agent_policy_contract
     - session_start_alignment
+    - recording_protocol
     - implementation_preflight
     - issue_first_branching
     - isolated_worktree_execution

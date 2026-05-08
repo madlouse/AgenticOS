@@ -1,10 +1,10 @@
-<!-- agenticos-template: v11 -->
+<!-- agenticos-template: v12 -->
 # AGENTS.md — AgenticOS
 
 ## Adapter Role
 
 `AGENTS.md` is the Codex/generic adapter surface for this project.
-It must expose the same canonical policy as other agent adapters rather than defining a different workflow.
+It must expose the same canonical policy as other agent adapters while allowing Codex/generic-specific operator guidance.
 
 ## Canonical Policy (Shared Across Agents)
 
@@ -16,92 +16,63 @@ It must expose the same canonical policy as other agent adapters rather than def
 
 - If natural-language routing is weak, use explicit `agenticos_*` tool calls before treating the issue as transport failure.
 - Bootstrap differences are runtime concerns rather than policy changes.
-- Optional local stop-hook reminders should call `agenticos-record-reminder`, not a source-checkout `tools/record-reminder.sh` path.
-- If migrating from a legacy source-checkout hook, replace `bash /path/to/tools/record-reminder.sh` with the installed `agenticos-record-reminder` command.
-## Optional Stop-Hook Reminder
+## Stop-Hook (Optional)
 
-If your runtime supports local stop hooks or command reminders, the preferred installed command is:
-
-```json
-{
-  "command": "agenticos-record-reminder",
-  "timeout": 5,
-  "type": "command"
-}
-```
-
-This remains an optional local reminder layer rather than a canonical guardrail.
+If your runtime supports local stop hooks, configure `agenticos-record-reminder` as a local reminder. This is optional, not a canonical guardrail.
 ## Task Intake Rule
 
-- At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.
-- Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.
-- Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.
+**Before writing any code or plan, verify three things:**
+
+1. **Intent**: What is the operator actually trying to achieve? (Not what they said — what they mean)
+2. **Data Source**: What source should I trust? Do not assume; verify.
+3. **Scope**: Can this be done in one session? If not, where are the checkpoints?
+
+If any of these cannot be answered clearly, **stop and ask**. Do not proceed with fuzzy assumptions.
+
+Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.
 ## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with `agenticos_status`; if no session project is bound or the bound project is not the intended one, call `agenticos_switch`.
 
-Implementation work must use the executable guardrail flow:
+For implementation-affecting work:
 
-1. call `agenticos_preflight`; if it returns `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
+1. call `agenticos_preflight`; if the result is `REDIRECT`, call `agenticos_branch_bootstrap` and continue in the returned worktree
 2. after the issue worktree is active, perform the normal startup load and record `agenticos_issue_bootstrap`
 3. rerun `agenticos_preflight` in that worktree before editing
-4. use `agenticos_edit_guard` immediately before implementation edits
-5. do not submit a PR before running `agenticos_pr_scope_check`
+4. call `agenticos_edit_guard` immediately before implementation edits
+5. before PR creation or merge, call `agenticos_pr_scope_check`
 
-If any guardrail returns `BLOCK`, stop and resolve the blocking reason first.
+If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
 
-## Recording Protocol (MANDATORY)
+## MANDATORY: Recording Protocol
 
-This project uses AgenticOS for persistent context management.
-All session activity MUST be recorded via MCP tools.
+> All session activity MUST be recorded. If you skip this, context is lost forever.
 
-### How to Record
+**During session**: After completing any meaningful unit of work, call `agenticos_record` with summary, decisions, outcomes, pending, and current_task.
 
-Call the MCP tool `agenticos_record` with:
-- `summary` (required): What happened in this session
-- `decisions`: Key decisions made
-- `outcomes`: What was accomplished
-- `pending`: What remains to be done
-- `current_task`: { title, status } to update current task
-- `project_path`: optional absolute issue worktree path when the session is operating outside the registered canonical checkout
+**Before session ends**: Call `agenticos_record` with complete summary, then `agenticos_save` to commit to Git.
+## Session Start Protocol
 
-`agenticos_record` is capture-first. If tracked continuity writes are protected, it must still preserve a safe capture when possible and return `RECORDED_CAPTURE_ONLY` with next actions. Do not treat capture-only as a terminal failure; follow the returned recovery path before ending the session.
+On session start:
 
-### When to Record
+1. Call `agenticos_status` to confirm current project and task
+2. If not on `AgenticOS` project, call `agenticos_switch`
+3. Read `.project.yaml`, `standards/.context/quick-start.md`, and `standards/.context/state.yaml`
+4. If implementation work requested, enter Guardrail Protocol before editing
+5. Greet with: project name, last progress, pending items, suggested next step
 
-1. After completing any meaningful unit of work
-2. Before ending the session (MANDATORY — context is lost otherwise)
+## Design Philosophy
 
-After recording, call `agenticos_save` to commit distilled continuity to Git when the current checkout is allowed to save.
+**Why**: AI-assisted development loses context on session interruption, agent switch, or when tracing decisions.
 
-### Session Start
+**Goal**: Make AI development traceable, resumable, and collaborative.
 
-On session start, align the runtime before meaningful work:
-1. call `agenticos_status` to confirm the current session project, current task, pending work, and latest recorded state
-2. if no session project is bound or the bound project is not `AgenticOS`, call `agenticos_switch`
-3. read `.project.yaml`, `standards/.context/quick-start.md`, and `standards/.context/state.yaml`; use the conversation-history contract surface for recovery when needed (`standards/.context/conversations/` for tracked continuity, or the publication-policy raw sidecar such as `.private/conversations/` when applicable)
-4. review the latest guardrail evidence and latest `agenticos_issue_bootstrap` record before implementation-affecting work
-5. if implementation work is requested, follow the Guardrail Protocol above exactly before editing
+**Mechanisms**:
+- Persistent Context: write decisions to disk, not just memory
+- Isolated Execution: Git worktree per issue for reproducibility
+- Progressive Disclosure: universal patterns in docs, contextual knowledge loaded on demand
 
-Then greet the user with: project name, last progress, current pending items, suggested next step.
-
-## Project
-
-**Name**: AgenticOS
-**Description**: Self-hosting AgenticOS product project. Canonical operational context lives under standards/.context while the root .context files remain compatibility shims.
-
-## Directory Structure
-
-| Path | Purpose |
-|------|---------|
-| `.project.yaml` | Project metadata |
-| `standards/.context/quick-start.md` | Quick project summary |
-| `standards/.context/state.yaml` | Session state and working memory |
-| `standards/.context/conversations/` | Conversation-history contract surface; tracked continuity path, while raw transcript routing depends on publication policy |
-| `knowledge/` | Persistent knowledge documents |
-| `tasks/` | Task tracking |
-| `tasks/templates/agent-preflight-checklist.yaml` | Preflight checklist template |
-| `tasks/templates/issue-design-brief.md` | Design-loop template |
-| `tasks/templates/non-code-evaluation-rubric.yaml` | Non-code evaluation rubric |
-| `tasks/templates/submission-evidence.md` | Submission evidence template |
-| `artifacts/` | Outputs and deliverables |
+**What this means for you**:
+- Session ends with `agenticos_record` + `agenticos_save` — or context is lost
+- Implementation starts with guardrail checks — reproducibility infrastructure, not bureaucracy
+- Task intake verifies intent, data source, and scope before building the wrong thing

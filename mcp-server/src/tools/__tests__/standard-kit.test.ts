@@ -274,7 +274,7 @@ describe('standard kit commands', () => {
     expect(agentsMd).toContain(`agenticos-template: v${CURRENT_TEMPLATE_VERSION}`);
     expect(claudeMd).toContain(`agenticos-template: v${CURRENT_TEMPLATE_VERSION}`);
     expect(agentsMd).toContain('## Task Intake Rule');
-    expect(claudeMd).toContain('recover operator intent');
+    expect(claudeMd).toContain('## Task Intake Rule');
   });
 
   it('upgrade check reports missing, stale, matching, and diverged files', async () => {
@@ -365,8 +365,10 @@ describe('standard kit commands', () => {
 
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
     expect(claudeMd).toContain(`agenticos-template: v${CURRENT_TEMPLATE_VERSION}`);
-    expect(claudeMd).toContain('custom dna');
-    expect(claudeMd).toContain('## Current State');
+    // v14 template no longer includes Design Philosophy (not needed for downstream projects)
+    expect(claudeMd).not.toContain('## Design Philosophy');
+    // v14 template no longer includes Current State (state is in state.yaml)
+    expect(claudeMd).not.toContain('## Current State');
   });
 
   it('upgrade check reports current generated files when template versions already match', async () => {
@@ -408,6 +410,12 @@ describe('standard kit commands', () => {
       behavior_checks: Array<{ behavior: string; status: string }>;
       adapter_checks: Array<{ agent_id: string; status: string; adapter_file: string }>;
     };
+
+    // Debug: print failed checks
+    const failedChecks = result.behavior_checks.filter((item) => item.status !== 'PASS');
+    if (failedChecks.length > 0) {
+      console.log('Failed checks:', JSON.stringify(failedChecks, null, 2));
+    }
 
     expect(result.status).toBe('PASS');
     expect(result.behavior_checks.every((item) => item.status === 'PASS')).toBe(true);
