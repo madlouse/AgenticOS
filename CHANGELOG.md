@@ -8,7 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+## [0.4.13] — 2026-05-08
+
+### Added
+- mcp-server: auto-adopt standard-kit on project switch when upgrade detected
+- mcp-server: `agenticos_record_upgrade_version` — record current standard-kit version after upgrading
+- mcp-server: `agenticos_check_stale_projects` — batch-check all projects for standard-kit staleness
+
+### Changed
+- mcp-server: simplified `agenticos_record` — inlined persistence write logic, removed `persistence-write-policy.ts` and `record-capture.ts` dependencies
+
+## [0.4.12] — 2026-05-08
+
+### Added
+- mcp-server: split record capture from continuity writes — capture-only mode for blocked writes
 
 ## [0.4.5] — 2026-04-21
 
