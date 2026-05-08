@@ -61,6 +61,10 @@ vi.mock('../../utils/worktree-topology.js', () => ({
   inspectProjectWorktreeTopology: worktreeTopologyMock.inspectProjectWorktreeTopology,
 }));
 
+vi.mock('../../utils/canonical-main-guard.js', () => ({
+  detectCanonicalMainWriteProtection: vi.fn(() => ({ blocked: false })),
+}));
+
 import { switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
@@ -399,6 +403,73 @@ describe('switchProject', () => {
       'utf-8',
     );
     expect(fsPromisesMock.writeFile).toHaveBeenCalledWith(
+      '/test/path/AGENTS.md',
+      expect.any(String),
+      'utf-8',
+    );
+  });
+
+  it('does not write to canonical main - reports stale entry surfaces instead', async () => {
+    const canonicalMainGuardMock = await import('../../utils/canonical-main-guard.js');
+    canonicalMainGuardMock.detectCanonicalMainWriteProtection = vi.fn(() => ({
+      blocked: true,
+      reason: 'canonical main checkout is not a supported runtime workspace',
+      current_branch: 'main',
+      workspace_type: 'main' as const,
+    }));
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          working_memory: { pending: [], decisions: [] },
+        });
+      }
+      if (path.endsWith('/.context/quick-start.md')) {
+        return '# Quick Start\n\nProject summary';
+      }
+      if (path.endsWith('/CLAUDE.md')) {
+        return '# CLAUDE.md\n\n<!-- agenticos-template: v1 -->\nOld content';
+      }
+      if (path.endsWith('/AGENTS.md')) {
+        return '# AGENTS.md\n\n<!-- agenticos-template: v1 -->\nOld content';
+      }
+      return '';
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    // Should NOT upgrade - should report stale instead
+    expect(result).toContain('⚠️ CLAUDE.md stale');
+    expect(result).toContain('⚠️ AGENTS.md stale');
+    // writeFile should NOT be called for canonical main
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalledWith(
+      '/test/path/CLAUDE.md',
+      expect.any(String),
+      'utf-8',
+    );
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalledWith(
       '/test/path/AGENTS.md',
       expect.any(String),
       'utf-8',
