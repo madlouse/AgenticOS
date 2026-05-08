@@ -25,6 +25,7 @@ import {
   type IssueBootstrapContinuityAssessment,
 } from '../utils/issue-bootstrap-continuity.js';
 import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../utils/worktree-topology.js';
+import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -356,7 +357,8 @@ export async function switchProject(args: any): Promise<string> {
     projectPath: found.path,
   });
 
-  // Auto-bootstrap: generate or upgrade CLAUDE.md / AGENTS.md
+  // Check if entry surface writes are allowed in this checkout
+  const writeProtection = await detectCanonicalMainWriteProtection(found.path);
   const bootstrapNotes: string[] = [];
   try {
     await patchProjectMetadata(found.id, {
@@ -404,7 +406,13 @@ export async function switchProject(args: any): Promise<string> {
   } catch {}
 
   // CLAUDE.md: create if missing, upgrade if stale template version
-  if (!existsSync(claudeMdPath)) {
+  // Skip writes to canonical main — entry surface changes must happen in isolated worktrees
+  if (writeProtection.blocked) {
+    const existingVersion = existsSync(claudeMdPath) ? extractTemplateVersion(await readFile(claudeMdPath, 'utf-8')) : 0;
+    if (existingVersion < CURRENT_TEMPLATE_VERSION) {
+      bootstrapNotes.push(`⚠️ CLAUDE.md stale (v${existingVersion} < v${CURRENT_TEMPLATE_VERSION}) — refresh in isolated worktree`);
+    }
+  } else if (!existsSync(claudeMdPath)) {
     await writeFile(claudeMdPath, generateClaudeMd(found.name, description, state, contextDisplayPaths), 'utf-8');
     bootstrapNotes.push('📝 CLAUDE.md created');
   } else {
@@ -417,7 +425,13 @@ export async function switchProject(args: any): Promise<string> {
   }
 
   // AGENTS.md: create if missing, upgrade if stale
-  if (!existsSync(agentsMdPath)) {
+  // Skip writes to canonical main — entry surface changes must happen in isolated worktrees
+  if (writeProtection.blocked) {
+    const existingVersion = existsSync(agentsMdPath) ? extractTemplateVersion(await readFile(agentsMdPath, 'utf-8')) : 0;
+    if (existingVersion < CURRENT_TEMPLATE_VERSION) {
+      bootstrapNotes.push(`⚠️ AGENTS.md stale (v${existingVersion} < v${CURRENT_TEMPLATE_VERSION}) — refresh in isolated worktree`);
+    }
+  } else if (!existsSync(agentsMdPath)) {
     await writeFile(agentsMdPath, generateAgentsMd(found.name, description, contextDisplayPaths), 'utf-8');
     bootstrapNotes.push('📝 AGENTS.md created');
   } else {
