@@ -1,4 +1,4 @@
-<!-- agenticos-template: v11 -->
+<!-- agenticos-template: v13 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -114,21 +114,19 @@ When you open this project in a new session, **immediately do the following**:
 ## Current State
 
 <!-- AGENT_CONTEXT_START -->
-**Last Updated**: 2026-04-22T07:11:50.602Z
+**Last Updated**: 2026-05-08T06:30:03.494Z
 
-**Current Task**: 14 项目合规审查 + YELLOW 项目修复 (status: completed)
+**Current Task**: fix #357: bootstrap verification treats Codex redacted MCP env as failure (status: in_progress)
 
 **Active Items**:
-- 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
-- agent-cli-api #82 等待用户处理
-- T5T/dev-report/workforce-analytics 不需要 git，但可选择性补 knowledge/ 和 standards/
+- Fix #357: bootstrap verification treats Codex redacted MCP env as failure
 
 **Recent Decisions**:
-- 3 个 RED 项目（agentic-devops/okr-management/2025-review）已归档，目录不存在
-- YELLOW 项目统一用 adopt 工具 + 手动补字段方式处理
-- 所有 YELLOW 项目的 public_transcript_isolation_contract 行为检查持续 FAIL，但文本要求（transcript isolation phrases）均已满足——这是 MCP 工具级问题
+- Use detectCanonicalMainWriteProtection to check before entry surface writes
+- Skip writes to canonical main, report stale instead with warning message
+- Added test for canonical main protection
 
-**Next Action**: 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
+**Next Action**: Fix #357: bootstrap verification treats Codex redacted MCP env as failure
 <!-- AGENT_CONTEXT_END -->
 
 ---
