@@ -616,5 +616,20 @@ export async function getStatus(args: any = {}): Promise<string> {
     }
   }
 
+  // Check bootstrap state for failures
+  const bootstrapStatePath = `${resolved.projectPath}/.agent-workspace/bootstrap-state.yaml`;
+  try {
+    const bootstrapContent = await readFile(bootstrapStatePath, 'utf-8');
+    const bootstrapState = yaml.parse(bootstrapContent) as any;
+    if (bootstrapState?.failed_agents?.length > 0) {
+      lines.push('');
+      lines.push('⚠️ Bootstrap Issues:');
+      for (const agent of bootstrapState.failed_agents as string[]) {
+        lines.push(`   - ${agent}: verification failed`);
+      }
+      lines.push('   Run: agenticos-bootstrap --verify');
+    }
+  } catch {}
+
   return lines.join('\n');
 }
