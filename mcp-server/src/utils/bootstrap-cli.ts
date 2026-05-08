@@ -323,6 +323,16 @@ export function buildDryRunLines(
   return lines;
 }
 
+function getRecoveryCommand(agentId: SupportedAgentId): string {
+  const commands: Record<SupportedAgentId, string> = {
+    'claude-code': 'claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp',
+    'codex': 'agenticos-bootstrap --agents codex',
+    'cursor': 'agenticos-bootstrap --agents cursor',
+    'gemini-cli': 'agenticos-bootstrap --agents gemini-cli',
+  };
+  return commands[agentId] || '';
+}
+
 function runVerification(
   workspace: string,
   selected: SupportedAgentId[],
@@ -341,7 +351,13 @@ function runVerification(
     const result = verifyAgent(agentId, deps, workspace);
     const marker = result.ok ? 'OK' : 'FAIL';
     lines.push(`${marker} ${agentId}: ${result.detail}`);
-    if (!result.ok) ok = false;
+    if (!result.ok) {
+      ok = false;
+      const recovery = getRecoveryCommand(agentId);
+      if (recovery) {
+        lines.push(`   Recovery: ${recovery}`);
+      }
+    }
   }
 
   if (options.persistShellEnv) {

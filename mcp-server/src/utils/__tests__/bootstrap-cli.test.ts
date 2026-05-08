@@ -231,6 +231,27 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(1);
     expect(harness.stdout.some((line) => line.includes('FAIL codex: env: AGENTICOS_HOME=/tmp/other-workspace'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Recovery: agenticos-bootstrap --agents codex'))).toBe(true);
+  });
+
+  it('shows recovery command for claude-code when verification fails', () => {
+    const harness = createDeps();
+    harness.deps.runCommand = (command: string, args: string[], failOnError: boolean) => {
+      harness.commands.push({ command, args, failOnError });
+      if ([command, ...args].join(' ') === 'claude mcp get agenticos') {
+        return { ok: false, detail: 'not registered' };
+      }
+      return { ok: true, detail: 'ok' };
+    };
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL claude-code'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Recovery: claude mcp add'))).toBe(true);
   });
 
   it('fails verification when the expected shell profile export is missing', () => {
