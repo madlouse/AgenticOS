@@ -411,7 +411,7 @@ describe('switchProject', () => {
 
   it('does not write to canonical main - reports stale entry surfaces instead', async () => {
     const canonicalMainGuardMock = await import('../../utils/canonical-main-guard.js');
-    canonicalMainGuardMock.detectCanonicalMainWriteProtection = vi.fn(() => ({
+    canonicalMainGuardMock.detectCanonicalMainWriteProtection = vi.fn(() => Promise.resolve({
       blocked: true,
       reason: 'canonical main checkout is not a supported runtime workspace',
       current_branch: 'main',
