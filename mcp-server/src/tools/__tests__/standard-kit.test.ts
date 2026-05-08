@@ -365,8 +365,8 @@ describe('standard kit commands', () => {
 
     const claudeMd = await readFile(join(projectRoot, 'CLAUDE.md'), 'utf-8');
     expect(claudeMd).toContain(`agenticos-template: v${CURRENT_TEMPLATE_VERSION}`);
-    // v14 template uses Design Philosophy instead of Project DNA
-    expect(claudeMd).toContain('## Design Philosophy');
+    // v14 template no longer includes Design Philosophy (not needed for downstream projects)
+    expect(claudeMd).not.toContain('## Design Philosophy');
     // v14 template no longer includes Current State (state is in state.yaml)
     expect(claudeMd).not.toContain('## Current State');
   });

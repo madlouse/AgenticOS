@@ -126,6 +126,7 @@ adoption:
     - public_transcript_isolation_contract
     - cross_agent_policy_contract
     - session_start_alignment
+    - recording_protocol
     - implementation_preflight
     - issue_first_branching
     - isolated_worktree_execution

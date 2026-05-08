@@ -8,7 +8,6 @@ import {
   SHARED_POLICY_BULLETS,
   SHARED_POLICY_TITLE,
   TASK_INTAKE_RULE_TITLE,
-  DESIGN_PHILOSOPHY_TITLE,
   generateAgentsMd,
   generateClaudeMd,
 } from '../distill.js';
@@ -48,9 +47,7 @@ describe('distill templates', () => {
     expect(content).toContain('agenticos_record');
     expect(content).toContain('agenticos_save');
     expect(content).toContain('## Session Start Protocol');
-    expect(content).toContain('## Design Philosophy');
-    expect(content).toContain('context is lost');  // From Design Philosophy
-    expect(content).toContain('reproducibility');  // From Design Philosophy
+    expect(content).not.toContain('## Design Philosophy');
     // Should NOT contain old content
     expect(content).not.toContain('## Navigation');
     expect(content).not.toContain('## Directory Structure');
@@ -82,7 +79,7 @@ describe('distill templates', () => {
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('## MANDATORY: Recording Protocol');
     expect(content).toContain('## Session Start Protocol');
-    expect(content).toContain(`## ${DESIGN_PHILOSOPHY_TITLE}`);
+    expect(content).not.toContain('## Design Philosophy');
     // Should NOT contain old content
     expect(content).not.toContain('## Navigation');
     expect(content).not.toContain('## Current State');

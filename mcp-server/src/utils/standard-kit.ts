@@ -647,6 +647,20 @@ export async function checkStandardKitConformance(args: { project_path?: string;
         });
         break;
       }
+      case 'recording_protocol': {
+        // Critical for Zero Loss: must describe record + save behavior
+        const pass = fileContainsAll(agentsMd, ['agenticos_record', 'agenticos_save', 'MANDATORY: Recording Protocol'])
+          && fileContainsAll(claudeMd, ['agenticos_record', 'agenticos_save', 'MANDATORY: Recording Protocol']);
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Both adapter surfaces preserve the mandatory recording protocol (record + save).'
+            : 'Recording protocol is missing or incomplete. Zero Loss cannot be guaranteed.',
+          evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
       case 'implementation_preflight': {
         const pass = fileContainsAll(agentsMd, ['agenticos_preflight']) && fileContainsAll(claudeMd, ['agenticos_preflight']);
         behaviorChecks.push({
