@@ -1,13 +1,13 @@
 import { readFile, writeFile } from 'fs/promises';
 import { readFileSync } from 'fs';
 import { joinDisplayPath, type ManagedProjectContextDisplayPaths } from './agent-context-paths.js';
-import { renderOptionalStopHookSection, STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
+import { STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
 
 /**
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 13;
+export const CURRENT_TEMPLATE_VERSION = 14;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -67,11 +67,30 @@ export const CLAUDE_RUNTIME_GUIDANCE_BULLETS = [
 ] as const;
 
 export const TASK_INTAKE_RULE_TITLE = 'Task Intake Rule';
-export const TASK_INTAKE_RULE_BULLETS = [
-  'At task intake, recover operator intent before treating named methods or workflow fragments as the full plan.',
-  'Separate goals, hard constraints, useful signals, and candidate methods before choosing an execution path.',
-  'Once intent is resolved, collapse it into a clean execution objective instead of carrying the full intake rubric through every later step.',
-] as const;
+export const TASK_INTAKE_RULE_CONTENT = `**Before writing any code or plan, verify three things:**
+
+1. **Intent**: What is the operator actually trying to achieve? (Not what they said — what they mean)
+2. **Data Source**: What source should I trust? Do not assume; verify.
+3. **Scope**: Can this be done in one session? If not, where are the checkpoints?
+
+If any of these cannot be answered clearly, **stop and ask**. Do not proceed with fuzzy assumptions.
+
+Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.` as const;
+
+export const DESIGN_PHILOSOPHY_TITLE = 'Design Philosophy';
+export const DESIGN_PHILOSOPHY_CONTENT = `**Why**: AI-assisted development loses context on session interruption, agent switch, or when tracing decisions.
+
+**Goal**: Make AI development traceable, resumable, and collaborative.
+
+**Mechanisms**:
+- Persistent Context: write decisions to disk, not just memory
+- Isolated Execution: Git worktree per issue for reproducibility
+- Progressive Disclosure: universal patterns in docs, contextual knowledge loaded on demand
+
+**What this means for you**:
+- Session ends with \`agenticos_record\` + \`agenticos_save\` — or context is lost
+- Implementation starts with guardrail checks — reproducibility infrastructure, not bureaucracy
+- Task intake verifies intent, data source, and scope before building the wrong thing` as const;
 
 export const CONTINUITY_CONTRACT_TITLE = 'Continuity Contract';
 export const CONTINUITY_CONTRACT_BULLETS = [
@@ -124,13 +143,34 @@ function renderContinuityContractSection(): string {
 // AGENTS.md template
 // ---------------------------------------------------------------------------
 
+const STOP_HOOK_SECTION = `## Stop-Hook (Optional)
+
+If your runtime supports local stop hooks, configure \`agenticos-record-reminder\` as a local reminder. This is optional, not a canonical guardrail.`;
+
+const RECORDING_PROTOCOL = `## MANDATORY: Recording Protocol
+
+> All session activity MUST be recorded. If you skip this, context is lost forever.
+
+**During session**: After completing any meaningful unit of work, call \`agenticos_record\` with summary, decisions, outcomes, pending, and current_task.
+
+**Before session ends**: Call \`agenticos_record\` with complete summary, then \`agenticos_save\` to commit to Git.`;
+
 export function generateAgentsMd(
   name: string,
   description: string,
   paths?: Partial<ManagedProjectContextDisplayPaths>,
 ): string {
   const contextPaths = normalizeAgentContextPaths(paths);
-  const taskTemplatesDir = joinDisplayPath(contextPaths.tasksDir, 'templates');
+
+  const sessionStartProtocol = `## Session Start Protocol
+
+On session start:
+
+1. Call \`agenticos_status\` to confirm current project and task
+2. If not on \`${name}\` project, call \`agenticos_switch\`
+3. Read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.statePath}\`
+4. If implementation work requested, enter Guardrail Protocol before editing
+5. Greet with: project name, last progress, pending items, suggested next step`;
 
   return `${VERSION_MARKER}
 # AGENTS.md — ${name}
@@ -140,162 +180,13 @@ export function generateAgentsMd(
 ${AGENTS_ADAPTER_LINES[0]}
 ${AGENTS_ADAPTER_LINES[1]}
 
-${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${renderOptionalStopHookSection()}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
+${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${STOP_HOOK_SECTION}
 
-Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
+## ${TASK_INTAKE_RULE_TITLE}
 
-Implementation work must use the executable guardrail flow:
+${TASK_INTAKE_RULE_CONTENT}
 
-1. call \`agenticos_preflight\`; if it returns \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
-2. after the issue worktree is active, perform the normal startup load and record \`agenticos_issue_bootstrap\`
-3. rerun \`agenticos_preflight\` in that worktree before editing
-4. use \`agenticos_edit_guard\` immediately before implementation edits
-5. do not submit a PR before running \`agenticos_pr_scope_check\`
-
-If any guardrail returns \`BLOCK\`, stop and resolve the blocking reason first.
-
-## Recording Protocol (MANDATORY)
-
-This project uses AgenticOS for persistent context management.
-All session activity MUST be recorded via MCP tools.
-
-### How to Record
-
-Call the MCP tool \`agenticos_record\` with:
-- \`summary\` (required): What happened in this session
-- \`decisions\`: Key decisions made
-- \`outcomes\`: What was accomplished
-- \`pending\`: What remains to be done
-- \`current_task\`: { title, status } to update current task
-
-### When to Record
-
-1. After completing any meaningful unit of work
-2. Before ending the session (MANDATORY — context is lost otherwise)
-
-After recording, call \`agenticos_save\` to commit to Git.
-
-### Session Start
-
-On session start, align the runtime before meaningful work:
-1. call \`agenticos_status\` to confirm the current session project, current task, pending work, and latest recorded state
-2. if no session project is bound or the bound project is not \`${name}\`, call \`agenticos_switch\`
-3. read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, \`${contextPaths.statePath}\`, and review the configured conversation history surface when relevant
-4. review the latest guardrail evidence and latest \`agenticos_issue_bootstrap\` record before implementation-affecting work
-5. if implementation work is requested, follow the Guardrail Protocol above exactly before editing
-
-Then greet the user with: project name, last progress, current pending items, suggested next step.
-
-## Project
-
-**Name**: ${name}
-**Description**: ${description || '(not set)'}
-
-## Directory Structure
-
-| Path | Purpose |
-|------|---------|
-| \`.project.yaml\` | Project metadata |
-| \`${contextPaths.quickStartPath}\` | Quick project summary |
-| \`${contextPaths.statePath}\` | Session state and working memory |
-| \`${contextPaths.conversationsDir}\` | Configured conversation history surface (tracked or policy-routed) |
-| \`${contextPaths.knowledgeDir}\` | Persistent knowledge documents |
-| \`${contextPaths.tasksDir}\` | Task tracking |
-| \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | Preflight checklist template |
-| \`${joinDisplayPath(taskTemplatesDir, 'issue-design-brief.md')}\` | Design-loop template |
-| \`${joinDisplayPath(taskTemplatesDir, 'non-code-evaluation-rubric.yaml')}\` | Non-code evaluation rubric |
-| \`${joinDisplayPath(taskTemplatesDir, 'submission-evidence.md')}\` | Submission evidence template |
-| \`${contextPaths.artifactsDir}\` | Outputs and deliverables |
-`;
-}
-
-// ---------------------------------------------------------------------------
-// CLAUDE.md template
-// ---------------------------------------------------------------------------
-
-const STATE_START = '<!-- AGENT_CONTEXT_START -->';
-const STATE_END = '<!-- AGENT_CONTEXT_END -->';
-
-interface StateYaml {
-  session?: { last_backup?: string };
-  current_task?: { title?: string; status?: string } | null;
-  working_memory?: { facts?: string[]; decisions?: string[]; pending?: string[] };
-}
-
-export function buildStateSection(state: StateYaml): string {
-  const lastUpdated = state.session?.last_backup || new Date().toISOString();
-  const taskTitle = state.current_task?.title || 'No active task';
-  const taskStatus = state.current_task?.status || 'unknown';
-  const pending = state.working_memory?.pending || [];
-  const decisions = state.working_memory?.decisions || [];
-
-  const lines: string[] = [];
-  lines.push(`**Last Updated**: ${lastUpdated}`);
-  lines.push('');
-  lines.push(`**Current Task**: ${taskTitle} (status: ${taskStatus})`);
-  lines.push('');
-  if (pending.length > 0) {
-    lines.push('**Active Items**:');
-    for (const item of pending.slice(0, 5)) lines.push(`- ${item}`);
-  } else {
-    lines.push('**Active Items**: None');
-  }
-  lines.push('');
-  if (decisions.length > 0) {
-    lines.push('**Recent Decisions**:');
-    for (const item of decisions.slice(-3)) lines.push(`- ${item}`);
-  }
-  lines.push('');
-  lines.push(`**Next Action**: ${pending.length > 0 ? pending[0] : 'Define next steps'}`);
-
-  return lines.join('\n');
-}
-
-interface ExtractedUserContent {
-  projectDna: string | null;
-  navigation: string | null;
-}
-
-function extractUserContent(content: string): ExtractedUserContent {
-  const projectDnaMatch = content.match(/## Project DNA\n([\s\S]*?)(?=## |\z)/);
-  const navigationMatch = content.match(/## Navigation\n([\s\S]*?)(?=## |\z)/);
-  const isDefault = (t: string | null) => !t || t.includes('(待补充)') || t.includes('(not set)') || t.trim() === '';
-  return {
-    projectDna: projectDnaMatch && !isDefault(projectDnaMatch[1].trim()) ? projectDnaMatch[1].trim() : null,
-    navigation: navigationMatch && navigationMatch[1].trim().length > 0 ? navigationMatch[1].trim() : null,
-  };
-}
-
-function buildClaudeMdContent(
-  name: string,
-  description: string,
-  state?: StateYaml,
-  userContent?: ExtractedUserContent,
-  paths?: Partial<ManagedProjectContextDisplayPaths>,
-): string {
-  const contextPaths = normalizeAgentContextPaths(paths);
-  const taskTemplatesDir = joinDisplayPath(contextPaths.tasksDir, 'templates');
-  const stateSection = state
-    ? buildStateSection(state)
-    : buildStateSection({ session: { last_backup: new Date().toISOString() }, current_task: null, working_memory: { facts: [], decisions: [], pending: ['Define project goals', 'Set up initial tasks'] } });
-
-  const pdna = userContent?.projectDna
-    ? `## Project DNA\n\n${userContent.projectDna}\n`
-    : `## Project DNA\n\n**一句话定位**: ${description || '(待补充)'}\n\n**核心设计原则**: (待补充 — 在项目推进中逐步完善)\n\n**技术栈**: (待补充)\n`;
-
-  const nav = userContent?.navigation
-    ? `## Navigation\n\n${userContent.navigation}\n`
-    : `## Navigation\n\n| 目录/文件 | 用途 |\n|-----------|------|\n| \`.project.yaml\` | 项目元信息 |\n| \`${contextPaths.quickStartPath}\` | 快速项目概览 |\n| \`${contextPaths.statePath}\` | 当前会话状态及工作记忆 |\n| \`${contextPaths.conversationsDir}\` | 会话历史入口（tracked 或按 policy 路由） |\n| \`${contextPaths.knowledgeDir}\` | 持久化知识文档 |\n| \`${contextPaths.tasksDir}\` | 任务追踪 |\n| \`${joinDisplayPath(taskTemplatesDir, 'agent-preflight-checklist.yaml')}\` | preflight 模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'issue-design-brief.md')}\` | 设计循环模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'non-code-evaluation-rubric.yaml')}\` | 非代码评估模板 |\n| \`${joinDisplayPath(taskTemplatesDir, 'submission-evidence.md')}\` | 提交证据模板 |\n| \`${contextPaths.artifactsDir}\` | 产出物 |\n`;
-
-  return `${VERSION_MARKER}
-# CLAUDE.md — ${name}
-
-## Adapter Role
-
-${CLAUDE_ADAPTER_LINES[0]}
-${CLAUDE_ADAPTER_LINES[1]}
-
-${renderSharedPolicySection()}${renderContinuityContractSection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${renderOptionalStopHookSection()}${renderRuntimeGuidanceSection(TASK_INTAKE_RULE_TITLE, TASK_INTAKE_RULE_BULLETS)}## Guardrail Protocol (MANDATORY)
+## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
@@ -309,124 +200,101 @@ For implementation-affecting work:
 
 If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.
 
-## MANDATORY: Recording Protocol
+${RECORDING_PROTOCOL}
 
-> This is an AgenticOS project. All session activity MUST be recorded.
-> Recording is not optional — it is the core function of this system.
+${sessionStartProtocol}
 
-### During Session
+## ${DESIGN_PHILOSOPHY_TITLE}
 
-After completing any meaningful unit of work (feature, fix, design decision, analysis), call \`agenticos_record\`:
-
-\`\`\`
-agenticos_record({
-  summary: "what happened",
-  decisions: ["decision 1", ...],
-  outcomes: ["outcome 1", ...],
-  pending: ["next step 1", ...],
-  current_task: { title: "task name", status: "in_progress" }
-})
-\`\`\`
-
-### Before Session Ends
-
-When the user signals session end (says goodbye, thanks, done, or stops responding), you MUST:
-
-1. Call \`agenticos_record\` with a complete session summary
-2. Call \`agenticos_save\` to commit to Git
-
-**If you skip this step, all context from this session is permanently lost.**
-
----
-
-## Session Start Protocol
-
-When you open this project in a new session, **immediately do the following**:
-
-1. Call \`agenticos_status\` to confirm the current session project, current task, pending work, and latest recorded state
-2. If no session project is bound or the bound project is not \`${name}\`, call \`agenticos_switch\`
-3. Read \`.project.yaml\`, the "Current State" section below, \`${contextPaths.quickStartPath}\`, and review the configured conversation history surface when relevant
-4. Review the latest guardrail evidence and latest \`agenticos_issue_bootstrap\` record before implementation-affecting work
-5. Greet the user with a brief status report:
-
-\`\`\`
-📍 项目：${name}
-📌 上次进展：[current_task title + status]
-🎯 当前待办：[top pending items]
-💡 建议下一步：[recommended next action]
-
-继续上次的工作，还是有新的方向？
-\`\`\`
-
-6. If implementation work is requested, enter the Guardrail Protocol above before editing
-7. Wait for the user's direction before proceeding
-
----
-
-${pdna}## Current State
-
-${STATE_START}
-${stateSection}
-${STATE_END}
-
----
-
-${nav}`;
+${DESIGN_PHILOSOPHY_CONTENT}
+`;
 }
+
+// ---------------------------------------------------------------------------
+// CLAUDE.md template
+// ---------------------------------------------------------------------------
 
 export function generateClaudeMd(
   name: string,
   description: string,
-  state?: StateYaml,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _state?: any,
   paths?: Partial<ManagedProjectContextDisplayPaths>,
 ): string {
-  return buildClaudeMdContent(name, description, state, undefined, paths);
+  const contextPaths = normalizeAgentContextPaths(paths);
+
+  return `${VERSION_MARKER}
+# CLAUDE.md — ${name}
+
+## Adapter Role
+
+${CLAUDE_ADAPTER_LINES[0]}
+${CLAUDE_ADAPTER_LINES[1]}
+
+${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${STOP_HOOK_SECTION}
+
+## ${TASK_INTAKE_RULE_TITLE}
+
+${TASK_INTAKE_RULE_CONTENT}
+
+## Guardrail Protocol (MANDATORY)
+
+Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
+
+For implementation-affecting work:
+
+1. call \`agenticos_preflight\`; if the result is \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
+2. after the issue worktree is active, perform the normal startup load and record \`agenticos_issue_bootstrap\`
+3. rerun \`agenticos_preflight\` in that worktree before editing
+4. call \`agenticos_edit_guard\` immediately before implementation edits
+5. before PR creation or merge, call \`agenticos_pr_scope_check\`
+
+If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.
+
+${RECORDING_PROTOCOL}
+
+## Session Start Protocol
+
+On session start:
+
+1. Call \`agenticos_status\` to confirm current project and task
+2. If not on \`${name}\` project, call \`agenticos_switch\`
+3. Read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.statePath}\`
+4. If implementation work requested, enter Guardrail Protocol before editing
+5. Greet with: project name, last progress, pending items, suggested next step
+
+## ${DESIGN_PHILOSOPHY_TITLE}
+
+${DESIGN_PHILOSOPHY_CONTENT}
+`;
 }
 
-/** Upgrade an existing CLAUDE.md to current template version, preserving user content. */
+/** @deprecated State is now in .context/state.yaml, not in CLAUDE.md */
+export interface StateYaml {
+  session?: { last_backup?: string };
+  current_task?: { title?: string; status?: string } | null;
+  working_memory?: { facts?: string[]; decisions?: string[]; pending?: string[] };
+}
+
+/** @deprecated Use generateClaudeMd instead. State is now in .context/state.yaml */
 export function upgradeClaudeMd(
-  claudeMdPath: string,
+  _claudeMdPath: string,
   name: string,
   description: string,
-  state?: StateYaml,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _state?: any,
   paths?: Partial<ManagedProjectContextDisplayPaths>,
 ): string {
-  const content = readFileSync(claudeMdPath, 'utf-8');
-  return buildClaudeMdContent(name, description, state, extractUserContent(content), paths);
+  return generateClaudeMd(name, description, undefined, paths);
 }
 
-// ---------------------------------------------------------------------------
-// State update
-// ---------------------------------------------------------------------------
-
+/** @deprecated State is now in .context/state.yaml, not in CLAUDE.md */
 export async function updateClaudeMdState(
-  claudeMdPath: string,
-  state: StateYaml,
-  projectName?: string,
-  projectDescription?: string,
+  _claudeMdPath: string,
+  _state: StateYaml,
+  _projectName?: string,
+  _projectDescription?: string,
 ): Promise<{ updated: boolean; created: boolean }> {
-  let content: string;
-  let created = false;
-
-  try {
-    content = await readFile(claudeMdPath, 'utf-8');
-  } catch {
-    content = generateClaudeMd(projectName || 'Untitled Project', projectDescription || '', state);
-    await writeFile(claudeMdPath, content, 'utf-8');
-    return { updated: true, created: true };
-  }
-
-  const startIdx = content.indexOf(STATE_START);
-  const endIdx = content.indexOf(STATE_END);
-
-  if (startIdx === -1 || endIdx === -1) {
-    content += `\n\n${STATE_START}\n${buildStateSection(state)}\n${STATE_END}\n`;
-  } else {
-    const before = content.substring(0, startIdx + STATE_START.length);
-    const after = content.substring(endIdx);
-    content = `${before}\n${buildStateSection(state)}\n${after}`;
-  }
-
-  await writeFile(claudeMdPath, ensureVersionMarker(content), 'utf-8');
-  return { updated: true, created: false };
+  // Since v14, state is kept in .context/state.yaml, not in CLAUDE.md
+  return { updated: false, created: false };
 }

@@ -507,12 +507,14 @@ export async function checkStandardKitConformance(args: { project_path?: string;
       case 'operator_intent_resolution': {
         const adaptersPass = fileContainsAll(agentsMd, [
           '## Task Intake Rule',
-          'recover operator intent',
-          'workflow fragments',
+          '**Intent**',
+          '**Data Source**',
+          '**Scope**',
         ]) && fileContainsAll(claudeMd, [
           '## Task Intake Rule',
-          'recover operator intent',
-          'workflow fragments',
+          '**Intent**',
+          '**Data Source**',
+          '**Scope**',
         ]);
         const templatePass = fileContainsAll(designBrief, [
           'Operator signals / partial methods:',
@@ -564,9 +566,11 @@ export async function checkStandardKitConformance(args: { project_path?: string;
       }
       case 'public_transcript_isolation_contract': {
         const publicationValidation = validateContextPublicationPolicy(project.projectName, projectYaml);
+        // v14 templates don't include conversation routing details in adapter surfaces
+        // Instead, they reference .context/quick-start.md for such guidance
         let pass = publicationValidation.ok
-          && fileContainsAll(agentsMd, ['Configured conversation history surface (tracked or policy-routed)'])
-          && fileContainsAll(claudeMd, ['会话历史入口（tracked 或按 policy 路由）']);
+          && fileContainsAll(agentsMd, ['## Session Start Protocol'])
+          && fileContainsAll(claudeMd, ['## Session Start Protocol']);
 
         if (pass && publicationValidation.ok && publicationValidation.policy === 'public_distilled') {
           const quickStartPath = resolveManagedProjectContextPaths(project.projectPath, projectYaml).quickStartPath;
@@ -619,9 +623,10 @@ export async function checkStandardKitConformance(args: { project_path?: string;
         break;
       }
       case 'session_start_alignment': {
-        const pass = fileContainsAll(agentsMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap', 'current session project', 'no session project is bound'])
+        // v14 templates use simplified session start protocol
+        const pass = fileContainsAll(agentsMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap', 'no session project is bound'])
           && fileContainsNone(agentsMd, ['confirm the active project', 'active project is missing or wrong'])
-          && fileContainsAll(claudeMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap', 'current session project', 'no session project is bound'])
+          && fileContainsAll(claudeMd, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap', 'no session project is bound'])
           && fileContainsNone(claudeMd, ['confirm the active project', 'active project is missing or wrong'])
           && fileContainsAll(bootstrapMatrixSource, ['session_start_sequence', 'agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
           && fileContainsAll(adapterMatrixSource, ['agenticos_status', 'agenticos_switch', 'agenticos_issue_bootstrap'])
