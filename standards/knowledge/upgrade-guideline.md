@@ -69,6 +69,13 @@ AgenticOS 维护以下版本追踪信息：
 - `AGENTICOS_HOME/.runtime/last-upgrade-version`：上次升级的版本
 - `项目/.agent-workspace/upgrade-log.yaml`：项目升级历史记录
 
+## 5. 相关工具
+
+- `agenticos_standard_kit_upgrade_check`：检查标准套件版本
+- `agenticos_standard_kit_adopt`：采用最新标准套件
+- `agenticos_switch`：项目切换时自动检测
+- `agenticos_standard_kit_conformance_check`：验证标准合规性
+
 ## 6. 设计评审检查点
 
 设计任何 feature 时，必须在设计文档中包含以下内容：

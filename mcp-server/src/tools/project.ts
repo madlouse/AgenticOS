@@ -4,6 +4,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry, patchProjectMetadata } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
+import { adoptStandardKit, checkStandardKitUpgrade } from '../utils/standard-kit.js';
 import { writeFile } from 'fs/promises';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../utils/project-target.js';
@@ -440,6 +441,36 @@ export async function switchProject(args: any): Promise<string> {
     if (existingVersion < CURRENT_TEMPLATE_VERSION) {
       await writeFile(agentsMdPath, generateAgentsMd(found.name, description, contextDisplayPaths), 'utf-8');
       bootstrapNotes.push(`📝 AGENTS.md upgraded: v${existingVersion} → v${CURRENT_TEMPLATE_VERSION}`);
+    }
+  }
+
+  // Auto-adopt standard kit for non-canonical main projects
+  // This ensures stale templates, missing files are automatically fixed on switch
+  // Note: diverged_from_canonical is intentionally NOT checked here
+  // because adoptStandardKit preserves user modifications to copied templates
+  if (!writeProtection.blocked) {
+    try {
+      const upgradeCheck = await checkStandardKitUpgrade({ project_path: found.path });
+      const hasIssues =
+        (upgradeCheck.missing_required_files.length > 0) ||
+        (upgradeCheck.generated_files.some(f => f.status === 'stale')) ||
+        (upgradeCheck.copied_templates.some(t => t.status === 'missing'));
+
+      if (hasIssues) {
+        const adoptResult = await adoptStandardKit({ project_path: found.path });
+        const summaryParts: string[] = [];
+        if (adoptResult.upgraded_generated_files.length > 0) {
+          summaryParts.push(`upgraded: ${adoptResult.upgraded_generated_files.join(', ')}`);
+        }
+        if (adoptResult.created_files.length > 0) {
+          summaryParts.push(`created: ${adoptResult.created_files.join(', ')}`);
+        }
+        if (summaryParts.length > 0) {
+          bootstrapNotes.push(`📦 Standard kit auto-adopted (${summaryParts.join('; ')})`);
+        }
+      }
+    } catch (error: any) {
+      bootstrapNotes.push(`⚠️ Standard kit auto-adopt failed: ${error.message}`);
     }
   }
 
