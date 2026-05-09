@@ -1,10 +1,9 @@
-import { exec, execFile } from 'child_process';
+import { exec } from 'child_process';
 import { readFile, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-const execFileAsync = promisify(execFile);
 
 function sanitize(value: string): string {
   return value.replace(/[`*_~[\]()#>]/g, '?').substring(0, 500);
@@ -175,11 +174,9 @@ async function runClaudeAgent(
     await writeFile(tmpFile, prompt, 'utf-8');
 
     // Use 'command claude' to bypass shell function wrappers (e.g., agent-cli-api overrides 'claude')
-    // Use execFile (array args) to avoid shell glob expansion of ? in tmpFile path
-    // stdio[0]='ignore' closes stdin, preventing parallel process conflicts
-    const { stdout } = await execFileAsync(
-      'command',
-      ['claude', '--print', '--agent', agentFlag, '--system-prompt-file', tmpFile, '.', '--dangerously-skip-permissions'],
+    // execFile doesn't invoke a shell, so 'command' builtin isn't available — use execAsync instead
+    const { stdout } = await execAsync(
+      `command claude --print --agent ${agentFlag} --system-prompt-file "${tmpFile}" . --dangerously-skip-permissions`,
       { timeout: 120000, maxBuffer: 1024 * 1024 * 2 },
     );
 
