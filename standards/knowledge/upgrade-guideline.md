@@ -1,0 +1,130 @@
+# Upgrade Guideline - 前向兼容性设计原则
+
+> 本规范适用于所有使用 Git Flow + Agentic OS 规范的项目。
+
+## 1. Feature 设计的前向兼容性原则
+
+### 核心要求
+
+设计任何 feature 时，必须考虑：
+
+1. **影响评估**：这个 feature 的变更是否会影响存量项目？
+2. **升级路径**：存量项目升级时，是否需要同步修改配置/模板？
+3. **自动化可能性**：如果需要修改，是否可以自动修复？
+
+### 如果不能前向兼容
+
+必须在以下位置明确说明：
+
+1. **设计文档**：说明升级路径和需要的变更
+2. **PR 评审**：检查是否提供了完整的升级方案
+3. **规范文档**：更新本 Upgrade Guideline
+
+### 适用范围
+
+- **Agentic OS 主版本项目**：必须遵守
+- **使用 Agentic OS 规范的任何项目**：建议遵守
+
+## 2. On-Switch 自动适配机制
+
+### 核心逻辑
+
+```
+On-Switch(project):
+  ├─► 检测项目配置 vs 最新规范
+  ├─► 如果有差异：
+  │     ├─► 配置类（模板版本等）→ 自动修复 + 报告变更
+  │     └─► 流程类（工作流变更）→ 报告 + 阻塞 + 提供升级命令
+  └─► 记录变更到 upgrade-log.yaml
+```
+
+### 自动修复范围
+
+- 模板版本差
+- 配置字段缺失
+- 新增必需文件
+
+### 需人工确认范围
+
+- 工作流程变更
+- 行为要求变更
+- 可能影响现有工作的变更
+
+## 3. 升级后首次 Switch 的处理
+
+```
+用户升级 AgenticOS 后：
+  ↓
+首次 switch 到任意项目：
+  ↓
+检测标准套件版本差
+  ├─► 有差异 → 提示用户并提供 adopt 命令
+  └─► 无差异 → 正常 switch
+```
+
+## 4. 版本追踪
+
+AgenticOS 维护以下版本追踪信息：
+
+- `AGENTICOS_HOME/.runtime/last-upgrade-version`：上次升级的版本
+- `项目/.agent-workspace/upgrade-log.yaml`：项目升级历史记录
+
+## 5. 相关工具
+
+- `agenticos_standard_kit_upgrade_check`：检查标准套件版本
+- `agenticos_standard_kit_adopt`：采用最新标准套件
+- `agenticos_switch`：项目切换时自动检测
+- `agenticos_standard_kit_conformance_check`：验证标准合规性
+
+## 6. 设计评审检查点
+
+设计任何 feature 时，必须在设计文档中包含以下内容：
+
+### 前向兼容性评估
+
+- [ ] 这个 feature 是否影响存量项目的配置？
+- [ ] 存量项目升级时需要哪些修改？
+- [ ] 这些修改是否可以自动完成？
+- [ ] 如果不能自动完成，升级路径是什么？
+
+### 如果不能前向兼容
+
+必须提供：
+- 明确的升级路径说明
+- 需要人工确认的变更清单
+- 可能的回滚方案
+
+## 7. PR 评审检查点
+
+PR 评审时必须检查：
+
+### 前向兼容性
+
+- [ ] 设计文档是否包含前向兼容性评估？
+- [ ] 如果 feature 影响存量项目，是否提供了完整的升级方案？
+- [ ] 升级方案是否经过测试？
+
+### 标准套件版本
+
+- [ ] 如果修改了 `standards/` 或 `templates/`，是否更新了标准套件版本？
+- [ ] 新版本的标准套件是否在 manifest 中声明？
+
+### 向后兼容
+
+- [ ] 新增的行为要求是否在模板中体现？
+- [ ] 是否有 deprecated markers 说明过渡期？
+
+## 8. 记录升级历史
+
+每次标准套件升级时：
+
+1. 在 `changelog.md` 中记录升级内容
+2. 更新 `manifest.yaml` 中的 `kit_version`
+3. 如果有破坏性变更，提供迁移指南
+
+## 9. 相关工具
+
+- `agenticos_standard_kit_upgrade_check`：检查标准套件版本
+- `agenticos_standard_kit_adopt`：采用最新标准套件
+- `agenticos_switch`：项目切换时自动检测
+- `agenticos_standard_kit_conformance_check`：验证标准合规性
