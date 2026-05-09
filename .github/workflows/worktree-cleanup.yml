@@ -26,16 +26,17 @@ jobs:
 
           # Worktree naming convention: {project}-{pr-number}-{slug}
           # Find and remove worktrees matching this PR
-          # Use word boundary grep to avoid false positives
-          git worktree list --porcelain | grep "^worktree " | awk '{print $2}' | while IFS= read -r wt; do
+          # Use process substitution to avoid subshell variable loss
+          exit_code=0
+          while IFS= read -r wt; do
             # Check if worktree path contains the exact PR number bounded by non-digits
             if echo "$wt" | grep -qE "(^|[^0-9])${PR_NUMBER}([^0-9]|$)"; then
               echo "Found worktree to remove: $wt"
               git worktree remove "$wt" || exit_code=1
             fi
-          done
+          done < <(git worktree list --porcelain | grep "^worktree " | awk '{print $2}')
 
-          if [ -n "$exit_code" ]; then
+          if [ "$exit_code" -ne 0 ]; then
             echo "Some worktrees failed to remove"
             exit 1
           fi
@@ -60,7 +61,7 @@ jobs:
           echo "Canonical root: $canonical_root"
 
           misplaced_found=0
-          git worktree list --porcelain | grep "^worktree " | awk '{print $2}' | while IFS= read -r wt; do
+          while IFS= read -r wt; do
             # Skip canonical checkout
             if [ "$wt" = "$canonical_root" ]; then
               continue
@@ -73,7 +74,7 @@ jobs:
               echo "MISPLACED: $wt"
               misplaced_found=1
             fi
-          done
+          done < <(git worktree list --porcelain | grep "^worktree " | awk '{print $2}')
 
           if [ "$misplaced_found" -eq 1 ]; then
             echo "::warning::Misplaced worktrees found"
