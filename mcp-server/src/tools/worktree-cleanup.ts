@@ -1,8 +1,8 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { join, resolve } from 'path';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 interface WorktreeCleanupArgs {
   repo_path?: string;
@@ -19,8 +19,26 @@ interface WorktreeCleanupResult {
   errors: string[];
 }
 
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
+const ALLOWED_BASE_PATHS = [
+  process.env.AGENTICOS_HOME,
+  process.env.HOME,
+].filter((p): p is string => typeof p === 'string');
+
+function validateRepoPath(repoPath: string): string | null {
+  // Must be absolute path (reject relative paths)
+  if (!repoPath.startsWith('/')) {
+    return 'repo_path must be an absolute path';
+  }
+  const normalized = resolve(repoPath);
+  const allowed = ALLOWED_BASE_PATHS.some((base) => normalized === base || normalized.startsWith(`${base}/`));
+  if (!allowed) {
+    return `repo_path must be within allowed base paths: ${ALLOWED_BASE_PATHS.join(', ')}`;
+  }
+  return null;
+}
+
+async function runGit(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync('git', args, { cwd, timeout: 30000 });
   return stdout.trim();
 }
 
@@ -60,10 +78,19 @@ function parseWorktreeListPorcelain(output: string): ParsedWorktreeRecord[] {
   return records;
 }
 
+async function isBranchMerged(repoPath: string, branchName: string | null, baseBranch: string): Promise<boolean> {
+  if (!branchName) return false;
+  try {
+    await runGit(repoPath, ['merge-base', '--is-ancestor', branchName, baseBranch]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<string> {
   const {
     repo_path,
-    project_path,
     branch_name,
     dry_run = false,
   } = args;
@@ -82,11 +109,20 @@ export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<str
     return JSON.stringify(result, null, 2);
   }
 
+  const validationError = validateRepoPath(repo_path);
+  if (validationError) {
+    result.errors.push(validationError);
+    return JSON.stringify(result, null, 2);
+  }
+
   try {
     // Get all worktrees
-    const worktreeOutput = await runGit(repo_path, 'worktree list --porcelain');
+    const worktreeOutput = await runGit(repo_path, ['worktree', 'list', '--porcelain']);
     const worktrees = parseWorktreeListPorcelain(worktreeOutput);
-    const canonicalRoot = normalizePath(await runGit(repo_path, 'rev-parse --show-toplevel'));
+    const canonicalRoot = normalizePath(await runGit(repo_path, ['rev-parse', '--show-toplevel']));
+
+    // Determine base branch for merge detection
+    const baseBranch = await runGit(repo_path, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => 'main');
 
     // Find worktrees to remove
     for (const wt of worktrees) {
@@ -102,24 +138,15 @@ export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<str
         continue;
       }
 
-      // Check if worktree is merged (no upstream or upstream is main/master)
-      let isMerged = false;
-      try {
-        const upstream = await runGit(wt.path, 'rev-parse --abbrev-ref --symbolic-full-name @{upstream}');
-        if (!upstream || upstream.includes('/main') || upstream.includes('/master')) {
-          isMerged = true;
-        }
-      } catch {
-        // No upstream means it's a feature branch
-        isMerged = true;
-      }
+      // Check if worktree branch is merged into base branch
+      const isMerged = await isBranchMerged(repo_path, wt.branch, baseBranch);
 
       if (isMerged) {
         if (dry_run) {
           result.notes.push(`[DRY_RUN] Would remove: ${wt.path} (branch: ${wt.branch})`);
         } else {
           try {
-            await runGit(repo_path, `worktree remove "${wt.path}"`);
+            await runGit(repo_path, ['worktree', 'remove', wt.path]);
             result.removed_worktrees.push(wt.path);
             result.notes.push(`Removed worktree: ${wt.path}`);
           } catch (error) {

@@ -10,6 +10,20 @@ describe('runWorktreeCleanup', () => {
     expect(parsed.errors).toContain('repo_path is required');
   });
 
+  it('rejects repo_path outside allowed base paths', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '/etc' });
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe('BLOCKED');
+    expect(parsed.errors[0]).toMatch(/must be within allowed base paths/);
+  });
+
+  it('rejects relative repo_path', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '../etc' });
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe('BLOCKED');
+    expect(parsed.errors[0]).toMatch(/must be an absolute path/);
+  });
+
   it('returns DRY_RUN status when dry_run is true', async () => {
     const result = await runWorktreeCleanup({ repo_path: '/fake/path', dry_run: true });
     const parsed = JSON.parse(result);
@@ -17,8 +31,6 @@ describe('runWorktreeCleanup', () => {
   });
 
   it('initializes with empty arrays when called with valid path', async () => {
-    // Note: This test would require mocking git commands
-    // For now, we just verify the function structure is correct
     const result = await runWorktreeCleanup({ repo_path: '/nonexistent' });
     const parsed = JSON.parse(result);
     expect(parsed).toHaveProperty('status');

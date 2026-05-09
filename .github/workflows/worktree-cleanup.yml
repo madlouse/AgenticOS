@@ -4,6 +4,8 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM
 
 jobs:
   cleanup-worktrees:
@@ -11,13 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clean up merged PR worktree
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          echo "PR #{{ github.event.pull_request.number }} merged"
-          echo "Branch: {{ github.event.pull_request.head.ref }}"
-
-          # Extract project from branch name (e.g., feat/123-issue-slug -> agenticos)
-          BRANCH="{{ github.event.pull_request.head.ref }}"
-          PR_NUMBER="{{ github.event.pull_request.number }}"
+          echo "PR #${PR_NUMBER} merged"
+          echo "Branch: ${BRANCH}"
 
           # Worktree naming convention: {project}-{pr-number}-{slug}
           # Find and remove worktrees matching this PR
@@ -30,13 +31,9 @@ jobs:
           done
 
           echo "Worktree cleanup complete"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup-stale-worktrees:
-    # Run weekly to clean up any orphaned worktrees
-    schedule:
-      - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
