@@ -175,8 +175,9 @@ async function runClaudeAgent(
 
     // Use 'command claude' to bypass shell function wrappers (e.g., agent-cli-api overrides 'claude')
     // execFile doesn't invoke a shell, so 'command' builtin isn't available — use execAsync instead
+    // Redirect stdin from /dev/null to prevent 'no stdin data received' warning
     const { stdout } = await execAsync(
-      `command claude --print --agent ${agentFlag} --system-prompt-file "${tmpFile}" . --dangerously-skip-permissions`,
+      `command claude --print --agent ${agentFlag} --system-prompt-file "${tmpFile}" . --dangerously-skip-permissions < /dev/null`,
       { timeout: 120000, maxBuffer: 1024 * 1024 * 2 },
     );
 
