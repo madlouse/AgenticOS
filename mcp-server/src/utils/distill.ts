@@ -156,31 +156,22 @@ export function generateAgentsMd(
 ): string {
   const contextPaths = normalizeAgentContextPaths(paths);
 
-  const sessionStartProtocol = `## Session Start Protocol
-
-On session start:
-
-1. Call \`agenticos_status\` to confirm current project and task
-2. If not on \`${name}\` project, call \`agenticos_switch\`
-3. Read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.statePath}\`
-4. If implementation work requested, enter Guardrail Protocol before editing
-5. Greet with: project name, last progress, pending items, suggested next step`;
-
-  return `${VERSION_MARKER}
-# AGENTS.md — ${name}
-
-## Adapter Role
-
-${AGENTS_ADAPTER_LINES[0]}
-${AGENTS_ADAPTER_LINES[1]}
-
-${renderSharedPolicySection()}${renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS)}${STOP_HOOK_SECTION}
-
-## ${TASK_INTAKE_RULE_TITLE}
-
-${TASK_INTAKE_RULE_CONTENT}
-
-## Guardrail Protocol (MANDATORY)
+  const sections = [
+    {
+      name: 'adapter-role',
+      content: `## Adapter Role\n\n${AGENTS_ADAPTER_LINES[0]}\n${AGENTS_ADAPTER_LINES[1]}`
+    },
+    { name: 'canonical-policy', content: renderSharedPolicySection() },
+    { name: 'continuity-contract', content: renderContinuityContractSection() },
+    { name: 'runtime-notes', content: renderRuntimeGuidanceSection(AGENTS_RUNTIME_GUIDANCE_TITLE, AGENTS_RUNTIME_GUIDANCE_BULLETS) },
+    { name: 'stop-hook', content: STOP_HOOK_SECTION },
+    {
+      name: 'task-intake-rule',
+      content: `## ${TASK_INTAKE_RULE_TITLE}\n\n${TASK_INTAKE_RULE_CONTENT}`
+    },
+    {
+      name: 'guardrail-protocol',
+      content: `## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
@@ -192,17 +183,122 @@ For implementation-affecting work:
 4. call \`agenticos_edit_guard\` immediately before implementation edits
 5. before PR creation or merge, call \`agenticos_pr_scope_check\`
 
-If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.
+If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.`
+    },
+    { name: 'recording-protocol', content: RECORDING_PROTOCOL },
+    {
+      name: 'session-start-protocol',
+      content: `## Session Start Protocol
 
-${RECORDING_PROTOCOL}
+On session start:
 
-${sessionStartProtocol}
+1. Call \`agenticos_status\` to confirm current project and task
+2. If not on \`${name}\` project, call \`agenticos_switch\`
+3. Read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.statePath}\`
+4. If implementation work requested, enter Guardrail Protocol before editing
+5. Greet with: project name, last progress, pending items, suggested next step`
+    },
+  ];
+
+  const markedContent = sections
+    .map(({ name, content }) => wrapStandardSection(name, content))
+    .join('\n');
+
+  return `${VERSION_MARKER}
+# AGENTS.md — ${name}
+
+${markedContent}
 `;
+}
+
+// ---------------------------------------------------------------------------
+// Section markers for module-level merge
+// ---------------------------------------------------------------------------
+
+/**
+ * Section marker format for module-level merge.
+ * Sections marked as "replace" get updated from template on upgrade.
+ * Sections marked as "preserve" are kept from existing file on upgrade.
+ */
+const SECTION_MARKER_PREFIX = '<!-- agenticos-section: ';
+const SECTION_MARKER_SUFFIX = ' -->';
+const SECTION_END_MARKER = '<!-- /agenticos-section -->';
+
+/**
+ * Define which sections are standard (replace on upgrade) vs project-specific (preserve).
+ * Standard sections: protocol-related, should be kept up-to-date with canonical policy.
+ * Project-specific sections: domain knowledge, user entry contracts, project rules.
+ */
+export const STANDARD_SECTION_NAMES = [
+  'adapter-role',
+  'canonical-policy',
+  'continuity-contract',
+  'runtime-notes',
+  'stop-hook',
+  'task-intake-rule',
+  'guardrail-protocol',
+  'recording-protocol',
+  'session-start-protocol',
+] as const;
+
+/**
+ * Map section names to human-readable titles for template generation.
+ * Standard sections use canonical titles.
+ */
+const SECTION_TITLES: Record<string, string> = {
+  'adapter-role': 'Adapter Role',
+  'canonical-policy': 'Canonical Policy (Shared Across Agents)',
+  'continuity-contract': 'Continuity Contract',
+  'runtime-notes': 'Claude Runtime Notes',
+  'stop-hook': 'Stop-Hook (Optional)',
+  'task-intake-rule': 'Task Intake Rule',
+  'guardrail-protocol': 'Guardrail Protocol (MANDATORY)',
+  'recording-protocol': 'MANDATORY: Recording Protocol',
+  'session-start-protocol': 'Session Start Protocol',
+};
+
+/** Parse section markers from existing content */
+function parseSections(content: string): Map<string, { marker: string; title: string; content: string }> {
+  const sections = new Map<string, { marker: string; title: string; content: string }>();
+  const regex = new RegExp(
+    `${SECTION_MARKER_PREFIX}([a-z-]+)\\s*-->\n(.*?)${SECTION_END_MARKER}`,
+    'gs'
+  );
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    const [, sectionName, body] = match;
+    const titleMatch = body.match(/^## (.+)\n/);
+    const title = titleMatch ? titleMatch[1] : sectionName;
+    sections.set(sectionName, {
+      marker: SECTION_MARKER_PREFIX + sectionName + SECTION_MARKER_SUFFIX,
+      title,
+      content: body.trim(),
+    });
+  }
+  return sections;
+}
+
+/** Wrap content with section markers for standard sections */
+function wrapStandardSection(sectionName: string, content: string): string {
+  return `${SECTION_MARKER_PREFIX}${sectionName}${SECTION_MARKER_SUFFIX}\n${content}\n${SECTION_END_MARKER}`;
 }
 
 // ---------------------------------------------------------------------------
 // CLAUDE.md template
 // ---------------------------------------------------------------------------
+
+function buildAdapterRoleSection(): string {
+  return `## Adapter Role
+
+${CLAUDE_ADAPTER_LINES[0]}
+${CLAUDE_ADAPTER_LINES[1]}`;
+}
+
+function buildStopHookSection(): string {
+  return `## Stop-Hook (Optional)
+
+If your runtime supports local stop hooks, configure \`agenticos-record-reminder\` as a local reminder. This is optional, not a canonical guardrail.`;
+}
 
 export function generateClaudeMd(
   name: string,
@@ -213,21 +309,18 @@ export function generateClaudeMd(
 ): string {
   const contextPaths = normalizeAgentContextPaths(paths);
 
-  return `${VERSION_MARKER}
-# CLAUDE.md — ${name}
-
-## Adapter Role
-
-${CLAUDE_ADAPTER_LINES[0]}
-${CLAUDE_ADAPTER_LINES[1]}
-
-${renderSharedPolicySection()}${renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS)}${STOP_HOOK_SECTION}
-
-## ${TASK_INTAKE_RULE_TITLE}
-
-${TASK_INTAKE_RULE_CONTENT}
-
-## Guardrail Protocol (MANDATORY)
+  const sections = [
+    { name: 'adapter-role', content: buildAdapterRoleSection() },
+    { name: 'canonical-policy', content: renderSharedPolicySection() },
+    { name: 'runtime-notes', content: renderRuntimeGuidanceSection(CLAUDE_RUNTIME_GUIDANCE_TITLE, CLAUDE_RUNTIME_GUIDANCE_BULLETS) },
+    { name: 'stop-hook', content: buildStopHookSection() },
+    {
+      name: 'task-intake-rule',
+      content: `## ${TASK_INTAKE_RULE_TITLE}\n\n${TASK_INTAKE_RULE_CONTENT}`
+    },
+    {
+      name: 'guardrail-protocol',
+      content: `## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
@@ -239,11 +332,21 @@ For implementation-affecting work:
 4. call \`agenticos_edit_guard\` immediately before implementation edits
 5. before PR creation or merge, call \`agenticos_pr_scope_check\`
 
-If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.
+If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.`
+    },
+    {
+      name: 'recording-protocol',
+      content: `## MANDATORY: Recording Protocol
 
-${RECORDING_PROTOCOL}
+> All session activity MUST be recorded. If you skip this, context is lost forever.
 
-## Session Start Protocol
+**During session**: After completing any meaningful unit of work, call \`agenticos_record\` with summary, decisions, outcomes, pending, and current_task.
+
+**Before session ends**: Call \`agenticos_record\` with complete summary, then \`agenticos_save\` to commit to Git.`
+    },
+    {
+      name: 'session-start-protocol',
+      content: `## Session Start Protocol
 
 On session start:
 
@@ -251,7 +354,18 @@ On session start:
 2. If not on \`${name}\` project, call \`agenticos_switch\`
 3. Read \`.project.yaml\`, \`${contextPaths.quickStartPath}\`, and \`${contextPaths.statePath}\`
 4. If implementation work requested, enter Guardrail Protocol before editing
-5. Greet with: project name, last progress, pending items, suggested next step
+5. Greet with: project name, last progress, pending items, suggested next step`
+    },
+  ];
+
+  const markedContent = sections
+    .map(({ name, content }) => wrapStandardSection(name, content))
+    .join('\n');
+
+  return `${VERSION_MARKER}
+# CLAUDE.md — ${name}
+
+${markedContent}
 `;
 }
 
@@ -262,16 +376,230 @@ export interface StateYaml {
   working_memory?: { facts?: string[]; decisions?: string[]; pending?: string[] };
 }
 
-/** @deprecated Use generateClaudeMd instead. State is now in .context/state.yaml */
+// Known project-specific section titles that should be preserved from existing files
+const PROJECT_SPECIFIC_TITLES = [
+  'Purpose',
+  'Read Order',
+  'Command Contract',
+  'Secret Contract',
+  'Resume Contract',
+  'Compatibility Contract',
+  'Install Contract',
+  'Provider Lifecycle Contract',
+  'Design Rules',
+  'Cross-Agent Handoff',
+  'GitHub Development Protocol',
+  'Editing Scope',
+  'Session Recording',
+  'What Must Stay True',
+  'Implementation Policy',
+  'Verification',
+  'Navigation',
+];
+
+/** Extract project-specific sections from existing file content.
+ * Sections that are NOT in STANDARD_SECTION_NAMES and match PROJECT_SPECIFIC_TITLES
+ * should be preserved from existing content.
+ */
+function extractProjectSpecificSections(existingContent: string): string[] {
+  const preservedSections: string[] = [];
+  const lines = existingContent.split('\n');
+  let currentSection: string[] = [];
+  let inProjectSection = false;
+
+  for (const line of lines) {
+    // Check if this is a section header (## but not standard section)
+    const sectionMatch = line.match(/^## ([^`]+)$/);
+    if (sectionMatch) {
+      const title = sectionMatch[1].trim();
+
+      // Check if this is a standard section (should be replaced)
+      const isStandard = STANDARD_SECTION_NAMES.some(name => {
+        // Map section names to possible titles
+        const standardTitles: Record<string, string[]> = {
+          'adapter-role': ['Adapter Role'],
+          'canonical-policy': ['Canonical Policy (Shared Across Agents)', 'Canonical Policy'],
+          'continuity-contract': ['Continuity Contract'],
+          'runtime-notes': ['Claude Runtime Notes', 'Codex / Generic Runtime Notes'],
+          'stop-hook': ['Stop-Hook (Optional)'],
+          'task-intake-rule': ['Task Intake Rule'],
+          'guardrail-protocol': ['Guardrail Protocol (MANDATORY)'],
+          'recording-protocol': ['MANDATORY: Recording Protocol', 'Recording Protocol (MANDATORY)'],
+          'session-start-protocol': ['Session Start Protocol'],
+        };
+        return standardTitles[name]?.includes(title);
+      });
+
+      // Check if this is a known project-specific section (should be preserved)
+      const isProjectSpecific = PROJECT_SPECIFIC_TITLES.some(
+        psTitle => title.includes(psTitle) || psTitle.includes(title)
+      );
+
+      if (isStandard) {
+        // Skip standard sections
+        inProjectSection = false;
+        if (currentSection.length > 0) {
+          preservedSections.push(currentSection.join('\n'));
+          currentSection = [];
+        }
+      } else if (isProjectSpecific) {
+        // Keep project-specific sections
+        inProjectSection = true;
+        if (currentSection.length > 0) {
+          preservedSections.push(currentSection.join('\n'));
+          currentSection = [];
+        }
+        currentSection.push(line);
+      } else {
+        // Unknown section - treat as project-specific for safety
+        if (!line.includes('Guardrail Protocol') && !line.includes('Recording Protocol')) {
+          inProjectSection = true;
+          if (currentSection.length > 0 && currentSection[currentSection.length - 1].startsWith('## ')) {
+            preservedSections.push(currentSection.join('\n'));
+            currentSection = [];
+          }
+          currentSection.push(line);
+        } else {
+          inProjectSection = false;
+          if (currentSection.length > 0) {
+            preservedSections.push(currentSection.join('\n'));
+            currentSection = [];
+          }
+        }
+      }
+    } else if (inProjectSection) {
+      currentSection.push(line);
+    }
+  }
+
+  // Don't forget the last section
+  if (currentSection.length > 0) {
+    preservedSections.push(currentSection.join('\n'));
+  }
+
+  return preservedSections;
+}
+
+/** Merge template and existing content at section level.
+ * Standard sections are replaced from template.
+ * Project-specific sections are preserved from existing file.
+ */
+export function mergeSections(
+  templateContent: string,
+  existingContent: string | null,
+): string {
+  // If no existing content, use template
+  if (!existingContent) {
+    return templateContent;
+  }
+
+  // Parse sections from existing content
+  const existingSections = parseSections(existingContent);
+  const templateSections = parseSections(templateContent);
+
+  const resultLines: string[] = [];
+
+  // Process template sections: replace standard ones, keep project-specific
+  const templateEntries = Array.from(templateSections.entries());
+  for (const [sectionName, templateSection] of templateEntries) {
+    const existingSection = existingSections.get(sectionName);
+    const isStandard = (STANDARD_SECTION_NAMES as readonly string[]).includes(sectionName);
+
+    if (isStandard) {
+      // Replace with template content
+      resultLines.push(wrapStandardSection(sectionName, templateSection.content));
+    } else if (existingSection) {
+      // Preserve project-specific content
+      resultLines.push(wrapStandardSection(sectionName, existingSection.content));
+    }
+  }
+
+  return resultLines.length > 0 ? resultLines.join('\n\n') : templateContent;
+}
+
+/** Upgrade CLAUDE.md with section-level merge.
+ * Preserves project-specific content while updating standard protocol sections.
+ *
+ * For files WITH section markers: merge at section level
+ * For files WITHOUT section markers: preserve project-specific sections
+ */
 export function upgradeClaudeMd(
-  _claudeMdPath: string,
+  claudeMdPath: string,
   name: string,
   description: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _state?: any,
   paths?: Partial<ManagedProjectContextDisplayPaths>,
 ): string {
-  return generateClaudeMd(name, description, undefined, paths);
+  // Read existing content for merge
+  let existingContent: string | null = null;
+  try {
+    existingContent = readFileSync(claudeMdPath, 'utf-8');
+  } catch {
+    // File doesn't exist, generate fresh
+  }
+
+  // Generate new template
+  const templateContent = generateClaudeMd(name, description, undefined, paths);
+
+  // If existing content has section markers, do merge
+  if (existingContent && existingContent.includes(SECTION_MARKER_PREFIX)) {
+    return mergeSections(templateContent, existingContent);
+  }
+
+  // No section markers - extract and preserve project-specific content
+  if (existingContent) {
+    const preservedSections = extractProjectSpecificSections(existingContent);
+
+    if (preservedSections.length > 0) {
+      // Append preserved sections to template
+      const standardContent = templateContent.split('\n').slice(0, 20).join('\n'); // Header + standard sections
+      return `${templateContent}\n\n---\n\n## Project-Specific Content (Preserved)\n\n${preservedSections.join('\n\n')}`;
+    }
+  }
+
+  return templateContent;
+}
+
+/** Upgrade AGENTS.md with section-level merge.
+ * Preserves project-specific content while updating standard protocol sections.
+ *
+ * For files WITH section markers: merge at section level
+ * For files WITHOUT section markers: preserve project-specific sections
+ */
+export function upgradeAgentsMd(
+  agentsMdPath: string,
+  name: string,
+  description: string,
+  paths?: Partial<ManagedProjectContextDisplayPaths>,
+): string {
+  // Read existing content for merge
+  let existingContent: string | null = null;
+  try {
+    existingContent = readFileSync(agentsMdPath, 'utf-8');
+  } catch {
+    // File doesn't exist, generate fresh
+  }
+
+  // Generate new template
+  const templateContent = generateAgentsMd(name, description, paths);
+
+  // If existing content has section markers, do merge
+  if (existingContent && existingContent.includes(SECTION_MARKER_PREFIX)) {
+    return mergeSections(templateContent, existingContent);
+  }
+
+  // No section markers - extract and preserve project-specific content
+  if (existingContent) {
+    const preservedSections = extractProjectSpecificSections(existingContent);
+
+    if (preservedSections.length > 0) {
+      // Append preserved sections to template
+      return `${templateContent}\n\n---\n\n## Project-Specific Content (Preserved)\n\n${preservedSections.join('\n\n')}`;
+    }
+  }
+
+  return templateContent;
 }
 
 /** @deprecated State is now in .context/state.yaml, not in CLAUDE.md */

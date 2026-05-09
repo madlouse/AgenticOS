@@ -4,7 +4,7 @@ import { join, dirname } from 'path';
 import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapter-matrix.js';
-import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd } from './distill.js';
+import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd, upgradeAgentsMd } from './distill.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
 import { validateContextPublicationPolicy } from './project-contract.js';
 import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
@@ -369,7 +369,7 @@ export async function adoptStandardKit(args: { project_path?: string; project?: 
     }
 
     const upgraded = entry.path === 'AGENTS.md'
-      ? generateAgentsMd(project.projectName, project.projectDescription, project.agentContextPaths)
+      ? upgradeAgentsMd(destination, project.projectName, project.projectDescription, project.agentContextPaths)
       : upgradeClaudeMd(destination, project.projectName, project.projectDescription, undefined, project.agentContextPaths);
     await writeFile(destination, upgraded, 'utf-8');
     upgradedGeneratedFiles.push(entry.path);
