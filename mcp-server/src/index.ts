@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -458,6 +458,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
       },
     },
+    {
+      name: 'agenticos_worktree_cleanup',
+      description: 'Clean up merged or stale worktrees from the repository. Can target a specific branch or all worktrees, with optional dry-run mode.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          repo_path: { type: 'string', description: 'Absolute repository path to clean up worktrees from.' },
+          project_path: { type: 'string', description: 'Optional managed project root for additional context.' },
+          branch_name: { type: 'string', description: 'Optional specific branch name to remove (otherwise removes all merged worktrees).' },
+          dry_run: { type: 'boolean', description: 'If true, show what would be removed without actually removing (default: false).' },
+        },
+        required: ['repo_path'],
+      },
+    },
   ],
 }));
 
@@ -518,6 +532,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runMultiAgentReview(args ?? {}) }] };
     case 'agenticos_enforce_git_policy':
       return { content: [{ type: 'text', text: await runEnforceGitPolicy(args ?? {}) }] };
+    case 'agenticos_worktree_cleanup':
+      return { content: [{ type: 'text', text: await runWorktreeCleanup(args ?? {}) }] };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

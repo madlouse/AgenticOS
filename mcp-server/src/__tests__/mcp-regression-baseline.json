@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-05-08T04:30:06.975Z",
+  "capturedAt": "2026-05-09T10:04:52.403Z",
   "version": "0.4.15",
   "serverInfo": {
     "name": "agenticos-mcp",
@@ -36,7 +36,8 @@
     "agenticos_validate_delegation",
     "agenticos_coverage_check",
     "agenticos_multi_agent_review",
-    "agenticos_enforce_git_policy"
+    "agenticos_enforce_git_policy",
+    "agenticos_worktree_cleanup"
   ],
-  "toolCount": 26
+  "toolCount": 27
 }

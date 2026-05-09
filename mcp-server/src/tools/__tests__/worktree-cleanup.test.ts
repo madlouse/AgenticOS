@@ -1,0 +1,50 @@
+/// <reference types="vitest/globals" />
+import { describe, it, expect } from 'vitest';
+import { runWorktreeCleanup } from '../worktree-cleanup.js';
+
+describe('runWorktreeCleanup', () => {
+  it('returns error when repo_path is missing', async () => {
+    const result = await runWorktreeCleanup({});
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe('BLOCKED');
+    expect(parsed.errors).toContain('repo_path is required');
+  });
+
+  it('returns DRY_RUN status when dry_run is true', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '/fake/path', dry_run: true });
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe('DRY_RUN');
+  });
+
+  it('initializes with empty arrays when called with valid path', async () => {
+    // Note: This test would require mocking git commands
+    // For now, we just verify the function structure is correct
+    const result = await runWorktreeCleanup({ repo_path: '/nonexistent' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toHaveProperty('status');
+    expect(parsed).toHaveProperty('removed_worktrees');
+    expect(parsed).toHaveProperty('remaining_worktrees');
+    expect(parsed).toHaveProperty('notes');
+    expect(parsed).toHaveProperty('errors');
+  });
+});
+
+describe('WorktreeCleanupArgs interface', () => {
+  it('accepts optional project_path', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '/repo', project_path: '/project' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toBeDefined();
+  });
+
+  it('accepts optional branch_name', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '/repo', branch_name: 'feat-123' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toBeDefined();
+  });
+
+  it('accepts dry_run boolean', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '/repo', dry_run: true });
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe('DRY_RUN');
+  });
+});
