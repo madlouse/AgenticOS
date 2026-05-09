@@ -1,0 +1,87 @@
+name: Worktree Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM
+
+jobs:
+  cleanup-worktrees:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clean up merged PR worktree
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "PR #${PR_NUMBER} merged"
+          echo "Branch: ${BRANCH}"
+
+          # Worktree naming convention: {project}-{pr-number}-{slug}
+          # Find and remove worktrees matching this PR
+          # Use process substitution to avoid subshell variable loss
+          exit_code=0
+          while IFS= read -r wt; do
+            # Check if worktree path contains the exact PR number bounded by non-digits
+            if echo "$wt" | grep -qE "(^|[^0-9])${PR_NUMBER}([^0-9]|$)"; then
+              echo "Found worktree to remove: $wt"
+              git worktree remove "$wt" || exit_code=1
+            fi
+          done < <(git worktree list --porcelain | grep "^worktree " | awk '{print $2}')
+
+          if [ "$exit_code" -ne 0 ]; then
+            echo "Some worktrees failed to remove"
+            exit 1
+          fi
+
+          echo "Worktree cleanup complete"
+
+  cleanup-stale-worktrees:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/workflows/worktree-cleanup.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Find misplaced worktrees
+        run: |
+          echo "Checking for misplaced worktrees..."
+
+          canonical_root=$(git -C . rev-parse --show-toplevel)
+          echo "Canonical root: $canonical_root"
+
+          misplaced_found=0
+          while IFS= read -r wt; do
+            # Skip canonical checkout
+            if [ "$wt" = "$canonical_root" ]; then
+              continue
+            fi
+
+            # Check if worktree is within expected structure
+            if echo "$wt" | grep -qE "worktrees/[^/]+/[^/]+$"; then
+              echo "OK: $wt"
+            else
+              echo "MISPLACED: $wt"
+              misplaced_found=1
+            fi
+          done < <(git worktree list --porcelain | grep "^worktree " | awk '{print $2}')
+
+          if [ "$misplaced_found" -eq 1 ]; then
+            echo "::warning::Misplaced worktrees found"
+            exit 1
+          fi
+
+      - name: Report misplaced worktrees
+        if: failure()
+        run: |
+          echo "Misplaced worktrees detected - review the 'Find misplaced worktrees' step logs above"

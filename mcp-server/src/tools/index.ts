@@ -19,3 +19,4 @@ export { runValidateDelegation } from './validate-delegation.js';
 export { runCoverageCheck, runCoverageGenerate } from './coverage-check.js';
 export { runMultiAgentReview } from './multi-agent-review.js';
 export { runEnforceGitPolicy } from './git-policy-enforce.js';
+export { runWorktreeCleanup } from './worktree-cleanup.js';
