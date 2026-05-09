@@ -24,6 +24,13 @@ describe('runWorktreeCleanup', () => {
     expect(parsed.errors[0]).toMatch(/must be an absolute path/);
   });
 
+  it('rejects repo_path equal to base directory itself', async () => {
+    const result = await runWorktreeCleanup({ repo_path: process.env.HOME || '/' });
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe('BLOCKED');
+    expect(parsed.errors[0]).toMatch(/must be within allowed base paths/);
+  });
+
   it('returns DRY_RUN status when dry_run is true', async () => {
     const result = await runWorktreeCleanup({ repo_path: '/fake/path', dry_run: true });
     const parsed = JSON.parse(result);

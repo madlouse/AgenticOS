@@ -22,9 +22,10 @@ jobs:
 
           # Worktree naming convention: {project}-{pr-number}-{slug}
           # Find and remove worktrees matching this PR
+          # Use word boundary grep to avoid false positives (e.g., PR 10 matching -101-)
           for wt in $(git worktree list --porcelain | grep "^worktree " | awk '{print $2}'); do
-            # Check if worktree name contains the PR number
-            if echo "$wt" | grep -qE "[/-]${PR_NUMBER}[-/]"; then
+            # Check if worktree path contains the exact PR number bounded by non-digits
+            if echo "$wt" | grep -qE "(^|[^0-9])${PR_NUMBER}([^0-9]|$)"; then
               echo "Found worktree to remove: $wt"
               git worktree remove "$wt" || echo "Failed to remove $wt"
             fi
@@ -52,6 +53,7 @@ jobs:
           canonical_root=$(git -C . rev-parse --show-toplevel)
           echo "Canonical root: $canonical_root"
 
+          misplaced_found=0
           for wt in $(git worktree list --porcelain | grep "^worktree " | awk '{print $2}'); do
             # Skip canonical checkout
             if [ "$wt" = "$canonical_root" ]; then
@@ -64,10 +66,16 @@ jobs:
               echo "OK: $wt"
             else
               echo "MISPLACED: $wt"
+              misplaced_found=1
             fi
           done
+
+          if [ "$misplaced_found" -eq 1 ]; then
+            echo "::warning::Misplaced worktrees found"
+            exit 1
+          fi
 
       - name: Report misplaced worktrees
         if: failure()
         run: |
-          echo "Failed to list worktrees - check repository access"
+          echo "Misplaced worktrees detected - review the 'Find misplaced worktrees' step logs above"

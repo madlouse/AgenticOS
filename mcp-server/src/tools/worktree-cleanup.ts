@@ -30,7 +30,7 @@ function validateRepoPath(repoPath: string): string | null {
     return 'repo_path must be an absolute path';
   }
   const normalized = resolve(repoPath);
-  const allowed = ALLOWED_BASE_PATHS.some((base) => normalized === base || normalized.startsWith(`${base}/`));
+  const allowed = ALLOWED_BASE_PATHS.some((base) => normalized.startsWith(`${base}/`));
   if (!allowed) {
     return `repo_path must be within allowed base paths: ${ALLOWED_BASE_PATHS.join(', ')}`;
   }
@@ -160,8 +160,10 @@ export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<str
       }
     }
 
-    if (result.removed_worktrees.length > 0 || result.errors.length > 0) {
-      result.status = result.errors.length > 0 ? 'BLOCKED' : 'CLEANED';
+    if (result.errors.length > 0) {
+      result.status = 'BLOCKED';
+    } else if (!dry_run) {
+      result.status = 'CLEANED';
     }
   } catch (error) {
     result.errors.push(`Cleanup failed: ${error instanceof Error ? error.message : 'unknown error'}`);
