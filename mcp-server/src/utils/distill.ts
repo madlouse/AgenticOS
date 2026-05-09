@@ -232,7 +232,6 @@ const SECTION_END_MARKER = '<!-- /agenticos-section -->';
 export const STANDARD_SECTION_NAMES = [
   'adapter-role',
   'canonical-policy',
-  'continuity-contract',
   'runtime-notes',
   'stop-hook',
   'task-intake-rule',
@@ -240,6 +239,9 @@ export const STANDARD_SECTION_NAMES = [
   'recording-protocol',
   'session-start-protocol',
 ] as const;
+
+/** Additional standard sections for AGENTS.md only */
+const AGENTS_ONLY_STANDARD_SECTIONS = ['continuity-contract'] as const;
 
 /**
  * Map section names to human-readable titles for template generation.
@@ -498,6 +500,7 @@ export function mergeSections(
   const templateSections = parseSections(templateContent);
 
   const resultLines: string[] = [];
+  const processedSectionNames = new Set<string>();
 
   // Process template sections: replace standard ones, keep project-specific
   const templateEntries = Array.from(templateSections.entries());
@@ -508,8 +511,18 @@ export function mergeSections(
     if (isStandard) {
       // Replace with template content
       resultLines.push(wrapStandardSection(sectionName, templateSection.content));
+      processedSectionNames.add(sectionName);
     } else if (existingSection) {
-      // Preserve project-specific content
+      // Preserve non-standard section from existing
+      resultLines.push(wrapStandardSection(sectionName, existingSection.content));
+      processedSectionNames.add(sectionName);
+    }
+  }
+
+  // Also preserve non-standard sections from existing that are not in template
+  for (const [sectionName, existingSection] of existingSections.entries()) {
+    if (!processedSectionNames.has(sectionName)) {
+      // This is a project-specific section from existing file, preserve it
       resultLines.push(wrapStandardSection(sectionName, existingSection.content));
     }
   }
