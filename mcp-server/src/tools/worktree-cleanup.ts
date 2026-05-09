@@ -133,7 +133,9 @@ export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<str
       }
 
       // If branch_name is specified, only remove that one
-      if (branch_name && wt.branch !== branch_name) {
+      // Normalize branch_name by stripping refs/heads/ prefix to match porcelain parser
+      const normalizedFilterBranch = branch_name?.replace(/^refs\/heads\//, '');
+      if (normalizedFilterBranch && wt.branch !== normalizedFilterBranch) {
         result.remaining_worktrees.push(wt.path);
         continue;
       }

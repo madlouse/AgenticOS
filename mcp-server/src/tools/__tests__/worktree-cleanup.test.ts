@@ -61,6 +61,12 @@ describe('WorktreeCleanupArgs interface', () => {
     expect(parsed).toBeDefined();
   });
 
+  it('normalizes refs/heads/ prefix in branch_name', async () => {
+    const result = await runWorktreeCleanup({ repo_path: '/repo', branch_name: 'refs/heads/feat-123' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toBeDefined();
+  });
+
   it('accepts dry_run boolean', async () => {
     const result = await runWorktreeCleanup({ repo_path: '/repo', dry_run: true });
     const parsed = JSON.parse(result);

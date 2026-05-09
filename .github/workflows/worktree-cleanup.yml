@@ -12,6 +12,10 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Clean up merged PR worktree
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -22,14 +26,19 @@ jobs:
 
           # Worktree naming convention: {project}-{pr-number}-{slug}
           # Find and remove worktrees matching this PR
-          # Use word boundary grep to avoid false positives (e.g., PR 10 matching -101-)
-          for wt in $(git worktree list --porcelain | grep "^worktree " | awk '{print $2}'); do
+          # Use word boundary grep to avoid false positives
+          git worktree list --porcelain | grep "^worktree " | awk '{print $2}' | while IFS= read -r wt; do
             # Check if worktree path contains the exact PR number bounded by non-digits
             if echo "$wt" | grep -qE "(^|[^0-9])${PR_NUMBER}([^0-9]|$)"; then
               echo "Found worktree to remove: $wt"
-              git worktree remove "$wt" || echo "Failed to remove $wt"
+              git worktree remove "$wt" || exit_code=1
             fi
           done
+
+          if [ -n "$exit_code" ]; then
+            echo "Some worktrees failed to remove"
+            exit 1
+          fi
 
           echo "Worktree cleanup complete"
 
@@ -47,21 +56,17 @@ jobs:
         run: |
           echo "Checking for misplaced worktrees..."
 
-          # Expected worktree root pattern: {AGENTICOS_HOME}/worktrees/{project_id}/
-          # Any worktree not matching this pattern is misplaced
-
           canonical_root=$(git -C . rev-parse --show-toplevel)
           echo "Canonical root: $canonical_root"
 
           misplaced_found=0
-          for wt in $(git worktree list --porcelain | grep "^worktree " | awk '{print $2}'); do
+          git worktree list --porcelain | grep "^worktree " | awk '{print $2}' | while IFS= read -r wt; do
             # Skip canonical checkout
             if [ "$wt" = "$canonical_root" ]; then
               continue
             fi
 
             # Check if worktree is within expected structure
-            # Expected: worktrees/{project_id}/{worktree_name}
             if echo "$wt" | grep -qE "worktrees/[^/]+/[^/]+$"; then
               echo "OK: $wt"
             else
