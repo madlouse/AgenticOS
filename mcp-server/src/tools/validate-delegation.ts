@@ -34,12 +34,17 @@ export async function runValidateDelegation(args: any): Promise<string> {
   let validatedResultPath = resultPath;
 
   try {
-    const [resolvedDelegationsRoot, resolvedLogPath, resolvedResultPath] = await Promise.all([
+    const [resolvedProjectPath, resolvedDelegationsRoot, resolvedLogPath, resolvedResultPath] = await Promise.all([
+      realpath(projectPath),
       realpath(delegationsRoot),
       realpath(logPath),
       realpath(resultPath),
     ]);
-    if (!isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot) || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)) {
+    if (
+      !isPathWithinRoot(resolvedDelegationsRoot, resolvedProjectPath)
+      || !isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot)
+      || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)
+    ) {
       return '❌ delegation_id resolves outside the delegations directory';
     }
     validatedLogPath = resolvedLogPath;

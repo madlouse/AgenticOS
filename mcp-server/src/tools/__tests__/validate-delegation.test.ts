@@ -50,11 +50,25 @@ describe('runValidateDelegation', () => {
 
   it('rejects delegation targets that resolve outside the delegations directory', async () => {
     mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
       .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
       .mockResolvedValueOnce('/tmp/outside/log.md')
       .mockResolvedValueOnce('/tmp/outside/result.md');
 
     const result = await runValidateDelegationActual({ delegation_id: 'test-escape' });
+
+    expect(result).toContain('resolves outside the delegations directory');
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a delegations root that resolves outside the project path', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
+      .mockResolvedValueOnce('/tmp/outside/delegations')
+      .mockResolvedValueOnce('/tmp/outside/delegations/test-root/log.md')
+      .mockResolvedValueOnce('/tmp/outside/delegations/test-root/result.md');
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-root' });
 
     expect(result).toContain('resolves outside the delegations directory');
     expect(mockValidate).not.toHaveBeenCalled();
@@ -72,6 +86,7 @@ describe('runValidateDelegation', () => {
 
   it('passes canonicalized paths to the validator when realpath succeeds', async () => {
     mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
       .mockResolvedValueOnce('/tmp/project/.real/delegations')
       .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/log.md')
       .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/result.md');
@@ -83,6 +98,19 @@ describe('runValidateDelegation', () => {
       '/tmp/project/.real/delegations/test-005/log.md',
       '/tmp/project/.real/delegations/test-005/result.md',
       'test-005',
+    );
+  });
+
+  it('falls back to the original paths when realpath cannot resolve the files', async () => {
+    mockRealpath.mockRejectedValue(new Error('ENOENT'));
+    mockValidate.mockResolvedValue(fixturePassing());
+
+    await runValidateDelegationActual({ delegation_id: 'test-006' });
+
+    expect(mockValidate).toHaveBeenCalledWith(
+      '/tmp/project/standards/.context/delegations/test-006/log.md',
+      '/tmp/project/standards/.context/delegations/test-006/result.md',
+      'test-006',
     );
   });
 
