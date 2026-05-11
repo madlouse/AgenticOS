@@ -10,14 +10,26 @@ import {
 const mockValidate = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
 const mockRealpath = vi.hoisted(() => vi.fn());
+const mockLstat = vi.hoisted(() => vi.fn());
+const mockOpen = vi.hoisted(() => vi.fn());
+const mockSpawnSync = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/delegation-validation.js', () => ({
-  validateDelegationOutput: mockValidate,
+  validateDelegationContent: mockValidate,
 }));
 vi.mock('../../utils/project-target.js', () => ({
   resolveManagedProjectTarget: mockResolve,
 }));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return {
+    ...actual,
+    spawnSync: mockSpawnSync,
+  };
+});
 vi.mock('fs/promises', () => ({
+  lstat: mockLstat,
+  open: mockOpen,
   realpath: mockRealpath,
 }));
 
@@ -26,13 +38,26 @@ describe('runValidateDelegation', () => {
     mockValidate.mockReset();
     mockResolve.mockReset();
     mockRealpath.mockReset();
+    mockLstat.mockReset();
+    mockOpen.mockReset();
+    mockSpawnSync.mockReset();
     mockResolve.mockResolvedValue({ projectPath: '/tmp/project' });
     mockRealpath.mockImplementation(async (path: string) => path);
+    mockLstat.mockResolvedValue({ dev: 1, ino: 2 });
+    mockOpen.mockResolvedValue({
+      fd: 11,
+      stat: vi.fn().mockResolvedValue({ dev: 1, ino: 2 }),
+      close: vi.fn().mockResolvedValue(undefined),
+    });
+    mockSpawnSync.mockReturnValue({ status: 0, stdout: 'file content', stderr: '', error: undefined });
   });
   afterEach(() => {
     mockValidate.mockRestore();
     mockResolve.mockRestore();
     mockRealpath.mockRestore();
+    mockLstat.mockRestore();
+    mockOpen.mockRestore();
+    mockSpawnSync.mockRestore();
   });
 
   it('returns error when delegation_id is missing', async () => {
@@ -45,6 +70,7 @@ describe('runValidateDelegation', () => {
     expect(result).toContain('must be a single relative path segment');
     expect(mockResolve).not.toHaveBeenCalled();
     expect(mockRealpath).not.toHaveBeenCalled();
+    expect(mockSpawnSync).not.toHaveBeenCalled();
     expect(mockValidate).not.toHaveBeenCalled();
   });
 
@@ -75,7 +101,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('formats a passing validation result', async () => {
-    mockValidate.mockResolvedValue(fixturePassing());
+    mockValidate.mockReturnValue(fixturePassing());
 
     const result = await runValidateDelegationActual({ delegation_id: 'test-001' });
     expect(result).toContain('✅');
@@ -90,31 +116,71 @@ describe('runValidateDelegation', () => {
       .mockResolvedValueOnce('/tmp/project/.real/delegations')
       .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/log.md')
       .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/result.md');
-    mockValidate.mockResolvedValue(fixturePassing());
+    mockValidate.mockReturnValue(fixturePassing());
 
     await runValidateDelegationActual({ delegation_id: 'test-005' });
 
-    expect(mockValidate).toHaveBeenCalledWith(
-      '/tmp/project/.real/delegations/test-005/log.md',
-      '/tmp/project/.real/delegations/test-005/result.md',
-      'test-005',
-    );
+    expect(mockSpawnSync).toHaveBeenCalledTimes(2);
+    expect(mockValidate).toHaveBeenCalledWith('file content', 'file content', 'test-005');
   });
 
-  it('falls back to the original paths when realpath cannot resolve the files', async () => {
+  it('returns a direct file error when canonicalization cannot resolve the files', async () => {
     mockRealpath
       .mockResolvedValueOnce('/tmp/project')
       .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
       .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-    mockValidate.mockResolvedValue(fixturePassing());
 
-    await runValidateDelegationActual({ delegation_id: 'test-006' });
+    const result = await runValidateDelegationActual({ delegation_id: 'test-006' });
 
-    expect(mockValidate).toHaveBeenCalledWith(
-      '/tmp/project/standards/.context/delegations/test-006/log.md',
-      '/tmp/project/standards/.context/delegations/test-006/result.md',
-      'test-006',
-    );
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/log.md');
+    expect(mockValidate).not.toHaveBeenCalled();
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  it('returns a direct file error when result.md canonicalization cannot resolve the file', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations/test-006/log.md')
+      .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-006' });
+
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/result.md');
+    expect(mockValidate).not.toHaveBeenCalled();
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the secure reader rejects a changed file path', async () => {
+    mockSpawnSync.mockReturnValueOnce({ status: 1, stdout: '', stderr: 'secure read failed', error: undefined });
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-009' });
+
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-009/log.md');
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the secure reader rejects a changed parent path', async () => {
+    mockSpawnSync.mockReturnValueOnce({ status: 1, stdout: '', stderr: 'secure read failed', error: undefined });
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-010' });
+
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-010/log.md');
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the pinned project root changes before secure read', async () => {
+    mockOpen.mockResolvedValueOnce({
+      fd: 11,
+      stat: vi.fn().mockResolvedValue({ dev: 9, ino: 9 }),
+      close: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-011' });
+
+    expect(result).toContain('delegation file changed during validation');
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(mockValidate).not.toHaveBeenCalled();
   });
 
   it('fails closed when canonicalization errors are not missing-file cases', async () => {
@@ -139,7 +205,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('formats a failing validation result with errors and warnings', async () => {
-    mockValidate.mockResolvedValue(
+    mockValidate.mockReturnValue(
       fixtureFailing(
         ['log.md missing delegation_id field'],
         ['Findings section is empty'],
@@ -153,7 +219,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('includes escalation details when present', async () => {
-    mockValidate.mockResolvedValue(
+    mockValidate.mockReturnValue(
       fixtureEscalation('Too many failures', 'Restart delegation', 5),
     );
 
