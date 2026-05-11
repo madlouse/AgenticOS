@@ -102,7 +102,10 @@ describe('runValidateDelegation', () => {
   });
 
   it('falls back to the original paths when realpath cannot resolve the files', async () => {
-    mockRealpath.mockRejectedValue(new Error('ENOENT'));
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     mockValidate.mockResolvedValue(fixturePassing());
 
     await runValidateDelegationActual({ delegation_id: 'test-006' });
@@ -112,6 +115,18 @@ describe('runValidateDelegation', () => {
       '/tmp/project/standards/.context/delegations/test-006/result.md',
       'test-006',
     );
+  });
+
+  it('fails closed when canonicalization errors are not missing-file cases', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-007' });
+
+    expect(result).toContain('failed to canonicalize delegation files');
+    expect(mockValidate).not.toHaveBeenCalled();
   });
 
   it('formats a failing validation result with errors and warnings', async () => {

@@ -34,23 +34,33 @@ export async function runValidateDelegation(args: any): Promise<string> {
   let validatedResultPath = resultPath;
 
   try {
-    const [resolvedProjectPath, resolvedDelegationsRoot, resolvedLogPath, resolvedResultPath] = await Promise.all([
+    const [resolvedProjectPath, resolvedDelegationsRoot] = await Promise.all([
       realpath(projectPath),
       realpath(delegationsRoot),
-      realpath(logPath),
-      realpath(resultPath),
     ]);
-    if (
-      !isPathWithinRoot(resolvedDelegationsRoot, resolvedProjectPath)
-      || !isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot)
-      || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)
-    ) {
+    if (!isPathWithinRoot(resolvedDelegationsRoot, resolvedProjectPath)) {
       return '❌ delegation_id resolves outside the delegations directory';
     }
-    validatedLogPath = resolvedLogPath;
-    validatedResultPath = resolvedResultPath;
+
+    try {
+      const [resolvedLogPath, resolvedResultPath] = await Promise.all([
+        realpath(logPath),
+        realpath(resultPath),
+      ]);
+      if (!isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot) || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)) {
+        return '❌ delegation_id resolves outside the delegations directory';
+      }
+      validatedLogPath = resolvedLogPath;
+      validatedResultPath = resolvedResultPath;
+    } catch (error: any) {
+      const errorCode = typeof error?.code === 'string' ? error.code : '';
+      if (errorCode !== 'ENOENT' && errorCode !== 'ENOTDIR') {
+        return '❌ failed to canonicalize delegation files';
+      }
+      // Let the validator report missing or unreadable log/result files.
+    }
   } catch {
-    // Let the validator report missing or unreadable log/result files.
+    return '❌ failed to resolve delegation root';
   }
 
   const result = await validateDelegationOutput(validatedLogPath, validatedResultPath, delegationId);
