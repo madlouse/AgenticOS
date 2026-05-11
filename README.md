@@ -82,10 +82,18 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 
 On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
 inherit `AGENTICOS_HOME` across sessions. Then restart your AI tool and
-confirm `agenticos_list` succeeds.
+run:
 
-Use `agenticos-bootstrap --verify` to audit the current state without
-mutating anything.
+```bash
+agenticos-config --validate
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
+```
+
+Then confirm the server appears in the tool's MCP diagnostics and
+`agenticos_list` succeeds.
+
+Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify` to
+audit the current state without mutating anything.
 
 ### Alternative: Per-agent manual setup
 

@@ -46,10 +46,10 @@ class Agenticos < Formula
       2. Bootstrap one officially supported agent:
 
          Recommended helper
-           agenticos-bootstrap --workspace "#{var}/agenticos" --first-run
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 
          macOS GUI/session helper
-           agenticos-bootstrap --workspace "#{var}/agenticos" --persist-shell-env --persist-launchctl-env --apply
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --persist-shell-env --persist-launchctl-env --apply
 
          Claude Code
            claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
@@ -75,8 +75,12 @@ class Agenticos < Formula
 
       3. Restart the AI tool.
 
-      4. Verify activation by confirming the server is listed in the tool's MCP diagnostics
-         and by explicitly calling agenticos_list.
+      4. Verify the selected-client bootstrap state:
+           agenticos-config --validate
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
+
+         Then confirm the server is listed in the tool's MCP diagnostics and explicitly call
+         agenticos_list.
 
       5. If Claude Code or Codex still points at a source checkout path, remove the stale entry
          and re-add the canonical binary entrypoint:

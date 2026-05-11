@@ -55,13 +55,23 @@ describe('homebrew bootstrap docs', () => {
       expect(normalized).toContain('restart');
       expect(doc).toContain('AGENTICOS_HOME');
       expect(doc).toContain('AGENTICOS_HOME="$AGENTICOS_HOME"');
+      expect(doc).toContain('agenticos-config --validate');
+      expect(doc).toContain('agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify');
       expect(normalized).not.toContain('seed workspace');
       expect(normalized).not.toContain('default: ~/agenticos');
       expect(normalized).not.toContain('product default: ~/agenticos');
+      expect(doc).not.toContain('/Users/jeking/');
+      expect(doc).not.toContain('/Users/huangsheng/');
       expect(doc).toContain('claude mcp get agenticos');
       expect(doc).toContain('claude mcp remove agenticos');
       expect(doc).toContain('codex mcp get agenticos');
       expect(doc).toContain('codex mcp remove agenticos');
+    }
+
+    for (const doc of [tapReadme, mcpReadme]) {
+      expect(doc).toContain('brew update && brew upgrade agenticos');
+      expect(doc).toContain('brew update');
+      expect(doc).toContain('brew upgrade');
     }
   });
 });
