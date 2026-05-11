@@ -1,12 +1,17 @@
-import { resolve } from 'path';
+import { realpath } from 'fs/promises';
+import { basename, resolve } from 'path';
 import { validateDelegationOutput } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
+import { isPathWithinRoot } from '../utils/worktree-topology.js';
 
 export async function runValidateDelegation(args: any): Promise<string> {
-  const { delegation_id } = args;
+  const delegationId = typeof args.delegation_id === 'string' ? args.delegation_id.trim() : '';
 
-  if (!delegation_id) {
+  if (!delegationId) {
     return '❌ delegation_id is required';
+  }
+  if (delegationId.includes('\\') || basename(delegationId) !== delegationId || delegationId === '.' || delegationId === '..') {
+    return '❌ delegation_id must be a single relative path segment';
   }
 
   // Resolve project to get agenticos_home
@@ -21,17 +26,50 @@ export async function runValidateDelegation(args: any): Promise<string> {
   }
 
   const { projectPath } = resolved;
-  const delegationBase = resolve(projectPath, 'standards/.context/delegations', delegation_id);
+  const delegationsRoot = resolve(projectPath, 'standards/.context/delegations');
+  const delegationBase = resolve(delegationsRoot, delegationId);
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
+  let validatedLogPath = logPath;
+  let validatedResultPath = resultPath;
 
-  const result = validateDelegationOutput(logPath, resultPath, delegation_id);
+  try {
+    const [resolvedProjectPath, resolvedDelegationsRoot] = await Promise.all([
+      realpath(projectPath),
+      realpath(delegationsRoot),
+    ]);
+    if (!isPathWithinRoot(resolvedDelegationsRoot, resolvedProjectPath)) {
+      return '❌ delegation_id resolves outside the delegations directory';
+    }
+
+    try {
+      const [resolvedLogPath, resolvedResultPath] = await Promise.all([
+        realpath(logPath),
+        realpath(resultPath),
+      ]);
+      if (!isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot) || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)) {
+        return '❌ delegation_id resolves outside the delegations directory';
+      }
+      validatedLogPath = resolvedLogPath;
+      validatedResultPath = resolvedResultPath;
+    } catch (error: any) {
+      const errorCode = typeof error?.code === 'string' ? error.code : '';
+      if (errorCode !== 'ENOENT' && errorCode !== 'ENOTDIR') {
+        return '❌ failed to canonicalize delegation files';
+      }
+      // Let the validator report missing or unreadable log/result files.
+    }
+  } catch {
+    return '❌ failed to resolve delegation root';
+  }
+
+  const result = await validateDelegationOutput(validatedLogPath, validatedResultPath, delegationId);
 
   const lines: string[] = [];
   if (result.pass) {
-    lines.push(`✅ Delegation **${delegation_id}** validated successfully.`);
+    lines.push(`✅ Delegation **${delegationId}** validated successfully.`);
   } else {
-    lines.push(`❌ Delegation **${delegation_id}** validation failed.`);
+    lines.push(`❌ Delegation **${delegationId}** validation failed.`);
   }
 
   if (result.errors.length > 0) {
