@@ -10,6 +10,7 @@ Object.defineProperty(execMock, promisify.custom, {
 const appendFileMock = vi.fn();
 const lstatMock = vi.fn();
 const mkdirMock = vi.fn();
+const readFileMock = vi.fn();
 const unlinkMock = vi.fn();
 const writeFileMock = vi.fn();
 const randomUUIDMock = vi.fn();
@@ -26,6 +27,7 @@ vi.mock('fs/promises', async () => ({
   appendFile: appendFileMock,
   lstat: lstatMock,
   mkdir: mkdirMock,
+  readFile: readFileMock,
   unlink: unlinkMock,
   writeFile: writeFileMock,
 }));
@@ -79,6 +81,9 @@ describe('multi-agent-review', () => {
 
     mkdirMock.mockReset();
     mkdirMock.mockResolvedValue(undefined);
+
+    readFileMock.mockReset();
+    readFileMock.mockResolvedValue('# Global Review Log\n\n<table>\n<tbody>\n');
 
     unlinkMock.mockReset();
     unlinkMock.mockResolvedValue(undefined);
@@ -309,6 +314,31 @@ describe('multi-agent-review', () => {
 
       const mod = await loadModule();
       await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).resolves.toBe('/repo/tasks/global-review-log.md');
+      expect(readFileMock).toHaveBeenCalledWith('/repo/tasks/global-review-log.md', 'utf-8');
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('migrates legacy markdown review logs before appending new rows', async () => {
+      writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+      readFileMock.mockResolvedValueOnce([
+        '# Global Review Log',
+        '',
+        '| PR | Agents | Recommendation | Findings | Date |',
+        '|---|---|---|---|---|',
+        '| [#1](https://github.com/madlouse/AgenticOS/pull/1) | Old Agent | **APPROVE** | 0 | 2026-05-10 |',
+      ].join('\n'));
+
+      const mod = await loadModule();
+      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
+
+      expect(writeFileMock).toHaveBeenNthCalledWith(
+        2,
+        '/repo/tasks/global-review-log.md',
+        expect.stringContaining('Legacy markdown review log content preserved during one-time migration.'),
+        'utf-8',
+      );
+      expect(writeFileMock.mock.calls[1][1]).toContain('<tbody>');
+      expect(writeFileMock.mock.calls[1][1]).toContain('| [#1](https://github.com/madlouse/AgenticOS/pull/1) | Old Agent |');
       expect(appendFileMock).toHaveBeenCalledTimes(1);
     });
 
@@ -373,8 +403,8 @@ describe('multi-agent-review', () => {
       expect(maxActiveReviews).toBe(2);
 
       const claudeCallOptions = execAsyncMock.mock.calls
-        .filter(([command]) => (command as string).startsWith('command claude'))
-        .map(([, options]) => options as { timeout: number; maxBuffer: number });
+        .filter((call: unknown[]) => (call[0] as string).startsWith('command claude'))
+        .map((call: unknown[]) => call[1] as { timeout: number; maxBuffer: number });
 
       expect(claudeCallOptions).toContainEqual(expect.objectContaining({ timeout: 300000, maxBuffer: 10 * 1024 * 1024 }));
       expect(claudeCallOptions).toContainEqual(expect.objectContaining({ timeout: 180000, maxBuffer: 10 * 1024 * 1024 }));

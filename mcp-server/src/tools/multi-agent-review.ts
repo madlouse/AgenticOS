@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
-import { appendFile, lstat, mkdir, unlink, writeFile } from 'fs/promises';
+import { appendFile, lstat, mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { promisify } from 'util';
 import pLimit from 'p-limit';
@@ -25,6 +25,26 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function escapeHtmlBlock(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildReviewLogHeader(): string {
+  return [
+    '# Global Review Log',
+    '',
+    '<table>',
+    '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>',
+    '<tbody>',
+    '',
+  ].join('\n');
 }
 
 function buildReviewLogRow(
@@ -64,6 +84,27 @@ function buildReviewLogRow(
   ].join('');
 }
 
+function buildLegacyMigrationRow(legacyContent: string, now: string): string {
+  const date = now.split('T')[0];
+
+  return [
+    '<tr>',
+    '<td>legacy<details><summary>Details</summary>',
+    '<p>Legacy markdown review log content preserved during one-time migration.</p>',
+    `<pre>${escapeHtmlBlock(legacyContent)}</pre>`,
+    '</details></td>',
+    '<td>Legacy log</td>',
+    '<td><strong>MIGRATED</strong></td>',
+    '<td>0</td>',
+    `<td>${date}</td>`,
+    '</tr>\n',
+  ].join('');
+}
+
+function isCanonicalReviewLog(content: string): boolean {
+  return content.includes('<table>') && content.includes('<tbody>');
+}
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -81,6 +122,29 @@ async function assertNotSymlink(path: string): Promise<void> {
     }
     throw err;
   }
+}
+
+async function ensureCanonicalReviewLog(reviewLogPath: string, now: string): Promise<void> {
+  try {
+    await writeFile(reviewLogPath, buildReviewLogHeader(), { encoding: 'utf-8', flag: 'wx' });
+    return;
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code !== 'EEXIST') {
+      throw err;
+    }
+  }
+
+  const existing = await readFile(reviewLogPath, 'utf-8');
+  if (isCanonicalReviewLog(existing)) {
+    return;
+  }
+
+  await writeFile(
+    reviewLogPath,
+    buildReviewLogHeader() + buildLegacyMigrationRow(existing, now),
+    'utf-8',
+  );
 }
 
 // Agent role definitions for multi-agent review
@@ -363,25 +427,7 @@ export async function persistReviewLog(
   await assertNotSymlink(tasksDir);
   await assertNotSymlink(reviewLogPath);
 
-  try {
-    await writeFile(
-      reviewLogPath,
-      [
-        '# Global Review Log',
-        '',
-        '<table>',
-        '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>',
-        '<tbody>',
-        '',
-      ].join('\n'),
-      { encoding: 'utf-8', flag: 'wx' },
-    );
-  } catch (err) {
-    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
-    if (code !== 'EEXIST') {
-      throw err;
-    }
-  }
+  await ensureCanonicalReviewLog(reviewLogPath, now);
 
   await appendFile(reviewLogPath, buildReviewLogRow(result, now), 'utf-8');
   return reviewLogPath;
