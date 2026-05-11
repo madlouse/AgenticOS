@@ -30,6 +30,8 @@ export async function runValidateDelegation(args: any): Promise<string> {
   const delegationBase = resolve(delegationsRoot, delegationId);
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
+  let validatedLogPath = logPath;
+  let validatedResultPath = resultPath;
 
   try {
     const [resolvedDelegationsRoot, resolvedLogPath, resolvedResultPath] = await Promise.all([
@@ -40,11 +42,13 @@ export async function runValidateDelegation(args: any): Promise<string> {
     if (!isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot) || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)) {
       return '❌ delegation_id resolves outside the delegations directory';
     }
+    validatedLogPath = resolvedLogPath;
+    validatedResultPath = resolvedResultPath;
   } catch {
     // Let the validator report missing or unreadable log/result files.
   }
 
-  const result = await validateDelegationOutput(logPath, resultPath, delegationId);
+  const result = await validateDelegationOutput(validatedLogPath, validatedResultPath, delegationId);
 
   const lines: string[] = [];
   if (result.pass) {

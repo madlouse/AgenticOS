@@ -70,6 +70,22 @@ describe('runValidateDelegation', () => {
     expect(result).not.toContain('Escalation required');
   });
 
+  it('passes canonicalized paths to the validator when realpath succeeds', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project/.real/delegations')
+      .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/log.md')
+      .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/result.md');
+    mockValidate.mockResolvedValue(fixturePassing());
+
+    await runValidateDelegationActual({ delegation_id: 'test-005' });
+
+    expect(mockValidate).toHaveBeenCalledWith(
+      '/tmp/project/.real/delegations/test-005/log.md',
+      '/tmp/project/.real/delegations/test-005/result.md',
+      'test-005',
+    );
+  });
+
   it('formats a failing validation result with errors and warnings', async () => {
     mockValidate.mockResolvedValue(
       fixtureFailing(
