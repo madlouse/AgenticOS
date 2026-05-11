@@ -169,6 +169,9 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('✅ Switched to project "Test Project"');
       expect(result).toContain('Path: /test/path');
       expect(result).toContain('Status: active');
+      expect(result).toContain('🧰 Filesystem workdir: /test/path');
+      expect(result).toContain('agenticos_switch did not change your shell cwd');
+      expect(result).toContain('Avoid relative-path edits until your shell cwd is aligned to this project.');
     });
 
     it('finds project by name', async () => {
