@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
-import { appendFile, mkdir, unlink, writeFile } from 'fs/promises';
+import { appendFile, lstat, mkdir, unlink, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { promisify } from 'util';
 import pLimit from 'p-limit';
@@ -66,6 +66,21 @@ function buildReviewLogRow(
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+async function assertNotSymlink(path: string): Promise<void> {
+  try {
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Refusing to write review log through symlinked path: ${path}`);
+    }
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code === 'ENOENT') {
+      return;
+    }
+    throw err;
+  }
 }
 
 // Agent role definitions for multi-agent review
@@ -343,7 +358,10 @@ export async function persistReviewLog(
     throw new Error('Review log path escaped repository directory');
   }
   const now = new Date().toISOString();
-  await mkdir(resolve(safeBase, 'tasks'), { recursive: true });
+  const tasksDir = resolve(safeBase, 'tasks');
+  await mkdir(tasksDir, { recursive: true });
+  await assertNotSymlink(tasksDir);
+  await assertNotSymlink(reviewLogPath);
 
   try {
     await writeFile(

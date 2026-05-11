@@ -8,6 +8,7 @@ Object.defineProperty(execMock, promisify.custom, {
 });
 
 const appendFileMock = vi.fn();
+const lstatMock = vi.fn();
 const mkdirMock = vi.fn();
 const unlinkMock = vi.fn();
 const writeFileMock = vi.fn();
@@ -23,6 +24,7 @@ vi.mock('crypto', () => ({
 
 vi.mock('fs/promises', async () => ({
   appendFile: appendFileMock,
+  lstat: lstatMock,
   mkdir: mkdirMock,
   unlink: unlinkMock,
   writeFile: writeFileMock,
@@ -71,6 +73,9 @@ describe('multi-agent-review', () => {
 
     appendFileMock.mockReset();
     appendFileMock.mockResolvedValue(undefined);
+
+    lstatMock.mockReset();
+    lstatMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
 
     mkdirMock.mockReset();
     mkdirMock.mockResolvedValue(undefined);
@@ -283,6 +288,8 @@ describe('multi-agent-review', () => {
 
       expect(logPath).toBe('/repo/tasks/global-review-log.md');
       expect(mkdirMock).toHaveBeenCalledWith('/repo/tasks', { recursive: true });
+      expect(lstatMock).toHaveBeenCalledWith('/repo/tasks');
+      expect(lstatMock).toHaveBeenCalledWith('/repo/tasks/global-review-log.md');
       expect(writeFileMock).toHaveBeenNthCalledWith(
         1,
         '/repo/tasks/global-review-log.md',
@@ -303,6 +310,16 @@ describe('multi-agent-review', () => {
       const mod = await loadModule();
       await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).resolves.toBe('/repo/tasks/global-review-log.md');
       expect(appendFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses to write through symlinked log surfaces', async () => {
+      lstatMock
+        .mockResolvedValueOnce({ isSymbolicLink: () => false })
+        .mockResolvedValueOnce({ isSymbolicLink: () => true });
+
+      const mod = await loadModule();
+      await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).rejects.toThrow('Refusing to write review log through symlinked path');
+      expect(appendFileMock).not.toHaveBeenCalled();
     });
 
     it('runs the main review path with bounded orchestration and per-agent timeouts', async () => {
