@@ -18,6 +18,17 @@ function sanitize(value: string): string {
     .substring(0, 500);
 }
 
+function buildReviewSummaryRow(
+  result: MultiAgentReviewResult,
+  now: string,
+): string {
+  const agentNames = result.reviews.map((r) => sanitize(r.agent_name)).join(', ');
+  const findingCount = result.reviews.reduce((sum, r) => sum + r.findings.length, 0);
+  const date = now.split('T')[0];
+
+  return `| [#${result.pr_number}](https://github.com/madlouse/AgenticOS/pull/${result.pr_number}) | ${agentNames} | **${result.overall_recommendation}** | ${findingCount} | ${date} |\n`;
+}
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -329,9 +340,13 @@ export async function persistReviewLog(
 ): Promise<string> {
   const safeBase = resolve(repoPath);
   const reviewLogPath = resolve(safeBase, 'tasks/global-review-log.md');
+  const reviewDetailsPath = resolve(safeBase, 'tasks/global-review-log.details.md');
   // Guard: resolved path must stay within the repo directory
   if (!reviewLogPath.startsWith(safeBase + '/')) {
     throw new Error('Review log path escaped repository directory');
+  }
+  if (!reviewDetailsPath.startsWith(safeBase + '/')) {
+    throw new Error('Review detail log path escaped repository directory');
   }
   const now = new Date().toISOString();
   await mkdir(resolve(safeBase, 'tasks'), { recursive: true });
@@ -342,7 +357,8 @@ export async function persistReviewLog(
       [
         '# Global Review Log',
         '',
-        'Review entries are appended chronologically to avoid O(N) rewrites as the log grows.',
+        '| PR | Agents | Recommendation | Findings | Date |',
+        '|---|---|---|---|---|',
         '',
       ].join('\n'),
       { encoding: 'utf-8', flag: 'wx' },
@@ -354,7 +370,26 @@ export async function persistReviewLog(
     }
   }
 
-  await appendFile(reviewLogPath, formatReviewLogEntry(result, now), 'utf-8');
+  try {
+    await writeFile(
+      reviewDetailsPath,
+      [
+        '# Global Review Log Details',
+        '',
+        'Detailed review entries are appended chronologically.',
+        '',
+      ].join('\n'),
+      { encoding: 'utf-8', flag: 'wx' },
+    );
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code !== 'EEXIST') {
+      throw err;
+    }
+  }
+
+  await appendFile(reviewLogPath, buildReviewSummaryRow(result, now), 'utf-8');
+  await appendFile(reviewDetailsPath, formatReviewLogEntry(result, now), 'utf-8');
   return reviewLogPath;
 }
 
