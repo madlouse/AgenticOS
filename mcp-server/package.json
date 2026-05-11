@@ -15,7 +15,8 @@
     "watch": "tsc --watch",
     "prepare": "npm run build",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "mcp",

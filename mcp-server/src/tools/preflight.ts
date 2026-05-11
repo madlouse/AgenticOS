@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
-import { dirname, resolve } from 'path';
+import { readFile } from 'fs/promises';
+import { dirname, relative, resolve, sep } from 'path';
 import { promisify } from 'util';
 import {
   extractLatestIssueBootstrap,
@@ -15,8 +16,18 @@ import {
 } from '../utils/repo-boundary.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 import { classifyUnrelatedCommitSubjects } from '../utils/issue-commit-scope.js';
+import { validateCoverageEvidence, type CoverageEvidence } from '../utils/coverage-evidence.js';
 
 const execAsync = promisify(exec);
+
+function isWithinDirectory(root: string, candidate: string): boolean {
+  const relativePath = relative(root, candidate);
+  return relativePath === '' || (!relativePath.startsWith('..') && !relativePath.includes(`..${sep}`));
+}
+
+function normalizeBranchName(branch: string): string {
+  return branch.replace(/^refs\/heads\//, '').replace(/^origin\//, '');
+}
 
 type WorkspaceType = 'main' | 'isolated_worktree';
 type GuardrailStatus = 'PASS' | 'BLOCK' | 'REDIRECT';
@@ -32,6 +43,7 @@ interface PreflightArgs {
   worktree_required?: boolean;
   root_scoped_exceptions?: string[];
   clean_reproducibility_gate?: string[];
+  coverage_evidence_path?: string;
 }
 
 interface PreflightResult {
@@ -67,6 +79,12 @@ interface PreflightResult {
       issue_id: string | null;
       repo_path: string | null;
       current_branch: string | null;
+    } | null;
+    coverage: {
+      evidence_path: string | null;
+      validation_pass: boolean | null;
+      errors: string[];
+      warnings: string[];
     } | null;
   };
   persistence?: GuardrailPersistenceResult;
@@ -149,6 +167,7 @@ function makeBaseResult(remoteBaseBranch: string): PreflightResult {
       workspace_type: 'main',
       commit_subjects_since_base: [],
       issue_bootstrap: null,
+      coverage: null,
     },
   };
 }
@@ -165,6 +184,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     worktree_required = isImplementationAffectingTask(task_type),
     root_scoped_exceptions = ['.github/'],
     clean_reproducibility_gate = [],
+    coverage_evidence_path,
   } = args;
 
   const result = makeBaseResult(remote_base_branch);
@@ -404,6 +424,67 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
     result.branch_based_on_intended_remote = true;
     result.scope_ok = true;
     result.reproducibility_gate_defined = true;
+  }
+
+  const coverageGateRequested = isImplementationAffectingTask(task_type)
+    && clean_reproducibility_gate.some((command) => command.includes('coverage'));
+  if (coverageGateRequested) {
+    const repoRoot = resolve(repo_path);
+    const evidencePath = coverage_evidence_path
+      ? resolve(repoRoot, coverage_evidence_path)
+      : resolve(repoRoot, 'mcp-server/coverage/coverage-evidence.json');
+    if (!isWithinDirectory(repoRoot, evidencePath)) {
+      result.evidence.coverage = {
+        evidence_path: evidencePath,
+        validation_pass: false,
+        errors: [`coverage evidence path must stay inside repo root: ${repoRoot}`],
+        warnings: [],
+      };
+      result.block_reasons.push(`coverage evidence path escapes repo root: ${evidencePath}`);
+    } else {
+      try {
+        const parsed = JSON.parse(await readFile(evidencePath, 'utf-8')) as CoverageEvidence;
+        const coverageValidation = validateCoverageEvidence(parsed);
+        const metadataErrors: string[] = [];
+        const expectedBaseBranch = normalizeBranchName(remote_base_branch);
+        if (!parsed.commit) {
+          metadataErrors.push('coverage evidence missing commit metadata');
+        } else if (parsed.commit !== result.evidence.current_head) {
+          metadataErrors.push(`coverage evidence commit "${parsed.commit}" does not match current HEAD "${result.evidence.current_head}"`);
+        }
+        if (!parsed.base_branch) {
+          metadataErrors.push('coverage evidence missing base_branch metadata');
+        } else if (normalizeBranchName(parsed.base_branch) !== expectedBaseBranch) {
+          metadataErrors.push(`coverage evidence base_branch "${parsed.base_branch}" does not match expected base "${remote_base_branch}"`);
+        }
+        if (result.evidence.current_branch !== 'HEAD') {
+          if (!parsed.branch) {
+            metadataErrors.push('coverage evidence missing branch metadata');
+          } else if (normalizeBranchName(parsed.branch) !== normalizeBranchName(result.evidence.current_branch)) {
+            metadataErrors.push(`coverage evidence branch "${parsed.branch}" does not match current branch "${result.evidence.current_branch}"`);
+          }
+        }
+        const coverageErrors = [...coverageValidation.errors, ...metadataErrors];
+        const coveragePass = coverageValidation.pass && metadataErrors.length === 0;
+        result.evidence.coverage = {
+          evidence_path: evidencePath,
+          validation_pass: coveragePass,
+          errors: coverageErrors,
+          warnings: coverageValidation.warnings,
+        };
+        if (!coveragePass) {
+          result.block_reasons.push(`coverage evidence validation failed: ${coverageErrors.join('; ')}`);
+        }
+      } catch (error: any) {
+        result.evidence.coverage = {
+          evidence_path: evidencePath,
+          validation_pass: false,
+          errors: [`coverage evidence missing or unreadable: ${error?.message || String(error)}`],
+          warnings: [],
+        };
+        result.block_reasons.push(`coverage evidence missing or unreadable at ${evidencePath}`);
+      }
+    }
   }
 
   const finalized = finalizeResult(result);

@@ -10,6 +10,7 @@ __pycache__/
 # Build output
 build/
 mcp-server/build/
+mcp-server/coverage/
 
 # Environment
 .env

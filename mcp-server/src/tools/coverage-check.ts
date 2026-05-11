@@ -1,7 +1,37 @@
-import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { mkdir, readFile, writeFile } from 'fs/promises';
+import { dirname, join, relative, resolve, sep } from 'path';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { generateCoverageEvidence, validateCoverageEvidence, type CoverageEvidence } from '../utils/coverage-evidence.js';
+
+function isWithinDirectory(root: string, candidate: string): boolean {
+  const relativePath = relative(root, candidate);
+  return relativePath === '' || (!relativePath.startsWith('..') && !relativePath.includes(`..${sep}`));
+}
+
+function resolveProjectPath(projectPath: string, candidatePath: string | undefined, defaultPath: string): string {
+  const projectRoot = resolve(projectPath);
+  const resolvedPath = candidatePath ? resolve(projectRoot, candidatePath) : resolve(defaultPath);
+  if (!isWithinDirectory(projectRoot, resolvedPath)) {
+    throw new Error(`path must stay inside project root: ${projectRoot}`);
+  }
+  return resolvedPath;
+}
+
+function parseChangedFilesJson(input: unknown): { changedFiles: string[]; error?: string } {
+  if (input === undefined) return { changedFiles: [] };
+  let parsed = input;
+  if (typeof input === 'string') {
+    try {
+      parsed = JSON.parse(input);
+    } catch {
+      return { changedFiles: [], error: 'changed_files_json is not valid JSON' };
+    }
+  }
+  if (!Array.isArray(parsed) || !parsed.every((file) => typeof file === 'string')) {
+    return { changedFiles: [], error: 'changed_files_json must be an array of strings' };
+  }
+  return { changedFiles: parsed };
+}
 
 export async function runCoverageCheck(args: any): Promise<string> {
   const { evidence_path } = args;
@@ -10,6 +40,7 @@ export async function runCoverageCheck(args: any): Promise<string> {
   try {
     resolved = await resolveManagedProjectTarget({
       project: args.project,
+      projectPath: args.project_path,
       commandName: 'agenticos_coverage_check',
     });
   } catch (error: any) {
@@ -17,8 +48,13 @@ export async function runCoverageCheck(args: any): Promise<string> {
   }
 
   const { projectPath } = resolved;
-  const defaultPath = join(projectPath, 'mcp-server/coverage/coverage-final.json');
-  const evidenceFile = evidence_path || defaultPath;
+  const defaultPath = join(projectPath, 'mcp-server/coverage/coverage-evidence.json');
+  let evidenceFile: string;
+  try {
+    evidenceFile = resolveProjectPath(projectPath, evidence_path, defaultPath);
+  } catch (error: any) {
+    return `❌ ${error.message}`;
+  }
 
   let content: string;
   try {
@@ -27,7 +63,7 @@ export async function runCoverageCheck(args: any): Promise<string> {
     return `❌ coverage-evidence.json not found or unreadable at ${evidenceFile}`;
   }
 
-  let parsed: CoverageEvidence;
+  let parsed: any;
   try {
     parsed = JSON.parse(content);
   } catch {
@@ -35,6 +71,7 @@ export async function runCoverageCheck(args: any): Promise<string> {
   }
 
   const { pass, errors, warnings } = validateCoverageEvidence(parsed);
+  const summary = parsed && typeof parsed === 'object' ? parsed : {};
 
   const lines: string[] = [];
   if (pass) {
@@ -57,26 +94,28 @@ export async function runCoverageCheck(args: any): Promise<string> {
   }
 
   lines.push('\n**Evidence summary:**');
-  lines.push(`  - Generated at: ${parsed.generated_at || '(unknown)'}`);
-  lines.push(`  - Running in PR: ${parsed.is_pr ? 'yes' : 'no'}`);
-  lines.push(`  - Changed files: ${parsed.changed_files.length > 0 ? parsed.changed_files.join(', ') : '(none)'}`);
-  lines.push(`  - Aggregate lines: ${parsed.aggregate?.pct_lines ?? '?'}% (floor: ${parsed.threshold_aggregate?.lines}%)`);
-  lines.push(`  - Aggregate functions: ${parsed.aggregate?.pct_functions ?? '?'}% (floor: ${parsed.threshold_aggregate?.functions}%)`);
-  lines.push(`  - Aggregate branches: ${parsed.aggregate?.pct_branches ?? '?'}% (floor: ${parsed.threshold_aggregate?.branches}%)`);
-  lines.push(`  - Aggregate statements: ${parsed.aggregate?.pct_statements ?? '?'}% (floor: ${parsed.threshold_aggregate?.statements}%)`);
-  lines.push(`  - Aggregate pass: ${parsed.aggregate_pass ? '✅' : '❌'}`);
-  lines.push(`  - Changed-scope pass: ${parsed.changed_scope_pass ? '✅' : '⚠️ (inactive)'}`);
+  lines.push(`  - Generated at: ${summary.generated_at || '(unknown)'}`);
+  lines.push(`  - Running in PR: ${summary.is_pr ? 'yes' : 'no'}`);
+  const changedFiles = Array.isArray(summary.changed_files) ? summary.changed_files : [];
+  lines.push(`  - Changed files: ${changedFiles.length > 0 ? changedFiles.join(', ') : '(none)'}`);
+  lines.push(`  - Aggregate lines: ${summary.aggregate?.pct_lines ?? '?'}% (floor: ${summary.threshold_aggregate?.lines}%)`);
+  lines.push(`  - Aggregate functions: ${summary.aggregate?.pct_functions ?? '?'}% (floor: ${summary.threshold_aggregate?.functions}%)`);
+  lines.push(`  - Aggregate branches: ${summary.aggregate?.pct_branches ?? '?'}% (floor: ${summary.threshold_aggregate?.branches}%)`);
+  lines.push(`  - Aggregate statements: ${summary.aggregate?.pct_statements ?? '?'}% (floor: ${summary.threshold_aggregate?.statements}%)`);
+  lines.push(`  - Aggregate pass: ${summary.aggregate_pass ? '✅' : '❌'}`);
+  lines.push(`  - Changed-scope pass: ${summary.changed_scope_pass ? '✅' : '⚠️ (inactive)'}`);
 
   return lines.join('\n');
 }
 
 export async function runCoverageGenerate(args: any): Promise<string> {
-  const { coverage_json_path, is_pr = false, changed_files_json } = args;
+  const { coverage_json_path, evidence_path, is_pr = false, changed_files_json } = args;
 
   let resolved;
   try {
     resolved = await resolveManagedProjectTarget({
       project: args.project,
+      projectPath: args.project_path,
       commandName: 'agenticos_coverage_check',
     });
   } catch (error: any) {
@@ -85,7 +124,12 @@ export async function runCoverageGenerate(args: any): Promise<string> {
 
   const { projectPath } = resolved;
   const defaultPath = join(projectPath, 'mcp-server/coverage/coverage-final.json');
-  const jsonPath = coverage_json_path || defaultPath;
+  let jsonPath: string;
+  try {
+    jsonPath = resolveProjectPath(projectPath, coverage_json_path, defaultPath);
+  } catch (error: any) {
+    return `❌ ${error.message}`;
+  }
 
   let content: string;
   try {
@@ -101,11 +145,27 @@ export async function runCoverageGenerate(args: any): Promise<string> {
     return `❌ coverage-final.json is not valid JSON`;
   }
 
-  const changedFiles = typeof changed_files_json === 'string'
-    ? JSON.parse(changed_files_json)
-    : Array.isArray(changed_files_json) ? changed_files_json : [];
+  const { changedFiles, error } = parseChangedFilesJson(changed_files_json);
+  if (error) {
+    return `❌ ${error}`;
+  }
 
-  const evidence = generateCoverageEvidence(coverageJson, is_pr, changedFiles);
+  const evidence = generateCoverageEvidence(coverageJson, is_pr, changedFiles, {
+    metadata: {
+      branch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME,
+      commit: process.env.GITHUB_SHA,
+      base_branch: process.env.GITHUB_BASE_REF,
+      pr_number: process.env.PR_NUMBER || process.env.GITHUB_EVENT_NUMBER,
+    },
+  });
+  let evidenceFile: string;
+  try {
+    evidenceFile = resolveProjectPath(projectPath, evidence_path, join(projectPath, 'mcp-server/coverage/coverage-evidence.json'));
+  } catch (error: any) {
+    return `❌ ${error.message}`;
+  }
+  await mkdir(dirname(evidenceFile), { recursive: true });
+  await writeFile(evidenceFile, JSON.stringify(evidence, null, 2), 'utf-8');
 
   const lines: string[] = [];
   if (evidence.pass) {
@@ -118,6 +178,7 @@ export async function runCoverageGenerate(args: any): Promise<string> {
   lines.push(`Aggregate floor: lines=${evidence.threshold_aggregate.lines}%, functions=${evidence.threshold_aggregate.functions}%, branches=${evidence.threshold_aggregate.branches}%, statements=${evidence.threshold_aggregate.statements}%`);
   lines.push(`Aggregate pass: ${evidence.aggregate_pass}`);
   lines.push(`Changed-scope pass: ${evidence.changed_scope_pass}`);
+  lines.push(`Evidence written: ${evidenceFile}`);
 
   if (evidence.aggregate_failures.length > 0) {
     lines.push(`\nAggregate failures:`);
