@@ -218,6 +218,33 @@ describe('saveState', () => {
     expect(writtenState.session.last_backup).toBeDefined();
   });
 
+  it('degrades to local-only save behavior for legacy local_directory_only projects with missing publication policy', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'local_directory_only',
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (_cmd: string, cb: (err: Error, stdout?: string, stderr?: string) => void) => {
+        cb(new Error('not a git repo'), '', '');
+      }
+    );
+
+    const result = await saveState({ message: 'legacy local-only save' });
+
+    expect(result).toContain('State saved but no git repo found');
+    expect(result).toContain('no git repo');
+  });
+
   it('runs git add, commit, push when git repo exists', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     mockProjectFiles({ state: { session: {} } });

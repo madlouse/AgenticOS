@@ -11,6 +11,14 @@ describe('validateContextPublicationPolicy', () => {
     })).toEqual({ ok: true, policy: 'local_private' });
   });
 
+  it('infers local_private for legacy local_directory_only projects when policy is missing', () => {
+    expect(validateContextPublicationPolicy('Legacy Local Project', {
+      source_control: {
+        topology: 'local_directory_only',
+      },
+    })).toEqual({ ok: true, policy: 'local_private' });
+  });
+
   it('accepts private_continuity for github_versioned projects', () => {
     expect(validateContextPublicationPolicy('Private Repo', {
       source_control: {
