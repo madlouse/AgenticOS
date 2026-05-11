@@ -80,6 +80,72 @@ export function sectionNonEmpty(content: string, heading: string): boolean {
   return extractHeadingContent(content, heading) !== null;
 }
 
+export function validateDelegationContent(
+  logContent: string,
+  resultContent: string,
+  delegationId: string,
+): ValidationResult {
+  const warnings: string[] = [];
+
+  const logId = extractField(logContent, 'delegation_id');
+  const logRecordedAt = extractField(logContent, 'recorded_at');
+  const logSubTask = extractField(logContent, 'sub_task');
+  const logStatus = extractField(logContent, 'status');
+
+  const logIdPresent = logId !== null;
+  const logIdMatches = logIdPresent ? logId === delegationId : null;
+  const logRecordedAtPresent = logRecordedAt !== null;
+  const logRecordedAtValid = logRecordedAt !== null ? ISO8601_RE.test(logRecordedAt) : false;
+  const logSubTaskPresent = logSubTask !== null;
+  const logStatusPresent = logStatus !== null;
+  const logStatusValid = logStatus !== null ? VALID_STATUSES.includes(logStatus) : false;
+  const logActionsNonempty = sectionNonEmpty(logContent, '## Actions Taken');
+  const logFindingsNonempty = sectionNonEmpty(logContent, '## Findings');
+
+  if (!logActionsNonempty) warnings.push('log.md: ## Actions Taken section is empty');
+
+  const resultId = extractAfterHeading(resultContent, '## Delegation ID');
+  const resultTimestamp = extractAfterHeading(resultContent, '## Timestamp');
+  const resultSummary = extractHeadingContent(resultContent, '## Summary');
+  const resultFindingsNonempty = sectionNonEmpty(resultContent, '## Findings') || sectionNonEmpty(resultContent, '## findings');
+  const resultRecsNonempty = sectionNonEmpty(resultContent, '## Recommendations') || sectionNonEmpty(resultContent, '## recommendations');
+
+  const resultIdPresent = resultId !== null;
+  const resultIdMatches = resultIdPresent ? resultId === delegationId : null;
+  const resultTimestampPresent = resultTimestamp !== null;
+  const resultSummaryNonempty = resultSummary !== null && resultSummary.replace(/\s/g, '').length >= 10;
+
+  const logErrors = [
+    !logIdPresent ? 'log.md: delegation_id field is missing' : null,
+    logIdMatches === false ? `log.md: delegation_id mismatch (expected ${delegationId}, got ${logId})` : null,
+    !logRecordedAtPresent ? 'log.md: recorded_at field is missing' : null,
+    !logRecordedAtValid ? `log.md: recorded_at is not ISO 8601 (got ${logRecordedAt})` : null,
+    !logSubTaskPresent ? 'log.md: sub_task field is missing' : null,
+    !logStatusPresent ? 'log.md: status field is missing' : null,
+    !logStatusValid ? `log.md: status must be one of ${VALID_STATUSES.join('|')} (got ${logStatus})` : null,
+    !logFindingsNonempty ? 'log.md: ## Findings section is empty' : null,
+  ].filter(Boolean) as string[];
+
+  const resultErrors = [
+    !resultIdPresent ? 'result.md: Delegation ID field is missing' : null,
+    resultIdMatches === false ? `result.md: Delegation ID mismatch (expected ${delegationId}, got ${resultId})` : null,
+    !resultTimestampPresent ? 'result.md: Timestamp field is missing' : null,
+    !resultSummaryNonempty ? 'result.md: Summary field is empty or too short' : null,
+    !resultFindingsNonempty ? 'result.md: ## Findings section is empty' : null,
+    !resultRecsNonempty ? 'result.md: ## Recommendations section is empty' : null,
+  ].filter(Boolean) as string[];
+
+  return mkResult(
+    logErrors.length === 0 && resultErrors.length === 0,
+    logErrors.length === 0,
+    resultErrors.length === 0,
+    [...logErrors, ...resultErrors],
+    warnings,
+    mkLogChecks(logIdPresent, logIdMatches, logRecordedAtPresent, logRecordedAtValid, logSubTaskPresent, logStatusPresent, logStatusValid, logActionsNonempty, logFindingsNonempty),
+    mkResultChecks(resultIdPresent, resultIdMatches, resultTimestampPresent, resultSummaryNonempty, resultFindingsNonempty, resultRecsNonempty),
+  );
+}
+
 /**
  * Validates that a sub-agent delegation produced complete, well-formed output.
  *

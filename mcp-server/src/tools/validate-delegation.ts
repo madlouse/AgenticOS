@@ -1,6 +1,7 @@
-import { realpath } from 'fs/promises';
+import { constants } from 'fs';
+import { open, realpath } from 'fs/promises';
 import { basename, resolve } from 'path';
-import { validateDelegationOutput } from '../utils/delegation-validation.js';
+import { validateDelegationContent } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { isPathWithinRoot } from '../utils/worktree-topology.js';
 
@@ -32,6 +33,27 @@ async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsR
       path: null,
       error: '❌ failed to canonicalize delegation files',
     };
+  }
+}
+
+async function readDelegationFileContent(canonicalPath: string, displayPath: string): Promise<{
+  content: string | null;
+  error: string | null;
+}> {
+  let handle;
+  try {
+    handle = await open(canonicalPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    return {
+      content: await handle.readFile('utf-8'),
+      error: null,
+    };
+  } catch {
+    return {
+      content: null,
+      error: `❌ delegation file not found or unreadable at ${displayPath}`,
+    };
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
 }
 
@@ -86,7 +108,17 @@ export async function runValidateDelegation(args: any): Promise<string> {
     return validatedResultPath.error;
   }
 
-  const result = await validateDelegationOutput(validatedLogPath.path!, validatedResultPath.path!, delegationId);
+  const logContent = await readDelegationFileContent(validatedLogPath.path!, logPath);
+  if (logContent.error) {
+    return logContent.error;
+  }
+
+  const resultContent = await readDelegationFileContent(validatedResultPath.path!, resultPath);
+  if (resultContent.error) {
+    return resultContent.error;
+  }
+
+  const result = validateDelegationContent(logContent.content!, resultContent.content!, delegationId);
 
   const lines: string[] = [];
   if (result.pass) {

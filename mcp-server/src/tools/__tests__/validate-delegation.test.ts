@@ -10,14 +10,16 @@ import {
 const mockValidate = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
 const mockRealpath = vi.hoisted(() => vi.fn());
+const mockOpen = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/delegation-validation.js', () => ({
-  validateDelegationOutput: mockValidate,
+  validateDelegationContent: mockValidate,
 }));
 vi.mock('../../utils/project-target.js', () => ({
   resolveManagedProjectTarget: mockResolve,
 }));
 vi.mock('fs/promises', () => ({
+  open: mockOpen,
   realpath: mockRealpath,
 }));
 
@@ -26,13 +28,19 @@ describe('runValidateDelegation', () => {
     mockValidate.mockReset();
     mockResolve.mockReset();
     mockRealpath.mockReset();
+    mockOpen.mockReset();
     mockResolve.mockResolvedValue({ projectPath: '/tmp/project' });
     mockRealpath.mockImplementation(async (path: string) => path);
+    mockOpen.mockResolvedValue({
+      readFile: vi.fn().mockResolvedValue('file content'),
+      close: vi.fn().mockResolvedValue(undefined),
+    });
   });
   afterEach(() => {
     mockValidate.mockRestore();
     mockResolve.mockRestore();
     mockRealpath.mockRestore();
+    mockOpen.mockRestore();
   });
 
   it('returns error when delegation_id is missing', async () => {
@@ -75,7 +83,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('formats a passing validation result', async () => {
-    mockValidate.mockResolvedValue(fixturePassing());
+    mockValidate.mockReturnValue(fixturePassing());
 
     const result = await runValidateDelegationActual({ delegation_id: 'test-001' });
     expect(result).toContain('✅');
@@ -90,15 +98,13 @@ describe('runValidateDelegation', () => {
       .mockResolvedValueOnce('/tmp/project/.real/delegations')
       .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/log.md')
       .mockResolvedValueOnce('/tmp/project/.real/delegations/test-005/result.md');
-    mockValidate.mockResolvedValue(fixturePassing());
+    mockValidate.mockReturnValue(fixturePassing());
 
     await runValidateDelegationActual({ delegation_id: 'test-005' });
 
-    expect(mockValidate).toHaveBeenCalledWith(
-      '/tmp/project/.real/delegations/test-005/log.md',
-      '/tmp/project/.real/delegations/test-005/result.md',
-      'test-005',
-    );
+    expect(mockOpen).toHaveBeenNthCalledWith(1, '/tmp/project/.real/delegations/test-005/log.md', expect.any(Number));
+    expect(mockOpen).toHaveBeenNthCalledWith(2, '/tmp/project/.real/delegations/test-005/result.md', expect.any(Number));
+    expect(mockValidate).toHaveBeenCalledWith('file content', 'file content', 'test-005');
   });
 
   it('returns a direct file error when canonicalization cannot resolve the files', async () => {
@@ -111,6 +117,21 @@ describe('runValidateDelegation', () => {
 
     expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/log.md');
     expect(mockValidate).not.toHaveBeenCalled();
+    expect(mockOpen).not.toHaveBeenCalled();
+  });
+
+  it('returns a direct file error when result.md canonicalization cannot resolve the file', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations/test-006/log.md')
+      .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-006' });
+
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/result.md');
+    expect(mockValidate).not.toHaveBeenCalled();
+    expect(mockOpen).not.toHaveBeenCalled();
   });
 
   it('fails closed when canonicalization errors are not missing-file cases', async () => {
@@ -135,7 +156,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('formats a failing validation result with errors and warnings', async () => {
-    mockValidate.mockResolvedValue(
+    mockValidate.mockReturnValue(
       fixtureFailing(
         ['log.md missing delegation_id field'],
         ['Findings section is empty'],
@@ -149,7 +170,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('includes escalation details when present', async () => {
-    mockValidate.mockResolvedValue(
+    mockValidate.mockReturnValue(
       fixtureEscalation('Too many failures', 'Restart delegation', 5),
     );
 
