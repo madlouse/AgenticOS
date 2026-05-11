@@ -7,7 +7,6 @@ Object.defineProperty(execMock, promisify.custom, {
   value: execAsyncMock,
 });
 
-const accessMock = vi.fn();
 const appendFileMock = vi.fn();
 const mkdirMock = vi.fn();
 const unlinkMock = vi.fn();
@@ -23,7 +22,6 @@ vi.mock('crypto', () => ({
 }));
 
 vi.mock('fs/promises', async () => ({
-  access: accessMock,
   appendFile: appendFileMock,
   mkdir: mkdirMock,
   unlink: unlinkMock,
@@ -70,9 +68,6 @@ describe('multi-agent-review', () => {
 
     execAsyncMock.mockReset();
     execAsyncMock.mockResolvedValue({ stdout: '', stderr: '' });
-
-    accessMock.mockReset();
-    accessMock.mockResolvedValue(undefined);
 
     appendFileMock.mockReset();
     appendFileMock.mockResolvedValue(undefined);
@@ -208,20 +203,8 @@ describe('multi-agent-review', () => {
   });
 
   describe('agent execution settings', () => {
-    it('uses longer timeout for architecture reviewer', async () => {
-      const mod = await loadModule();
-      expect(mod.getClaudeAgentTimeoutMs('architecture-reviewer')).toBe(300000);
-      expect(mod.getClaudeAgentTimeoutMs('qa-expert')).toBe(180000);
-    });
-
-    it('builds temp file paths with uuid suffixes', async () => {
-      const mod = await loadModule();
-      const path = mod.buildPromptTempFilePath('/tmp/test', 123, 456, 'uuid-123');
-      expect(path).toBe('/tmp/test/claude-agent-prompt-123-456-uuid-123.txt');
-    });
-
-    it('runs claude with expanded buffer and cleans up prompt files', async () => {
-      process.env.TMPDIR = '/tmp/test-agent-review';
+    it('runs claude with expanded buffer, shell-safe prompt files, and cleanup', async () => {
+      process.env.TMPDIR = `/tmp/test-agent-review-$(echo nope)-o'hare`;
       execAsyncMock.mockResolvedValue({
         stdout: '**Findings:**\n- Missing limit\n\n**Recommendations:**\n- Add tests\n\n**Summary:**\nNeeds follow-up.',
         stderr: '',
@@ -235,11 +218,14 @@ describe('multi-agent-review', () => {
       expect(result.summary).toBe('Needs follow-up.');
 
       const tmpFile = writeFileMock.mock.calls[0][0] as string;
-      expect(tmpFile).toContain('/tmp/test-agent-review/claude-agent-prompt-');
+      expect(tmpFile).toContain('/tmp/test-agent-review-$(echo nope)-o\'hare/claude-agent-prompt-');
       expect(tmpFile).toContain('uuid-123.txt');
 
+      const execCommand = execAsyncMock.mock.calls[0][0] as string;
+      expect(execCommand).toContain(`--system-prompt-file '/tmp/test-agent-review-$(echo nope)-o'\\''hare`);
+      expect(execCommand).not.toContain(`--system-prompt-file "${tmpFile}"`);
       expect(execAsyncMock).toHaveBeenCalledWith(
-        expect.stringContaining(`--system-prompt-file "${tmpFile}"`),
+        expect.any(String),
         expect.objectContaining({
           timeout: 300000,
           maxBuffer: 10 * 1024 * 1024,
@@ -273,44 +259,103 @@ describe('multi-agent-review', () => {
 
     it('formats log entries as append-only sections', async () => {
       const mod = await loadModule();
-      const entry = mod.formatReviewLogEntry(REVIEW_RESULT, '2026-05-11T10:00:00.000Z');
-      expect(entry).toContain('## PR #42');
-      expect(entry).toContain('Recommendation: **REQUEST_CHANGES**');
-      expect(entry).toContain('### OK Code Reviewer');
+      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
+      expect(appendFileMock).toHaveBeenCalledWith(
+        '/repo/tasks/global-review-log.md',
+        expect.stringContaining('## PR #42'),
+        'utf-8',
+      );
+      expect(appendFileMock).toHaveBeenCalledWith(
+        '/repo/tasks/global-review-log.md',
+        expect.stringContaining('### OK Code Reviewer'),
+        'utf-8',
+      );
     });
 
-    it('creates log header once and appends new entries', async () => {
-      accessMock.mockRejectedValueOnce(new Error('missing'));
-
+    it('creates log header atomically before appending new entries', async () => {
       const mod = await loadModule();
       const logPath = await mod.persistReviewLog(REVIEW_RESULT, '/repo');
 
       expect(logPath).toBe('/repo/tasks/global-review-log.md');
       expect(mkdirMock).toHaveBeenCalledWith('/repo/tasks', { recursive: true });
-      expect(appendFileMock).toHaveBeenNthCalledWith(
+      expect(writeFileMock).toHaveBeenNthCalledWith(
         1,
         '/repo/tasks/global-review-log.md',
         expect.stringContaining('# Global Review Log'),
-        'utf-8',
+        expect.objectContaining({ flag: 'wx' }),
       );
-      expect(appendFileMock).toHaveBeenNthCalledWith(
-        2,
-        '/repo/tasks/global-review-log.md',
-        expect.stringContaining('## PR #42'),
-        'utf-8',
-      );
-    });
-
-    it('appends without rewriting when the log already exists', async () => {
-      const mod = await loadModule();
-      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
-
       expect(appendFileMock).toHaveBeenCalledTimes(1);
       expect(appendFileMock).toHaveBeenCalledWith(
         '/repo/tasks/global-review-log.md',
         expect.stringContaining('## PR #42'),
         'utf-8',
       );
+    });
+
+    it('treats EEXIST during header creation as a harmless concurrent writer race', async () => {
+      writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+
+      const mod = await loadModule();
+      await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).resolves.toBe('/repo/tasks/global-review-log.md');
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the main review path with bounded orchestration and per-agent timeouts', async () => {
+      let activeReviews = 0;
+      let maxActiveReviews = 0;
+
+      execAsyncMock.mockImplementation(async (command: string, options?: { timeout?: number; maxBuffer?: number }) => {
+        if (command.startsWith('gh pr view')) {
+          return {
+            stdout: JSON.stringify({
+              title: PR_DETAILS.title,
+              body: PR_DETAILS.body,
+              state: PR_DETAILS.state,
+              author: { login: PR_DETAILS.author },
+              files: PR_DETAILS.changedFiles.map((path) => ({ path })),
+              additions: PR_DETAILS.additions,
+              deletions: PR_DETAILS.deletions,
+            }),
+            stderr: '',
+          };
+        }
+
+        if (command.startsWith('gh pr diff')) {
+          return { stdout: 'diff --git a/src/index.ts b/src/index.ts', stderr: '' };
+        }
+
+        if (command.startsWith('command claude')) {
+          activeReviews += 1;
+          maxActiveReviews = Math.max(maxActiveReviews, activeReviews);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          activeReviews -= 1;
+
+          return {
+            stdout: '**Findings:**\n- Looks fine\n\n**Recommendations:**\n- Ship it\n\n**Summary:**\nNo blocking issues.',
+            stderr: '',
+          };
+        }
+
+        throw new Error(`unexpected command: ${command}`);
+      });
+
+      const mod = await loadModule();
+      const output = await mod.runMultiAgentReview({
+        pr_number: 42,
+        repo_path: '/repo',
+        agents: ['code-reviewer', 'security-auditor', 'qa-expert', 'architecture-reviewer'],
+      });
+
+      expect(output).toContain('## Multi-Agent Review — PR #42');
+      expect(output).toContain('**Agents:** 4/4 completed');
+      expect(maxActiveReviews).toBe(2);
+
+      const claudeCallOptions = execAsyncMock.mock.calls
+        .filter(([command]) => (command as string).startsWith('command claude'))
+        .map(([, options]) => options as { timeout: number; maxBuffer: number });
+
+      expect(claudeCallOptions).toContainEqual(expect.objectContaining({ timeout: 300000, maxBuffer: 10 * 1024 * 1024 }));
+      expect(claudeCallOptions).toContainEqual(expect.objectContaining({ timeout: 180000, maxBuffer: 10 * 1024 * 1024 }));
     });
   });
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
-import { access, appendFile, mkdir, unlink, writeFile } from 'fs/promises';
+import { appendFile, mkdir, unlink, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { promisify } from 'util';
 import pLimit from 'p-limit';
@@ -12,7 +12,14 @@ const DEFAULT_AGENT_TIMEOUT_MS = 180000;
 const ARCHITECTURE_AGENT_TIMEOUT_MS = 300000;
 
 function sanitize(value: string): string {
-  return value.replace(/[`*_~[\]()#>]/g, '?').substring(0, 500);
+  return value
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[`*_~[\]()#>]/g, '?')
+    .substring(0, 500);
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Agent role definitions for multi-agent review
@@ -83,13 +90,13 @@ export function mapToClaudeAgentType(agent: string): string {
   return known.includes(agent) ? agent : 'code-reviewer';
 }
 
-export function getClaudeAgentTimeoutMs(agentType: string): number {
+function getClaudeAgentTimeoutMs(agentType: string): number {
   return agentType === 'architecture-reviewer'
     ? ARCHITECTURE_AGENT_TIMEOUT_MS
     : DEFAULT_AGENT_TIMEOUT_MS;
 }
 
-export function buildPromptTempFilePath(tmpDir: string, pid: number, timestamp: number, uuid: string): string {
+function buildPromptTempFilePath(tmpDir: string, pid: number, timestamp: number, uuid: string): string {
   return `${tmpDir}/claude-agent-prompt-${pid}-${timestamp}-${uuid}.txt`;
 }
 
@@ -193,7 +200,7 @@ export async function runClaudeAgent(
     // execFile doesn't invoke a shell, so 'command' builtin isn't available — use execAsync instead
     // Redirect stdin from /dev/null to prevent 'no stdin data received' warning
     const { stdout } = await execAsync(
-      `command claude --print --agent ${agentFlag} --system-prompt-file "${tmpFile}" . --dangerously-skip-permissions < /dev/null`,
+      `command claude --print --agent ${agentFlag} --system-prompt-file ${shellQuote(tmpFile)} . --dangerously-skip-permissions < /dev/null`,
       { timeout: getClaudeAgentTimeoutMs(agentType), maxBuffer: CLAUDE_MAX_BUFFER_BYTES },
     );
 
@@ -279,7 +286,7 @@ export function aggregateResults(reviews: AgentReviewResult[]): {
   return { summary, recommendation };
 }
 
-export function formatReviewLogEntry(
+function formatReviewLogEntry(
   result: MultiAgentReviewResult,
   now: string,
 ): string {
@@ -330,9 +337,7 @@ export async function persistReviewLog(
   await mkdir(resolve(safeBase, 'tasks'), { recursive: true });
 
   try {
-    await access(reviewLogPath);
-  } catch {
-    await appendFile(
+    await writeFile(
       reviewLogPath,
       [
         '# Global Review Log',
@@ -340,8 +345,13 @@ export async function persistReviewLog(
         'Review entries are appended chronologically to avoid O(N) rewrites as the log grows.',
         '',
       ].join('\n'),
-      'utf-8',
+      { encoding: 'utf-8', flag: 'wx' },
     );
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code !== 'EEXIST') {
+      throw err;
+    }
   }
 
   await appendFile(reviewLogPath, formatReviewLogEntry(result, now), 'utf-8');
