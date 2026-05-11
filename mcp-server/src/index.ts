@@ -191,6 +191,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             items: { type: 'string' },
             description: 'Required clean baseline verification commands such as npm ci and npm run build',
           },
+          coverage_evidence_path: { type: 'string', description: 'Optional coverage-evidence.json path for coverage reproducibility gates.' },
         },
         required: ['task_type', 'repo_path'],
       },
@@ -410,23 +411,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_validate_delegation',
-      description: 'Validate that a delegated task follows AgenticOS delegation protocol: coverage, evidence, and formal closure.',
+      description: 'Validate delegation log.md/result.md artifacts for a delegation ID.',
       inputSchema: {
         type: 'object',
         properties: {
-          delegation_evidence_path: { type: 'string', description: 'Path to delegation evidence JSON file.' },
-          coverage_threshold: { type: 'number', description: 'Minimum coverage percentage (default: 80).' },
+          project: { type: 'string', description: 'Optional project id, name, or path.' },
+          delegation_id: { type: 'string', description: 'Single path segment identifying standards/.context/delegations/{delegation_id}.' },
         },
+        required: ['delegation_id'],
       },
     },
     {
       name: 'agenticos_coverage_check',
-      description: 'Check test coverage threshold compliance. Use runCoverageGenerate first if no evidence file exists.',
+      description: 'Generate or validate AgenticOS test coverage evidence.',
       inputSchema: {
         type: 'object',
         properties: {
-          threshold: { type: 'number', description: 'Minimum coverage percentage (default: 80).' },
-          evidence_path: { type: 'string', description: 'Path to coverage evidence JSON.' },
+          action: { type: 'string', enum: ['check', 'generate'], description: 'Whether to validate coverage evidence or generate it from coverage-final.json.' },
+          project: { type: 'string', description: 'Optional project id, name, or path.' },
+          project_path: { type: 'string', description: 'Optional managed project root override, normally the active issue worktree.' },
+          coverage_json_path: { type: 'string', description: 'Path to Vitest coverage-final.json when action=generate.' },
+          evidence_path: { type: 'string', description: 'Path to coverage-evidence.json.' },
+          is_pr: { type: 'boolean', description: 'Whether generated evidence should enforce changed-scope coverage.' },
+          changed_files_json: { type: 'string', description: 'JSON array of changed files for changed-scope coverage.' },
           format: { type: 'string', enum: ['markdown', 'json'], description: 'Output format.' },
         },
       },
@@ -527,7 +534,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case 'agenticos_validate_delegation':
       return { content: [{ type: 'text', text: await runValidateDelegation(args ?? {}) }] };
     case 'agenticos_coverage_check':
-      return { content: [{ type: 'text', text: await runCoverageCheck(args ?? {}) }] };
+      return { content: [{ type: 'text', text: (args as any)?.action === 'generate' ? await runCoverageGenerate(args ?? {}) : await runCoverageCheck(args ?? {}) }] };
     case 'agenticos_multi_agent_review':
       return { content: [{ type: 'text', text: await runMultiAgentReview(args ?? {}) }] };
     case 'agenticos_enforce_git_policy':
