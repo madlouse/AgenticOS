@@ -1,5 +1,6 @@
-import { execFile } from 'child_process';
-import { realpath } from 'fs/promises';
+import { spawnSync } from 'child_process';
+import { constants } from 'fs';
+import { lstat, open, realpath } from 'fs/promises';
 import { basename, relative, resolve } from 'path';
 import { validateDelegationContent } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
@@ -9,8 +10,8 @@ const SECURE_READ_SCRIPT = String.raw`
 import os
 import sys
 
-root = sys.argv[1]
-relative_path = sys.argv[2]
+project_fd = 3
+relative_path = sys.argv[1]
 parts = [part for part in relative_path.split('/') if part not in ('', '.')]
 if not parts or any(part == '..' for part in parts):
     raise SystemExit(2)
@@ -18,7 +19,7 @@ if not parts or any(part == '..' for part in parts):
 dir_fds = []
 file_fd = None
 try:
-    current_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    current_fd = os.dup(project_fd)
     dir_fds.append(current_fd)
 
     for part in parts[:-1]:
@@ -68,6 +69,7 @@ async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsR
 }
 
 async function readDelegationFileContent(
+  resolvedProjectPath: string,
   resolvedDelegationsRoot: string,
   canonicalPath: string,
   displayPath: string,
@@ -75,38 +77,55 @@ async function readDelegationFileContent(
   content: string | null;
   error: string | null;
 }> {
-  const relativePath = relative(resolvedDelegationsRoot, canonicalPath).replace(/\\/g, '/');
-  if (!relativePath || relativePath === '..' || relativePath.startsWith('../')) {
+  const relativePath = relative(resolvedProjectPath, canonicalPath).replace(/\\/g, '/');
+  const relativeFromDelegationsRoot = relative(resolvedDelegationsRoot, canonicalPath).replace(/\\/g, '/');
+  if (
+    !relativePath
+    || relativePath === '..'
+    || relativePath.startsWith('../')
+    || !relativeFromDelegationsRoot
+    || relativeFromDelegationsRoot === '..'
+    || relativeFromDelegationsRoot.startsWith('../')
+  ) {
     return {
       content: null,
       error: '❌ delegation file changed during validation',
     };
   }
 
+  let projectRootHandle;
   try {
-    const content = await new Promise<string>((resolvePromise, rejectPromise) => {
-      execFile(
-        'python3',
-        ['-c', SECURE_READ_SCRIPT, resolvedDelegationsRoot, relativePath],
-        {
-          encoding: 'utf-8',
-          maxBuffer: 1024 * 1024,
-        },
-        (error, stdout) => {
-          if (error) {
-            rejectPromise(error);
-            return;
-          }
-          resolvePromise(stdout);
-        },
-      );
-    });
+    const expectedProjectStat = await lstat(resolvedProjectPath);
+    projectRootHandle = await open(resolvedProjectPath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    const openedProjectStat = await projectRootHandle.stat();
+    if (openedProjectStat.dev !== expectedProjectStat.dev || openedProjectStat.ino !== expectedProjectStat.ino) {
+      return {
+        content: null,
+        error: '❌ delegation file changed during validation',
+      };
+    }
+
+    const command = spawnSync(
+      'python3',
+      ['-c', SECURE_READ_SCRIPT, relativePath],
+      {
+        encoding: 'utf-8',
+        maxBuffer: 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe', projectRootHandle.fd],
+      },
+    );
+    if (command.status !== 0 || command.error) {
+      throw command.error || new Error(command.stderr || 'secure read failed');
+    }
+    const content = command.stdout;
     return { content, error: null };
   } catch {
     return {
       content: null,
       error: `❌ delegation file not found or unreadable at ${displayPath}`,
     };
+  } finally {
+    await projectRootHandle?.close().catch(() => undefined);
   }
 }
 
@@ -137,15 +156,17 @@ export async function runValidateDelegation(args: any): Promise<string> {
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
 
+  let resolvedProjectPath: string;
   let resolvedDelegationsRoot: string;
   try {
-    const [resolvedProjectPath, canonicalDelegationsRoot] = await Promise.all([
+    const [canonicalProjectPath, canonicalDelegationsRoot] = await Promise.all([
       realpath(projectPath),
       realpath(delegationsRoot),
     ]);
-    if (!isPathWithinRoot(canonicalDelegationsRoot, resolvedProjectPath)) {
+    if (!isPathWithinRoot(canonicalDelegationsRoot, canonicalProjectPath)) {
       return '❌ delegation_id resolves outside the delegations directory';
     }
+    resolvedProjectPath = canonicalProjectPath;
     resolvedDelegationsRoot = canonicalDelegationsRoot;
   } catch {
     return '❌ failed to resolve delegation root';
@@ -161,12 +182,22 @@ export async function runValidateDelegation(args: any): Promise<string> {
     return validatedResultPath.error;
   }
 
-  const logContent = await readDelegationFileContent(resolvedDelegationsRoot, validatedLogPath.path!, logPath);
+  const logContent = await readDelegationFileContent(
+    resolvedProjectPath,
+    resolvedDelegationsRoot,
+    validatedLogPath.path!,
+    logPath,
+  );
   if (logContent.error) {
     return logContent.error;
   }
 
-  const resultContent = await readDelegationFileContent(resolvedDelegationsRoot, validatedResultPath.path!, resultPath);
+  const resultContent = await readDelegationFileContent(
+    resolvedProjectPath,
+    resolvedDelegationsRoot,
+    validatedResultPath.path!,
+    resultPath,
+  );
   if (resultContent.error) {
     return resultContent.error;
   }
