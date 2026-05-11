@@ -1,9 +1,40 @@
-import { constants } from 'fs';
-import { lstat, open, realpath } from 'fs/promises';
-import { basename, join, relative, resolve } from 'path';
+import { execFile } from 'child_process';
+import { realpath } from 'fs/promises';
+import { basename, relative, resolve } from 'path';
 import { validateDelegationContent } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { isPathWithinRoot } from '../utils/worktree-topology.js';
+
+const SECURE_READ_SCRIPT = String.raw`
+import os
+import sys
+
+root = sys.argv[1]
+relative_path = sys.argv[2]
+parts = [part for part in relative_path.split('/') if part not in ('', '.')]
+if not parts or any(part == '..' for part in parts):
+    raise SystemExit(2)
+
+dir_fds = []
+file_fd = None
+try:
+    current_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    dir_fds.append(current_fd)
+
+    for part in parts[:-1]:
+        current_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current_fd)
+        dir_fds.append(current_fd)
+
+    file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=current_fd)
+    with os.fdopen(file_fd, 'r', encoding='utf-8') as handle:
+        sys.stdout.write(handle.read())
+    file_fd = None
+finally:
+    if file_fd is not None:
+        os.close(file_fd)
+    for fd in reversed(dir_fds):
+        os.close(fd)
+`;
 
 async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsRoot: string): Promise<{
   path: string | null;
@@ -44,42 +75,38 @@ async function readDelegationFileContent(
   content: string | null;
   error: string | null;
 }> {
-  let handle;
-  try {
-    const relativePath = relative(resolvedDelegationsRoot, canonicalPath);
-    const segments = relativePath.split('/').filter((segment) => segment.length > 0);
-    let currentPath = resolvedDelegationsRoot;
-    for (const segment of segments) {
-      currentPath = join(currentPath, segment);
-      const currentStat = await lstat(currentPath);
-      if (currentStat.isSymbolicLink()) {
-        return {
-          content: null,
-          error: '❌ delegation file changed during validation',
-        };
-      }
-    }
-
-    const expectedStat = await lstat(canonicalPath);
-    handle = await open(canonicalPath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const openedStat = await handle.stat();
-    if (openedStat.dev !== expectedStat.dev || openedStat.ino !== expectedStat.ino) {
-      return {
-        content: null,
-        error: '❌ delegation file changed during validation',
-      };
-    }
+  const relativePath = relative(resolvedDelegationsRoot, canonicalPath).replace(/\\/g, '/');
+  if (!relativePath || relativePath === '..' || relativePath.startsWith('../')) {
     return {
-      content: await handle.readFile('utf-8'),
-      error: null,
+      content: null,
+      error: '❌ delegation file changed during validation',
     };
+  }
+
+  try {
+    const content = await new Promise<string>((resolvePromise, rejectPromise) => {
+      execFile(
+        'python3',
+        ['-c', SECURE_READ_SCRIPT, resolvedDelegationsRoot, relativePath],
+        {
+          encoding: 'utf-8',
+          maxBuffer: 1024 * 1024,
+        },
+        (error, stdout) => {
+          if (error) {
+            rejectPromise(error);
+            return;
+          }
+          resolvePromise(stdout);
+        },
+      );
+    });
+    return { content, error: null };
   } catch {
     return {
       content: null,
       error: `❌ delegation file not found or unreadable at ${displayPath}`,
     };
-  } finally {
-    await handle?.close().catch(() => undefined);
   }
 }
 

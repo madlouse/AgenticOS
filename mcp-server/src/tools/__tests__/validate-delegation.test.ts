@@ -1,5 +1,6 @@
 /// <reference types="vitest/globals" />
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import type { ExecFileOptions } from 'child_process';
 import { runValidateDelegation as runValidateDelegationActual } from '../validate-delegation.js';
 import {
   fixturePassing,
@@ -10,8 +11,7 @@ import {
 const mockValidate = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
 const mockRealpath = vi.hoisted(() => vi.fn());
-const mockLstat = vi.hoisted(() => vi.fn());
-const mockOpen = vi.hoisted(() => vi.fn());
+const mockExecFile = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/delegation-validation.js', () => ({
   validateDelegationContent: mockValidate,
@@ -19,34 +19,46 @@ vi.mock('../../utils/delegation-validation.js', () => ({
 vi.mock('../../utils/project-target.js', () => ({
   resolveManagedProjectTarget: mockResolve,
 }));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return {
+    ...actual,
+    execFile: mockExecFile,
+  };
+});
 vi.mock('fs/promises', () => ({
-  lstat: mockLstat,
-  open: mockOpen,
   realpath: mockRealpath,
 }));
+
+function installExecFileSuccess(stdout = 'file content') {
+  mockExecFile.mockImplementation(
+    (
+      _file: string,
+      _args: string[],
+      _options: ExecFileOptions,
+      callback: (error: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      callback(null, stdout, '');
+      return {} as any;
+    },
+  );
+}
 
 describe('runValidateDelegation', () => {
   beforeEach(() => {
     mockValidate.mockReset();
     mockResolve.mockReset();
     mockRealpath.mockReset();
-    mockLstat.mockReset();
-    mockOpen.mockReset();
+    mockExecFile.mockReset();
     mockResolve.mockResolvedValue({ projectPath: '/tmp/project' });
     mockRealpath.mockImplementation(async (path: string) => path);
-    mockLstat.mockResolvedValue({ dev: 1, ino: 2, isSymbolicLink: () => false });
-    mockOpen.mockResolvedValue({
-      readFile: vi.fn().mockResolvedValue('file content'),
-      stat: vi.fn().mockResolvedValue({ dev: 1, ino: 2 }),
-      close: vi.fn().mockResolvedValue(undefined),
-    });
+    installExecFileSuccess();
   });
   afterEach(() => {
     mockValidate.mockRestore();
     mockResolve.mockRestore();
     mockRealpath.mockRestore();
-    mockLstat.mockRestore();
-    mockOpen.mockRestore();
+    mockExecFile.mockRestore();
   });
 
   it('returns error when delegation_id is missing', async () => {
@@ -59,6 +71,7 @@ describe('runValidateDelegation', () => {
     expect(result).toContain('must be a single relative path segment');
     expect(mockResolve).not.toHaveBeenCalled();
     expect(mockRealpath).not.toHaveBeenCalled();
+    expect(mockExecFile).not.toHaveBeenCalled();
     expect(mockValidate).not.toHaveBeenCalled();
   });
 
@@ -108,8 +121,7 @@ describe('runValidateDelegation', () => {
 
     await runValidateDelegationActual({ delegation_id: 'test-005' });
 
-    expect(mockOpen).toHaveBeenNthCalledWith(1, '/tmp/project/.real/delegations/test-005/log.md', expect.any(Number));
-    expect(mockOpen).toHaveBeenNthCalledWith(2, '/tmp/project/.real/delegations/test-005/result.md', expect.any(Number));
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
     expect(mockValidate).toHaveBeenCalledWith('file content', 'file content', 'test-005');
   });
 
@@ -123,7 +135,7 @@ describe('runValidateDelegation', () => {
 
     expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/log.md');
     expect(mockValidate).not.toHaveBeenCalled();
-    expect(mockOpen).not.toHaveBeenCalled();
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 
   it('returns a direct file error when result.md canonicalization cannot resolve the file', async () => {
@@ -137,30 +149,44 @@ describe('runValidateDelegation', () => {
 
     expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/result.md');
     expect(mockValidate).not.toHaveBeenCalled();
-    expect(mockOpen).not.toHaveBeenCalled();
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 
-  it('fails closed when a canonicalized file changes before it is read', async () => {
-    mockOpen.mockResolvedValueOnce({
-      readFile: vi.fn().mockResolvedValue('file content'),
-      stat: vi.fn().mockResolvedValue({ dev: 9, ino: 9 }),
-      close: vi.fn().mockResolvedValue(undefined),
-    });
+  it('fails closed when the secure reader rejects a changed file path', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _file: string,
+        _args: string[],
+        _options: ExecFileOptions,
+        callback: (error: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        callback(new Error('secure read failed'), '', '');
+        return {} as any;
+      },
+    );
 
     const result = await runValidateDelegationActual({ delegation_id: 'test-009' });
 
-    expect(result).toContain('delegation file changed during validation');
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-009/log.md');
     expect(mockValidate).not.toHaveBeenCalled();
   });
 
-  it('fails closed when a parent path component becomes a symlink before read', async () => {
-    mockLstat
-      .mockResolvedValueOnce({ dev: 1, ino: 2, isSymbolicLink: () => true });
+  it('fails closed when the secure reader rejects a changed parent path', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _file: string,
+        _args: string[],
+        _options: ExecFileOptions,
+        callback: (error: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        callback(new Error('secure read failed'), '', '');
+        return {} as any;
+      },
+    );
 
     const result = await runValidateDelegationActual({ delegation_id: 'test-010' });
 
-    expect(result).toContain('delegation file changed during validation');
-    expect(mockOpen).not.toHaveBeenCalled();
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-010/log.md');
     expect(mockValidate).not.toHaveBeenCalled();
   });
 
