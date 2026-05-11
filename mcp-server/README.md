@@ -20,7 +20,7 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
-Use `agenticos-bootstrap --verify` to audit the selected agents and optional persistence layers without mutating them.
+Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify` to audit the Homebrew/runtime bootstrap state and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
 After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
@@ -529,7 +529,11 @@ Get complete context for the current session project.
    ```bash
    echo $AGENTICOS_HOME
    ```
-2. Run `agenticos-bootstrap --verify` to audit the current bootstrap state
+2. Run:
+   ```bash
+   agenticos-config --validate
+   agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
+   ```
 3. If the workspace was never initialized, run:
    ```bash
    agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
@@ -634,11 +638,14 @@ If Homebrew reports that the installed version does not match the tap version,
 the Homebrew formula is stale. Repair with:
 
 ```bash
-brew upgrade agenticos     # fastest fix if a newer version exists in the tap
+brew update && brew upgrade agenticos
 ```
 
-If `brew upgrade` reports nothing to upgrade but the version still mismatches, the
-local Homebrew tap cache is stale. Force a refresh:
+`brew update` must run first so Homebrew refreshes tap metadata; `brew upgrade`
+only installs a version the local Homebrew cache already knows about.
+
+If `brew update && brew upgrade` still reports nothing to upgrade but the version
+still mismatches, the local Homebrew tap cache is stale. Force a refresh:
 
 ```bash
 brew untap agenticos/tap
