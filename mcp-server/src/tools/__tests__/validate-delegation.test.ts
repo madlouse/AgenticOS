@@ -34,7 +34,7 @@ describe('runValidateDelegation', () => {
     mockOpen.mockReset();
     mockResolve.mockResolvedValue({ projectPath: '/tmp/project' });
     mockRealpath.mockImplementation(async (path: string) => path);
-    mockLstat.mockResolvedValue({ dev: 1, ino: 2 });
+    mockLstat.mockResolvedValue({ dev: 1, ino: 2, isSymbolicLink: () => false });
     mockOpen.mockResolvedValue({
       readFile: vi.fn().mockResolvedValue('file content'),
       stat: vi.fn().mockResolvedValue({ dev: 1, ino: 2 }),
@@ -150,6 +150,17 @@ describe('runValidateDelegation', () => {
     const result = await runValidateDelegationActual({ delegation_id: 'test-009' });
 
     expect(result).toContain('delegation file changed during validation');
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a parent path component becomes a symlink before read', async () => {
+    mockLstat
+      .mockResolvedValueOnce({ dev: 1, ino: 2, isSymbolicLink: () => true });
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-010' });
+
+    expect(result).toContain('delegation file changed during validation');
+    expect(mockOpen).not.toHaveBeenCalled();
     expect(mockValidate).not.toHaveBeenCalled();
   });
 

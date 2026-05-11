@@ -1,6 +1,6 @@
 import { constants } from 'fs';
 import { lstat, open, realpath } from 'fs/promises';
-import { basename, resolve } from 'path';
+import { basename, join, relative, resolve } from 'path';
 import { validateDelegationContent } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { isPathWithinRoot } from '../utils/worktree-topology.js';
@@ -36,12 +36,30 @@ async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsR
   }
 }
 
-async function readDelegationFileContent(canonicalPath: string, displayPath: string): Promise<{
+async function readDelegationFileContent(
+  resolvedDelegationsRoot: string,
+  canonicalPath: string,
+  displayPath: string,
+): Promise<{
   content: string | null;
   error: string | null;
 }> {
   let handle;
   try {
+    const relativePath = relative(resolvedDelegationsRoot, canonicalPath);
+    const segments = relativePath.split('/').filter((segment) => segment.length > 0);
+    let currentPath = resolvedDelegationsRoot;
+    for (const segment of segments) {
+      currentPath = join(currentPath, segment);
+      const currentStat = await lstat(currentPath);
+      if (currentStat.isSymbolicLink()) {
+        return {
+          content: null,
+          error: '❌ delegation file changed during validation',
+        };
+      }
+    }
+
     const expectedStat = await lstat(canonicalPath);
     handle = await open(canonicalPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const openedStat = await handle.stat();
@@ -116,12 +134,12 @@ export async function runValidateDelegation(args: any): Promise<string> {
     return validatedResultPath.error;
   }
 
-  const logContent = await readDelegationFileContent(validatedLogPath.path!, logPath);
+  const logContent = await readDelegationFileContent(resolvedDelegationsRoot, validatedLogPath.path!, logPath);
   if (logContent.error) {
     return logContent.error;
   }
 
-  const resultContent = await readDelegationFileContent(validatedResultPath.path!, resultPath);
+  const resultContent = await readDelegationFileContent(resolvedDelegationsRoot, validatedResultPath.path!, resultPath);
   if (resultContent.error) {
     return resultContent.error;
   }
