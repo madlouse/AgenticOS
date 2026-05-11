@@ -1,12 +1,15 @@
-import { resolve } from 'path';
+import { basename, resolve } from 'path';
 import { validateDelegationOutput } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 
 export async function runValidateDelegation(args: any): Promise<string> {
-  const { delegation_id } = args;
+  const delegationId = typeof args.delegation_id === 'string' ? args.delegation_id.trim() : '';
 
-  if (!delegation_id) {
+  if (!delegationId) {
     return '❌ delegation_id is required';
+  }
+  if (delegationId.includes('\\') || basename(delegationId) !== delegationId || delegationId === '.' || delegationId === '..') {
+    return '❌ delegation_id must be a single relative path segment';
   }
 
   // Resolve project to get agenticos_home
@@ -21,17 +24,17 @@ export async function runValidateDelegation(args: any): Promise<string> {
   }
 
   const { projectPath } = resolved;
-  const delegationBase = resolve(projectPath, 'standards/.context/delegations', delegation_id);
+  const delegationBase = resolve(projectPath, 'standards/.context/delegations', delegationId);
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
 
-  const result = await validateDelegationOutput(logPath, resultPath, delegation_id);
+  const result = await validateDelegationOutput(logPath, resultPath, delegationId);
 
   const lines: string[] = [];
   if (result.pass) {
-    lines.push(`✅ Delegation **${delegation_id}** validated successfully.`);
+    lines.push(`✅ Delegation **${delegationId}** validated successfully.`);
   } else {
-    lines.push(`❌ Delegation **${delegation_id}** validation failed.`);
+    lines.push(`❌ Delegation **${delegationId}** validation failed.`);
   }
 
   if (result.errors.length > 0) {

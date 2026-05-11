@@ -163,7 +163,7 @@ export function generateCoverageEvidence(
         filesByPath.get(changedFile)
         ?? files.find((f) => changedFile.endsWith(f.path) || f.path.endsWith(changedFile));
       if (!entry) {
-        // File not in coverage report — cannot verify
+        changedScopeFailures.push(`${changedFile}: file missing from coverage report`);
         continue;
       }
       if (entry.pct_lines < CHANGED_SCOPE_TARGET.lines) {

@@ -37,4 +37,22 @@ describe('generateCoverageEvidence', () => {
     expect(evidence.changed_scope_pass).toBe(false);
     expect(evidence.changed_scope_failures).toContain('/tmp/worktree/mcp-server/src/bar.ts: lines 50% < 100%');
   });
+
+  it('fails changed-scope validation when a changed file is absent from coverage', () => {
+    const evidence = generateCoverageEvidence(
+      {
+        'src/foo.ts': {
+          s: { '1': 1 },
+          b: {},
+          f: { '2': 1 },
+          lh: [1],
+        },
+      },
+      true,
+      ['src/missing.ts'],
+    );
+
+    expect(evidence.changed_scope_pass).toBe(false);
+    expect(evidence.changed_scope_failures).toContain('src/missing.ts: file missing from coverage report');
+  });
 });

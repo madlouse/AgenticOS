@@ -33,6 +33,13 @@ describe('runValidateDelegation', () => {
     expect(result).toContain('delegation_id is required');
   });
 
+  it('rejects delegation_id path traversal input', async () => {
+    const result = await runValidateDelegationActual({ delegation_id: '../escape' });
+    expect(result).toContain('must be a single relative path segment');
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
   it('formats a passing validation result', async () => {
     mockValidate.mockResolvedValue(fixturePassing());
 
