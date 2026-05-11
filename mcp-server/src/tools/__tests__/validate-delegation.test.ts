@@ -101,20 +101,16 @@ describe('runValidateDelegation', () => {
     );
   });
 
-  it('falls back to the original paths when realpath cannot resolve the files', async () => {
+  it('returns a direct file error when canonicalization cannot resolve the files', async () => {
     mockRealpath
       .mockResolvedValueOnce('/tmp/project')
       .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
       .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-    mockValidate.mockResolvedValue(fixturePassing());
 
-    await runValidateDelegationActual({ delegation_id: 'test-006' });
+    const result = await runValidateDelegationActual({ delegation_id: 'test-006' });
 
-    expect(mockValidate).toHaveBeenCalledWith(
-      '/tmp/project/standards/.context/delegations/test-006/log.md',
-      '/tmp/project/standards/.context/delegations/test-006/result.md',
-      'test-006',
-    );
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/log.md');
+    expect(mockValidate).not.toHaveBeenCalled();
   });
 
   it('fails closed when canonicalization errors are not missing-file cases', async () => {

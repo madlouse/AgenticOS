@@ -4,6 +4,37 @@ import { validateDelegationOutput } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { isPathWithinRoot } from '../utils/worktree-topology.js';
 
+async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsRoot: string): Promise<{
+  path: string | null;
+  error: string | null;
+}> {
+  try {
+    const resolvedPath = await realpath(filePath);
+    if (!isPathWithinRoot(resolvedPath, resolvedDelegationsRoot)) {
+      return {
+        path: null,
+        error: '❌ delegation_id resolves outside the delegations directory',
+      };
+    }
+    return {
+      path: resolvedPath,
+      error: null,
+    };
+  } catch (error: any) {
+    const errorCode = typeof error?.code === 'string' ? error.code : '';
+    if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') {
+      return {
+        path: null,
+        error: `❌ delegation file not found or unreadable at ${filePath}`,
+      };
+    }
+    return {
+      path: null,
+      error: '❌ failed to canonicalize delegation files',
+    };
+  }
+}
+
 export async function runValidateDelegation(args: any): Promise<string> {
   const delegationId = typeof args.delegation_id === 'string' ? args.delegation_id.trim() : '';
 
@@ -30,40 +61,32 @@ export async function runValidateDelegation(args: any): Promise<string> {
   const delegationBase = resolve(delegationsRoot, delegationId);
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
-  let validatedLogPath = logPath;
-  let validatedResultPath = resultPath;
 
+  let resolvedDelegationsRoot: string;
   try {
-    const [resolvedProjectPath, resolvedDelegationsRoot] = await Promise.all([
+    const [resolvedProjectPath, canonicalDelegationsRoot] = await Promise.all([
       realpath(projectPath),
       realpath(delegationsRoot),
     ]);
-    if (!isPathWithinRoot(resolvedDelegationsRoot, resolvedProjectPath)) {
+    if (!isPathWithinRoot(canonicalDelegationsRoot, resolvedProjectPath)) {
       return '❌ delegation_id resolves outside the delegations directory';
     }
-
-    try {
-      const [resolvedLogPath, resolvedResultPath] = await Promise.all([
-        realpath(logPath),
-        realpath(resultPath),
-      ]);
-      if (!isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot) || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)) {
-        return '❌ delegation_id resolves outside the delegations directory';
-      }
-      validatedLogPath = resolvedLogPath;
-      validatedResultPath = resolvedResultPath;
-    } catch (error: any) {
-      const errorCode = typeof error?.code === 'string' ? error.code : '';
-      if (errorCode !== 'ENOENT' && errorCode !== 'ENOTDIR') {
-        return '❌ failed to canonicalize delegation files';
-      }
-      // Let the validator report missing or unreadable log/result files.
-    }
+    resolvedDelegationsRoot = canonicalDelegationsRoot;
   } catch {
     return '❌ failed to resolve delegation root';
   }
 
-  const result = await validateDelegationOutput(validatedLogPath, validatedResultPath, delegationId);
+  const validatedLogPath = await canonicalizeDelegationFile(logPath, resolvedDelegationsRoot);
+  if (validatedLogPath.error) {
+    return validatedLogPath.error;
+  }
+
+  const validatedResultPath = await canonicalizeDelegationFile(resultPath, resolvedDelegationsRoot);
+  if (validatedResultPath.error) {
+    return validatedResultPath.error;
+  }
+
+  const result = await validateDelegationOutput(validatedLogPath.path!, validatedResultPath.path!, delegationId);
 
   const lines: string[] = [];
   if (result.pass) {
