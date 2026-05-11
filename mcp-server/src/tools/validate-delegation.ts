@@ -25,7 +25,7 @@ export async function runValidateDelegation(args: any): Promise<string> {
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
 
-  const result = validateDelegationOutput(logPath, resultPath, delegation_id);
+  const result = await validateDelegationOutput(logPath, resultPath, delegation_id);
 
   const lines: string[] = [];
   if (result.pass) {

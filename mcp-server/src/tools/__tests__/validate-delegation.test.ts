@@ -34,7 +34,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('formats a passing validation result', async () => {
-    mockValidate.mockReturnValue(fixturePassing());
+    mockValidate.mockResolvedValue(fixturePassing());
 
     const result = await runValidateDelegationActual({ delegation_id: 'test-001' });
     expect(result).toContain('✅');
@@ -44,7 +44,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('formats a failing validation result with errors and warnings', async () => {
-    mockValidate.mockReturnValue(
+    mockValidate.mockResolvedValue(
       fixtureFailing(
         ['log.md missing delegation_id field'],
         ['Findings section is empty'],
@@ -58,7 +58,7 @@ describe('runValidateDelegation', () => {
   });
 
   it('includes escalation details when present', async () => {
-    mockValidate.mockReturnValue(
+    mockValidate.mockResolvedValue(
       fixtureEscalation('Too many failures', 'Restart delegation', 5),
     );
 

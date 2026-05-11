@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 
 export interface ValidationResult {
@@ -92,18 +92,18 @@ export function sectionNonEmpty(content: string, heading: string): boolean {
  * @param delegationId Expected delegation ID (for cross-check)
  * @returns ValidationResult with pass/fail and detailed per-field checks
  */
-export function validateDelegationOutput(
+export async function validateDelegationOutput(
   logPath: string,
   resultPath: string,
   delegationId: string,
-): ValidationResult {
+): Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
 
   // --- Log checks ---
   let logContent: string;
   try {
-    logContent = readFileSync(resolve(logPath), 'utf-8');
+    logContent = await readFile(resolve(logPath), 'utf-8');
   } catch {
     errors.push(`log file not found or unreadable at ${logPath}`);
     return mkResult(false, false, false, errors, warnings, null, null);
@@ -138,7 +138,7 @@ export function validateDelegationOutput(
   // --- Result checks ---
   let resultContent: string;
   try {
-    resultContent = readFileSync(resolve(resultPath), 'utf-8');
+    resultContent = await readFile(resolve(resultPath), 'utf-8');
   } catch {
     errors.push(`result file not found or unreadable at ${resultPath}`);
     return mkResult(

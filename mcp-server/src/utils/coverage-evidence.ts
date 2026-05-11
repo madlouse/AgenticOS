@@ -62,6 +62,7 @@ export function generateCoverageEvidence(
 
   // Collect per-file data
   const files: CoverageFileEntry[] = [];
+  const filesByPath = new Map<string, CoverageFileEntry>();
   let totalLines = 0;
   let totalCoveredLines = 0;
   let totalBranches = 0;
@@ -80,31 +81,50 @@ export function generateCoverageEvidence(
     const f = (fileData.f as Record<string, number>) || {};
     const lh = (fileData.lh as number[]) || [];
 
-    // Statement: count unique statements hit (v > 0)
-    const fileStatements = Object.keys(s).length;
-    const fileCoveredStatements = Object.values(s).filter((v) => v > 0).length;
-    // Branch: each branch sub-entry has length = total branches, filter > 0 = hit branches
-    const fileBranches = Object.values(b).reduce((a, arr) => a + arr.length, 0);
-    const fileCoveredBranches = Object.values(b).reduce((a, arr) => a + arr.filter((v) => v > 0).length, 0);
-    // Function: each entry in f map = one function
-    const fileFunctions = Object.keys(f).length;
-    const fileCoveredFunctions = Object.values(f).filter((v) => v > 0).length;
-    // Line: lh is per-line hit count array; count lines with hit > 0
-    const fileLines = lh.length;
-    const fileCoveredLines = lh.filter((v) => v > 0).length;
+    let fileStatements = 0;
+    let fileCoveredStatements = 0;
+    for (const hits of Object.values(s)) {
+      fileStatements += 1;
+      if (hits > 0) fileCoveredStatements += 1;
+    }
+
+    let fileBranches = 0;
+    let fileCoveredBranches = 0;
+    for (const branchHits of Object.values(b)) {
+      fileBranches += branchHits.length;
+      for (const hits of branchHits) {
+        if (hits > 0) fileCoveredBranches += 1;
+      }
+    }
+
+    let fileFunctions = 0;
+    let fileCoveredFunctions = 0;
+    for (const hits of Object.values(f)) {
+      fileFunctions += 1;
+      if (hits > 0) fileCoveredFunctions += 1;
+    }
+
+    let fileLines = 0;
+    let fileCoveredLines = 0;
+    for (const hits of lh) {
+      fileLines += 1;
+      if (hits > 0) fileCoveredLines += 1;
+    }
 
     const pctStatements = fileStatements > 0 ? Math.round((fileCoveredStatements / fileStatements) * 100) : 0;
     const pctBranches = fileBranches > 0 ? Math.round((fileCoveredBranches / fileBranches) * 100) : 0;
     const pctFunctions = fileFunctions > 0 ? Math.round((fileCoveredFunctions / fileFunctions) * 100) : 0;
     const pctLines = fileLines > 0 ? Math.round((fileCoveredLines / fileLines) * 100) : 0;
 
-    files.push({
+    const entry = {
       path,
       pct_statements: pctStatements,
       pct_branches: pctBranches,
       pct_functions: pctFunctions,
       pct_lines: pctLines,
-    });
+    };
+    files.push(entry);
+    filesByPath.set(path, entry);
 
     totalLines += fileLines;
     totalCoveredLines += fileCoveredLines;
@@ -139,7 +159,9 @@ export function generateCoverageEvidence(
   const changedScopeFailures: string[] = [];
   if (isPr && changedFiles.length > 0) {
     for (const changedFile of changedFiles) {
-      const entry = files.find((f) => f.path === changedFile || changedFile.endsWith(f.path) || f.path.endsWith(changedFile));
+      const entry =
+        filesByPath.get(changedFile)
+        ?? files.find((f) => changedFile.endsWith(f.path) || f.path.endsWith(changedFile));
       if (!entry) {
         // File not in coverage report — cannot verify
         continue;
