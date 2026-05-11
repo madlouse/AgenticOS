@@ -129,6 +129,15 @@ describe('runValidateDelegation', () => {
     expect(mockValidate).not.toHaveBeenCalled();
   });
 
+  it('fails closed when the delegation root cannot be resolved', async () => {
+    mockRealpath.mockRejectedValueOnce(new Error('root missing'));
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-008' });
+
+    expect(result).toContain('failed to resolve delegation root');
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
   it('formats a failing validation result with errors and warnings', async () => {
     mockValidate.mockResolvedValue(
       fixtureFailing(
