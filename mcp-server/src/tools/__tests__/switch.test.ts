@@ -172,6 +172,8 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('🧰 Filesystem workdir: /test/path');
       expect(result).toContain('agenticos_switch did not change your shell cwd');
       expect(result).toContain('Avoid relative-path edits until your shell cwd is aligned to this project.');
+      expect(result.indexOf('Status: active')).toBeLessThan(result.indexOf('🧰 Filesystem workdir: /test/path'));
+      expect(result.indexOf('🧰 Filesystem workdir: /test/path')).toBeLessThan(result.indexOf('Context loaded from:'));
     });
 
     it('finds project by name', async () => {
