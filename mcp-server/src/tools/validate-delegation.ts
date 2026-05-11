@@ -1,6 +1,8 @@
+import { realpath } from 'fs/promises';
 import { basename, resolve } from 'path';
 import { validateDelegationOutput } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
+import { isPathWithinRoot } from '../utils/worktree-topology.js';
 
 export async function runValidateDelegation(args: any): Promise<string> {
   const delegationId = typeof args.delegation_id === 'string' ? args.delegation_id.trim() : '';
@@ -24,9 +26,23 @@ export async function runValidateDelegation(args: any): Promise<string> {
   }
 
   const { projectPath } = resolved;
-  const delegationBase = resolve(projectPath, 'standards/.context/delegations', delegationId);
+  const delegationsRoot = resolve(projectPath, 'standards/.context/delegations');
+  const delegationBase = resolve(delegationsRoot, delegationId);
   const logPath = `${delegationBase}/log.md`;
   const resultPath = `${delegationBase}/result.md`;
+
+  try {
+    const [resolvedDelegationsRoot, resolvedLogPath, resolvedResultPath] = await Promise.all([
+      realpath(delegationsRoot),
+      realpath(logPath),
+      realpath(resultPath),
+    ]);
+    if (!isPathWithinRoot(resolvedLogPath, resolvedDelegationsRoot) || !isPathWithinRoot(resolvedResultPath, resolvedDelegationsRoot)) {
+      return '❌ delegation_id resolves outside the delegations directory';
+    }
+  } catch {
+    // Let the validator report missing or unreadable log/result files.
+  }
 
   const result = await validateDelegationOutput(logPath, resultPath, delegationId);
 

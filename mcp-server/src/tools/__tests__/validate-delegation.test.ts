@@ -9,6 +9,7 @@ import {
 
 const mockValidate = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
+const mockRealpath = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/delegation-validation.js', () => ({
   validateDelegationOutput: mockValidate,
@@ -16,16 +17,22 @@ vi.mock('../../utils/delegation-validation.js', () => ({
 vi.mock('../../utils/project-target.js', () => ({
   resolveManagedProjectTarget: mockResolve,
 }));
+vi.mock('fs/promises', () => ({
+  realpath: mockRealpath,
+}));
 
 describe('runValidateDelegation', () => {
   beforeEach(() => {
     mockValidate.mockReset();
     mockResolve.mockReset();
+    mockRealpath.mockReset();
     mockResolve.mockResolvedValue({ projectPath: '/tmp/project' });
+    mockRealpath.mockImplementation(async (path: string) => path);
   });
   afterEach(() => {
     mockValidate.mockRestore();
     mockResolve.mockRestore();
+    mockRealpath.mockRestore();
   });
 
   it('returns error when delegation_id is missing', async () => {
@@ -37,6 +44,19 @@ describe('runValidateDelegation', () => {
     const result = await runValidateDelegationActual({ delegation_id: '../escape' });
     expect(result).toContain('must be a single relative path segment');
     expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockRealpath).not.toHaveBeenCalled();
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('rejects delegation targets that resolve outside the delegations directory', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockResolvedValueOnce('/tmp/outside/log.md')
+      .mockResolvedValueOnce('/tmp/outside/result.md');
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-escape' });
+
+    expect(result).toContain('resolves outside the delegations directory');
     expect(mockValidate).not.toHaveBeenCalled();
   });
 

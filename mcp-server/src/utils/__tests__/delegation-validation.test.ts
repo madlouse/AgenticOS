@@ -50,4 +50,21 @@ describe('validateDelegationOutput', () => {
     expect(result.result_pass).toBe(false);
     expect(result.errors).toContain(`result file not found or unreadable at ${resultPath}`);
   });
+
+  it('returns a blocking error when log.md cannot be read', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'agenticos-delegation-'));
+    tempDirs.push(dir);
+
+    const delegationId = 'delegation-003';
+    const logPath = join(dir, 'missing-log.md');
+    const resultPath = join(dir, 'result.md');
+
+    await writeFile(resultPath, makeDelegationResult(delegationId), 'utf-8');
+
+    const result = await validateDelegationOutput(logPath, resultPath, delegationId);
+
+    expect(result.pass).toBe(false);
+    expect(result.log_pass).toBe(false);
+    expect(result.errors).toContain(`log file not found or unreadable at ${logPath}`);
+  });
 });
