@@ -52,6 +52,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
           { path: '.context/state.yaml', canonical_source: 'projects/agenticos/.meta/templates/state.yaml' },
           { path: 'tasks/templates/agent-preflight-checklist.yaml', canonical_source: 'projects/agenticos/.meta/templates/agent-preflight-checklist.yaml' },
           { path: 'tasks/templates/issue-design-brief.md', canonical_source: 'projects/agenticos/.meta/templates/issue-design-brief.md' },
+          { path: 'tasks/templates/global-review-log.md', canonical_source: 'projects/agenticos/.meta/templates/global-review-log.md' },
           { path: 'tasks/templates/non-code-evaluation-rubric.yaml', canonical_source: 'projects/agenticos/.meta/templates/non-code-evaluation-rubric.yaml' },
           { path: 'tasks/templates/sub-agent-handoff.md', canonical_source: 'projects/agenticos/.meta/templates/sub-agent-handoff.md' },
           { path: 'tasks/templates/submission-evidence.md', canonical_source: 'projects/agenticos/.meta/templates/submission-evidence.md' },
@@ -67,6 +68,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         '.context/state.yaml',
         'tasks/templates/agent-preflight-checklist.yaml',
         'tasks/templates/issue-design-brief.md',
+        'tasks/templates/global-review-log.md',
         'tasks/templates/non-code-evaluation-rubric.yaml',
         'tasks/templates/sub-agent-handoff.md',
         'tasks/templates/submission-evidence.md',
@@ -95,6 +97,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   await writeFile(join(templateRoot, 'state.yaml'), '# Contract:\n# - Mutable operational working state only\n# - Keep current task, working memory, and latest guardrail evidence here\n# - Do not append raw conversation transcripts here\n# - Durable synthesis belongs in knowledge/\nsession:\n  id: "session-001"\n  started: "YYYY-MM-DDTHH:MM:SSZ"\n  agent: "claude-sonnet-4.6"\ncurrent_task:\n  id: null\n  title: null\n  status: "pending"\n  next_step: null\nworking_memory:\n  facts: []\n  decisions: []\n  pending: []\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\nloaded_context:\n  - ".project.yaml"\n', 'utf-8');
   await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.2\n', 'utf-8');
   await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n\n## Objective Synthesis\n- User-stated request:\n- Inferred end goal:\n- Operator signals / partial methods:\n- Constraints:\n- Contradictions or weak assumptions to resolve:\n- Non-goals:\n', 'utf-8');
+  await writeFile(join(templateRoot, 'global-review-log.md'), '# <!-- agenticos-template: v1 -->\n# Global Review Log\n\n<!-- agenticos:global-review-log:v2 -->\n\n<table>\n<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>\n<tbody>\n', 'utf-8');
   await writeFile(join(templateRoot, 'non-code-evaluation-rubric.yaml'), 'version: 0.1\nname: non-code-evaluation-rubric\n', 'utf-8');
   await writeFile(join(templateRoot, 'sub-agent-handoff.md'), '# Sub-Agent Handoff\n', 'utf-8');
   await writeFile(join(templateRoot, 'submission-evidence.md'), '# Submission Evidence\n', 'utf-8');
