@@ -20,6 +20,11 @@ export function isValidContextPublicationPolicy(value: unknown): value is Contex
   return value === 'local_private' || value === 'private_continuity' || value === 'public_distilled';
 }
 
+export function hasDeclaredContextPublicationPolicy(projectYaml: any): boolean {
+  const contract = getSourceControlContract(projectYaml);
+  return Boolean(contract && Object.prototype.hasOwnProperty.call(contract, 'context_publication_policy'));
+}
+
 export function validateContextPublicationPolicy(projectName: string, projectYaml: any): { ok: true; policy: ContextPublicationPolicy } | { ok: false; message: string } {
   const contract = getSourceControlContract(projectYaml);
   const topology = contract?.topology;
@@ -33,6 +38,10 @@ export function validateContextPublicationPolicy(projectName: string, projectYam
   }
 
   if (!isValidContextPublicationPolicy(policy)) {
+    if (topology === 'local_directory_only' && !hasDeclaredContextPublicationPolicy(projectYaml)) {
+      return { ok: true, policy: 'local_private' };
+    }
+
     return {
       ok: false,
       message: `Project "${projectName}" is missing source_control.context_publication_policy. Use "local_private", "private_continuity", or "public_distilled".`,

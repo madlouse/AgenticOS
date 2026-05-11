@@ -222,6 +222,32 @@ describe('recordSession', () => {
     expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('state.yaml'))).toBe(false);
   });
 
+  it('records successfully for legacy local_directory_only projects with missing publication policy', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'local_directory_only',
+        },
+      },
+    });
+
+    const result = await recordSession({ summary: 'legacy local-only record' });
+
+    expect(result).toContain('✅ Session recorded for "Test Project"');
+    expect(result).toContain('Raw conversation: .context/conversations/');
+    expect(result).toContain('State: .context/state.yaml (updated)');
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('state.yaml'))).toBe(true);
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalledWith(
+      'test-project',
+      expect.objectContaining({ last_recorded: expect.any(String) }),
+    );
+  });
+
   it('creates conversation file with correct date-based filename', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
 
