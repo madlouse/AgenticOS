@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
-import { appendFile, lstat, mkdir, unlink, writeFile } from 'fs/promises';
+import { appendFile, lstat, mkdir, open as openFile, readFile, rename, unlink, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { promisify } from 'util';
 import pLimit from 'p-limit';
@@ -10,6 +10,10 @@ export const AGENT_REVIEW_CONCURRENCY = 2;
 export const CLAUDE_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const DEFAULT_AGENT_TIMEOUT_MS = 180000;
 const ARCHITECTURE_AGENT_TIMEOUT_MS = 300000;
+const REVIEW_LOG_MARKER = '<!-- agenticos:global-review-log:v2 -->';
+const REVIEW_LOG_TABLE_HEADER = '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>';
+const MIGRATION_LOCK_ATTEMPTS = 600;
+const MIGRATION_LOCK_RETRY_MS = 100;
 
 function sanitize(value: string): string {
   return value
@@ -25,6 +29,28 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function escapeHtmlBlock(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildReviewLogHeader(): string {
+  return [
+    '# Global Review Log',
+    '',
+    REVIEW_LOG_MARKER,
+    '',
+    '<table>',
+    REVIEW_LOG_TABLE_HEADER,
+    '<tbody>',
+    '',
+  ].join('\n');
 }
 
 function buildReviewLogRow(
@@ -64,6 +90,68 @@ function buildReviewLogRow(
   ].join('');
 }
 
+function buildLegacyMigrationRow(legacyContent: string, now: string): string {
+  const date = now.split('T')[0];
+
+  return [
+    '<tr>',
+    '<td>legacy<details><summary>Details</summary>',
+    '<p>Legacy markdown review log content preserved during one-time migration.</p>',
+    `<pre>${escapeHtmlBlock(legacyContent)}</pre>`,
+    '</details></td>',
+    '<td>Legacy log</td>',
+    '<td><strong>MIGRATED</strong></td>',
+    '<td>0</td>',
+    `<td>${date}</td>`,
+    '</tr>\n',
+  ].join('');
+}
+
+function stripMarkdown(value: string): string {
+  return value.replace(/\*\*/g, '').trim();
+}
+
+function isSafeReviewUrl(url: string, prNumber: string): boolean {
+  return url === `https://github.com/madlouse/AgenticOS/pull/${prNumber}`;
+}
+
+function buildLegacySummaryRow(line: string, now: string): string | null {
+  const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+  if (cells.length < 5 || cells[0] === 'PR' || /^-+$/.test(cells[0])) {
+    return null;
+  }
+
+  const prMatch = cells[0].match(/\[#(\d+)\]\(([^)]+)\)/);
+  const prCell = prMatch && isSafeReviewUrl(prMatch[2], prMatch[1])
+    ? `<a href="${escapeHtmlBlock(prMatch[2])}">#${prMatch[1]}</a>`
+    : escapeHtml(stripMarkdown(cells[0]));
+  const date = stripMarkdown(cells[4]) || now.split('T')[0];
+
+  return [
+    '<tr>',
+    `<td>${prCell}<details><summary>Details</summary><p>Migrated from legacy markdown summary row.</p><pre>${escapeHtmlBlock(line)}</pre></details></td>`,
+    `<td>${escapeHtml(stripMarkdown(cells[1]))}</td>`,
+    `<td><strong>${escapeHtml(stripMarkdown(cells[2]))}</strong></td>`,
+    `<td>${escapeHtml(stripMarkdown(cells[3]))}</td>`,
+    `<td>${escapeHtml(date)}</td>`,
+    '</tr>\n',
+  ].join('');
+}
+
+function buildLegacyMigrationRows(legacyContent: string, now: string): string {
+  const migratedRows = legacyContent
+    .split('\n')
+    .map((line) => buildLegacySummaryRow(line, now))
+    .filter((row): row is string => row !== null);
+
+  return migratedRows.join('') + buildLegacyMigrationRow(legacyContent, now);
+}
+
+function isCanonicalReviewLog(content: string): boolean {
+  return content.includes(REVIEW_LOG_MARKER) ||
+    (content.includes(REVIEW_LOG_TABLE_HEADER) && content.includes('<tbody>'));
+}
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -81,6 +169,76 @@ async function assertNotSymlink(path: string): Promise<void> {
     }
     throw err;
   }
+}
+
+async function readReviewLogPrefix(path: string): Promise<string> {
+  const handle = await openFile(path, 'r');
+  try {
+    const buffer = Buffer.alloc(4096);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, bytesRead).toString('utf-8');
+  } finally {
+    await handle.close();
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
+async function ensureCanonicalReviewLog(reviewLogPath: string, now: string): Promise<void> {
+  try {
+    await writeFile(reviewLogPath, buildReviewLogHeader(), { encoding: 'utf-8', flag: 'wx' });
+    return;
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code !== 'EEXIST') {
+      throw err;
+    }
+  }
+
+  if (isCanonicalReviewLog(await readReviewLogPrefix(reviewLogPath))) {
+    return;
+  }
+
+  const lockPath = `${reviewLogPath}.migration.lock`;
+  for (let attempt = 0; attempt < MIGRATION_LOCK_ATTEMPTS; attempt += 1) {
+    try {
+      await writeFile(lockPath, `${process.pid}\n`, { encoding: 'utf-8', flag: 'wx' });
+      try {
+        if (isCanonicalReviewLog(await readReviewLogPrefix(reviewLogPath))) {
+          return;
+        }
+        const existing = await readFile(reviewLogPath, 'utf-8');
+        const tempPath = `${reviewLogPath}.migration.${process.pid}.${randomUUID()}.tmp`;
+        try {
+          await writeFile(
+            tempPath,
+            buildReviewLogHeader() + buildLegacyMigrationRows(existing, now),
+            'utf-8',
+          );
+          await rename(tempPath, reviewLogPath);
+        } catch (err) {
+          await unlink(tempPath).catch(() => {/* ignore */});
+          throw err;
+        }
+        return;
+      } finally {
+        await unlink(lockPath).catch(() => {/* ignore */});
+      }
+    } catch (err) {
+      const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+      if (code !== 'EEXIST') {
+        throw err;
+      }
+      await sleep(MIGRATION_LOCK_RETRY_MS);
+      if (isCanonicalReviewLog(await readReviewLogPrefix(reviewLogPath))) {
+        return;
+      }
+    }
+  }
+
+  throw new Error(`Timed out waiting for review log migration lock: ${lockPath}`);
 }
 
 // Agent role definitions for multi-agent review
@@ -363,25 +521,7 @@ export async function persistReviewLog(
   await assertNotSymlink(tasksDir);
   await assertNotSymlink(reviewLogPath);
 
-  try {
-    await writeFile(
-      reviewLogPath,
-      [
-        '# Global Review Log',
-        '',
-        '<table>',
-        '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>',
-        '<tbody>',
-        '',
-      ].join('\n'),
-      { encoding: 'utf-8', flag: 'wx' },
-    );
-  } catch (err) {
-    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
-    if (code !== 'EEXIST') {
-      throw err;
-    }
-  }
+  await ensureCanonicalReviewLog(reviewLogPath, now);
 
   await appendFile(reviewLogPath, buildReviewLogRow(result, now), 'utf-8');
   return reviewLogPath;

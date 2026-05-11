@@ -10,6 +10,9 @@ Object.defineProperty(execMock, promisify.custom, {
 const appendFileMock = vi.fn();
 const lstatMock = vi.fn();
 const mkdirMock = vi.fn();
+const openFileMock = vi.fn();
+const readFileMock = vi.fn();
+const renameMock = vi.fn();
 const unlinkMock = vi.fn();
 const writeFileMock = vi.fn();
 const randomUUIDMock = vi.fn();
@@ -26,6 +29,9 @@ vi.mock('fs/promises', async () => ({
   appendFile: appendFileMock,
   lstat: lstatMock,
   mkdir: mkdirMock,
+  open: openFileMock,
+  readFile: readFileMock,
+  rename: renameMock,
   unlink: unlinkMock,
   writeFile: writeFileMock,
 }));
@@ -79,6 +85,22 @@ describe('multi-agent-review', () => {
 
     mkdirMock.mockReset();
     mkdirMock.mockResolvedValue(undefined);
+
+    openFileMock.mockReset();
+    openFileMock.mockImplementation(async () => ({
+      read: async (buffer: Buffer) => {
+        const content = '# Global Review Log\n\n<!-- agenticos:global-review-log:v2 -->\n\n<table>\n<tbody>\n';
+        buffer.write(content);
+        return { bytesRead: Buffer.byteLength(content) };
+      },
+      close: async () => undefined,
+    }));
+
+    readFileMock.mockReset();
+    readFileMock.mockResolvedValue('# Global Review Log\n\n<table>\n<tbody>\n');
+
+    renameMock.mockReset();
+    renameMock.mockResolvedValue(undefined);
 
     unlinkMock.mockReset();
     unlinkMock.mockResolvedValue(undefined);
@@ -309,7 +331,154 @@ describe('multi-agent-review', () => {
 
       const mod = await loadModule();
       await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).resolves.toBe('/repo/tasks/global-review-log.md');
+      expect(readFileMock).not.toHaveBeenCalled();
       expect(appendFileMock).toHaveBeenCalledTimes(1);
+      expect(writeFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('migrates legacy markdown review logs before appending new rows', async () => {
+      writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+      openFileMock.mockImplementation(async () => ({
+        read: async (buffer: Buffer) => {
+          const content = '# Global Review Log\n\n| PR | Agents | Recommendation | Findings | Date |\n';
+          buffer.write(content);
+          return { bytesRead: Buffer.byteLength(content) };
+        },
+        close: async () => undefined,
+      }));
+      readFileMock.mockResolvedValueOnce([
+        '# Global Review Log',
+        '',
+        '| PR | Agents | Recommendation | Findings | Date |',
+        '|---|---|---|---|---|',
+        '| [#1](https://github.com/madlouse/AgenticOS/pull/1) | Old Agent | **APPROVE** | 0 | 2026-05-10 |',
+      ].join('\n'));
+
+      const mod = await loadModule();
+      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
+
+      expect(writeFileMock).toHaveBeenNthCalledWith(
+        2,
+        '/repo/tasks/global-review-log.md.migration.lock',
+        expect.any(String),
+        expect.objectContaining({ flag: 'wx' }),
+      );
+      expect(writeFileMock).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('/repo/tasks/global-review-log.md.migration.'),
+        expect.stringContaining('Legacy markdown review log content preserved during one-time migration.'),
+        'utf-8',
+      );
+      expect(writeFileMock.mock.calls[2][1]).toContain('<!-- agenticos:global-review-log:v2 -->');
+      expect(writeFileMock.mock.calls[2][1]).toContain('<a href="https://github.com/madlouse/AgenticOS/pull/1">#1</a>');
+      expect(writeFileMock.mock.calls[2][1]).toContain('| [#1](https://github.com/madlouse/AgenticOS/pull/1) | Old Agent |');
+      expect(renameMock).toHaveBeenCalledWith(
+        expect.stringContaining('/repo/tasks/global-review-log.md.migration.'),
+        '/repo/tasks/global-review-log.md',
+      );
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves unsafe legacy markdown PR URLs as escaped text', async () => {
+      writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+      openFileMock.mockImplementation(async () => ({
+        read: async (buffer: Buffer) => {
+          const content = '# Global Review Log\n\n| PR | Agents | Recommendation | Findings | Date |\n';
+          buffer.write(content);
+          return { bytesRead: Buffer.byteLength(content) };
+        },
+        close: async () => undefined,
+      }));
+      readFileMock.mockResolvedValueOnce('| [#1](javascript:alert(1)) | Old Agent | **APPROVE** | 0 | 2026-05-10 |');
+
+      const mod = await loadModule();
+      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
+
+      const migratedContent = writeFileMock.mock.calls[2][1] as string;
+      expect(migratedContent).not.toContain('href="javascript:alert(1)"');
+      expect(migratedContent).toContain('javascript:alert?1?');
+    });
+
+    it('times out instead of deleting a contended migration lock', async () => {
+      vi.useFakeTimers();
+      writeFileMock
+        .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }))
+        .mockRejectedValue(Object.assign(new Error('locked'), { code: 'EEXIST' }));
+      openFileMock.mockImplementation(async () => ({
+        read: async (buffer: Buffer) => {
+          const content = '# Global Review Log\n\n| PR | Agents | Recommendation | Findings | Date |\n';
+          buffer.write(content);
+          return { bytesRead: Buffer.byteLength(content) };
+        },
+        close: async () => undefined,
+      }));
+      readFileMock.mockResolvedValueOnce('# Global Review Log\n');
+
+      const mod = await loadModule();
+      const persistPromise = mod.persistReviewLog(REVIEW_RESULT, '/repo');
+      const expectation = expect(persistPromise).rejects.toThrow('Timed out waiting for review log migration lock');
+      try {
+        await vi.advanceTimersByTimeAsync(60000);
+        await expectation;
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(unlinkMock).not.toHaveBeenCalledWith('/repo/tasks/global-review-log.md.migration.lock');
+      expect(renameMock).not.toHaveBeenCalled();
+    });
+
+    it('appends after a concurrent migration finishes while waiting on the lock', async () => {
+      vi.useFakeTimers();
+      writeFileMock
+        .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }))
+        .mockRejectedValueOnce(Object.assign(new Error('locked'), { code: 'EEXIST' }));
+      let prefixReadCount = 0;
+      openFileMock.mockImplementation(async () => ({
+        read: async (buffer: Buffer) => {
+          prefixReadCount += 1;
+          const content = prefixReadCount === 1
+            ? '# Global Review Log\n\n| PR | Agents | Recommendation | Findings | Date |\n'
+            : '# Global Review Log\n\n<!-- agenticos:global-review-log:v2 -->\n\n<table>\n<tbody>\n';
+          buffer.write(content);
+          return { bytesRead: Buffer.byteLength(content) };
+        },
+        close: async () => undefined,
+      }));
+
+      const mod = await loadModule();
+      const persistPromise = mod.persistReviewLog(REVIEW_RESULT, '/repo');
+      try {
+        await vi.advanceTimersByTimeAsync(100);
+        await expect(persistPromise).resolves.toBe('/repo/tasks/global-review-log.md');
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(readFileMock).not.toHaveBeenCalled();
+      expect(renameMock).not.toHaveBeenCalled();
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not treat arbitrary embedded tables as canonical review logs', async () => {
+      writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+      openFileMock.mockImplementation(async () => ({
+        read: async (buffer: Buffer) => {
+          const content = '# Notes\n\n<table><tbody><tr><td>not the review schema</td></tr></tbody></table>\n';
+          buffer.write(content);
+          return { bytesRead: Buffer.byteLength(content) };
+        },
+        close: async () => undefined,
+      }));
+      readFileMock.mockResolvedValueOnce('# Notes\n\n<table><tbody><tr><td>not the review schema</td></tr></tbody></table>\n');
+
+      const mod = await loadModule();
+      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
+
+      expect(renameMock).toHaveBeenCalledWith(
+        expect.stringContaining('/repo/tasks/global-review-log.md.migration.'),
+        '/repo/tasks/global-review-log.md',
+      );
     });
 
     it('refuses to write through symlinked log surfaces', async () => {
@@ -373,8 +542,8 @@ describe('multi-agent-review', () => {
       expect(maxActiveReviews).toBe(2);
 
       const claudeCallOptions = execAsyncMock.mock.calls
-        .filter(([command]) => (command as string).startsWith('command claude'))
-        .map(([, options]) => options as { timeout: number; maxBuffer: number });
+        .filter((call: unknown[]) => (call[0] as string).startsWith('command claude'))
+        .map((call: unknown[]) => call[1] as { timeout: number; maxBuffer: number });
 
       expect(claudeCallOptions).toContainEqual(expect.objectContaining({ timeout: 300000, maxBuffer: 10 * 1024 * 1024 }));
       expect(claudeCallOptions).toContainEqual(expect.objectContaining({ timeout: 180000, maxBuffer: 10 * 1024 * 1024 }));
