@@ -12,6 +12,11 @@ import sys
 
 project_fd = 3
 relative_path = sys.argv[1]
+delegations_depth = int(sys.argv[2])
+expected_root_dev = int(sys.argv[3])
+expected_root_ino = int(sys.argv[4])
+expected_file_dev = int(sys.argv[5])
+expected_file_ino = int(sys.argv[6])
 parts = [part for part in relative_path.split('/') if part not in ('', '.')]
 if not parts or any(part == '..' for part in parts):
     raise SystemExit(2)
@@ -22,11 +27,18 @@ try:
     current_fd = os.dup(project_fd)
     dir_fds.append(current_fd)
 
-    for part in parts[:-1]:
+    for index, part in enumerate(parts[:-1], start=1):
         current_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current_fd)
         dir_fds.append(current_fd)
+        if index == delegations_depth:
+            current_stat = os.fstat(current_fd)
+            if current_stat.st_dev != expected_root_dev or current_stat.st_ino != expected_root_ino:
+                raise SystemExit(3)
 
     file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=current_fd)
+    file_stat = os.fstat(file_fd)
+    if file_stat.st_dev != expected_file_dev or file_stat.st_ino != expected_file_ino:
+        raise SystemExit(4)
     with os.fdopen(file_fd, 'r', encoding='utf-8') as handle:
         sys.stdout.write(handle.read())
     file_fd = None
@@ -95,6 +107,10 @@ async function readDelegationFileContent(
 
   let projectRootHandle;
   try {
+    const delegationsRelativePath = relative(resolvedProjectPath, resolvedDelegationsRoot).replace(/\\/g, '/');
+    const delegationsDepth = delegationsRelativePath.split('/').filter((segment) => segment.length > 0).length;
+    const expectedDelegationsStat = await lstat(resolvedDelegationsRoot);
+    const expectedFileStat = await lstat(canonicalPath);
     const expectedProjectStat = await lstat(resolvedProjectPath);
     projectRootHandle = await open(resolvedProjectPath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     const openedProjectStat = await projectRootHandle.stat();
@@ -107,7 +123,16 @@ async function readDelegationFileContent(
 
     const command = spawnSync(
       'python3',
-      ['-c', SECURE_READ_SCRIPT, relativePath],
+      [
+        '-c',
+        SECURE_READ_SCRIPT,
+        relativePath,
+        String(delegationsDepth),
+        String(expectedDelegationsStat.dev),
+        String(expectedDelegationsStat.ino),
+        String(expectedFileStat.dev),
+        String(expectedFileStat.ino),
+      ],
       {
         encoding: 'utf-8',
         maxBuffer: 1024 * 1024,
