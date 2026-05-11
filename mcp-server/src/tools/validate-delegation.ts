@@ -51,6 +51,7 @@ finally:
 
 async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsRoot: string): Promise<{
   path: string | null;
+  stat: { dev: number; ino: number } | null;
   error: string | null;
 }> {
   try {
@@ -58,11 +59,14 @@ async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsR
     if (!isPathWithinRoot(resolvedPath, resolvedDelegationsRoot)) {
       return {
         path: null,
+        stat: null,
         error: '❌ delegation_id resolves outside the delegations directory',
       };
     }
+    const expectedStat = await lstat(resolvedPath);
     return {
       path: resolvedPath,
+      stat: { dev: expectedStat.dev, ino: expectedStat.ino },
       error: null,
     };
   } catch (error: any) {
@@ -70,11 +74,13 @@ async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsR
     if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') {
       return {
         path: null,
+        stat: null,
         error: `❌ delegation file not found or unreadable at ${filePath}`,
       };
     }
     return {
       path: null,
+      stat: null,
       error: '❌ failed to canonicalize delegation files',
     };
   }
@@ -82,8 +88,11 @@ async function canonicalizeDelegationFile(filePath: string, resolvedDelegationsR
 
 async function readDelegationFileContent(
   resolvedProjectPath: string,
+  expectedProjectStat: { dev: number; ino: number },
   resolvedDelegationsRoot: string,
+  expectedDelegationsStat: { dev: number; ino: number },
   canonicalPath: string,
+  expectedFileStat: { dev: number; ino: number },
   displayPath: string,
 ): Promise<{
   content: string | null;
@@ -109,9 +118,6 @@ async function readDelegationFileContent(
   try {
     const delegationsRelativePath = relative(resolvedProjectPath, resolvedDelegationsRoot).replace(/\\/g, '/');
     const delegationsDepth = delegationsRelativePath.split('/').filter((segment) => segment.length > 0).length;
-    const expectedDelegationsStat = await lstat(resolvedDelegationsRoot);
-    const expectedFileStat = await lstat(canonicalPath);
-    const expectedProjectStat = await lstat(resolvedProjectPath);
     projectRootHandle = await open(resolvedProjectPath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     const openedProjectStat = await projectRootHandle.stat();
     if (openedProjectStat.dev !== expectedProjectStat.dev || openedProjectStat.ino !== expectedProjectStat.ino) {
@@ -182,7 +188,9 @@ export async function runValidateDelegation(args: any): Promise<string> {
   const resultPath = `${delegationBase}/result.md`;
 
   let resolvedProjectPath: string;
+  let expectedProjectStat: { dev: number; ino: number };
   let resolvedDelegationsRoot: string;
+  let expectedDelegationsStat: { dev: number; ino: number };
   try {
     const [canonicalProjectPath, canonicalDelegationsRoot] = await Promise.all([
       realpath(projectPath),
@@ -193,6 +201,12 @@ export async function runValidateDelegation(args: any): Promise<string> {
     }
     resolvedProjectPath = canonicalProjectPath;
     resolvedDelegationsRoot = canonicalDelegationsRoot;
+    const [projectStat, delegationsStat] = await Promise.all([
+      lstat(canonicalProjectPath),
+      lstat(canonicalDelegationsRoot),
+    ]);
+    expectedProjectStat = { dev: projectStat.dev, ino: projectStat.ino };
+    expectedDelegationsStat = { dev: delegationsStat.dev, ino: delegationsStat.ino };
   } catch {
     return '❌ failed to resolve delegation root';
   }
@@ -209,8 +223,11 @@ export async function runValidateDelegation(args: any): Promise<string> {
 
   const logContent = await readDelegationFileContent(
     resolvedProjectPath,
+    expectedProjectStat,
     resolvedDelegationsRoot,
+    expectedDelegationsStat,
     validatedLogPath.path!,
+    validatedLogPath.stat!,
     logPath,
   );
   if (logContent.error) {
@@ -219,8 +236,11 @@ export async function runValidateDelegation(args: any): Promise<string> {
 
   const resultContent = await readDelegationFileContent(
     resolvedProjectPath,
+    expectedProjectStat,
     resolvedDelegationsRoot,
+    expectedDelegationsStat,
     validatedResultPath.path!,
+    validatedResultPath.stat!,
     resultPath,
   );
   if (resultContent.error) {
