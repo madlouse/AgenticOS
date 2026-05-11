@@ -399,14 +399,10 @@ describe('multi-agent-review', () => {
       expect(migratedContent).toContain('javascript:alert?1?');
     });
 
-    it('removes stale migration locks before retrying migration', async () => {
+    it('times out instead of deleting a contended migration lock', async () => {
       writeFileMock
         .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }))
-        .mockRejectedValueOnce(Object.assign(new Error('locked'), { code: 'EEXIST' }));
-      lstatMock
-        .mockResolvedValueOnce({ isSymbolicLink: () => false })
-        .mockResolvedValueOnce({ isSymbolicLink: () => false })
-        .mockResolvedValueOnce({ isSymbolicLink: () => false, mtimeMs: Date.now() - 20 * 60 * 1000 });
+        .mockRejectedValue(Object.assign(new Error('locked'), { code: 'EEXIST' }));
       openFileMock.mockImplementation(async () => ({
         read: async (buffer: Buffer) => {
           const content = '# Global Review Log\n\n| PR | Agents | Recommendation | Findings | Date |\n';
@@ -418,13 +414,10 @@ describe('multi-agent-review', () => {
       readFileMock.mockResolvedValueOnce('# Global Review Log\n');
 
       const mod = await loadModule();
-      await mod.persistReviewLog(REVIEW_RESULT, '/repo');
+      await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).rejects.toThrow('Timed out waiting for review log migration lock');
 
-      expect(unlinkMock).toHaveBeenCalledWith('/repo/tasks/global-review-log.md.migration.lock');
-      expect(renameMock).toHaveBeenCalledWith(
-        expect.stringContaining('/repo/tasks/global-review-log.md.migration.'),
-        '/repo/tasks/global-review-log.md',
-      );
+      expect(unlinkMock).not.toHaveBeenCalledWith('/repo/tasks/global-review-log.md.migration.lock');
+      expect(renameMock).not.toHaveBeenCalled();
     });
 
     it('does not treat arbitrary embedded tables as canonical review logs', async () => {
