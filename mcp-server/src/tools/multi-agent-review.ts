@@ -1,12 +1,86 @@
+import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
-import { readFile, writeFile } from 'fs/promises';
+import { appendFile, lstat, mkdir, unlink, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { promisify } from 'util';
+import pLimit from 'p-limit';
 
 const execAsync = promisify(exec);
+export const AGENT_REVIEW_CONCURRENCY = 2;
+export const CLAUDE_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const DEFAULT_AGENT_TIMEOUT_MS = 180000;
+const ARCHITECTURE_AGENT_TIMEOUT_MS = 300000;
 
 function sanitize(value: string): string {
-  return value.replace(/[`*_~[\]()#>]/g, '?').substring(0, 500);
+  return value
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[`*_~[\]()#>]/g, '?')
+    .substring(0, 500);
+}
+
+function escapeHtml(value: string): string {
+  return sanitize(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildReviewLogRow(
+  result: MultiAgentReviewResult,
+  now: string,
+): string {
+  const agentNames = result.reviews.map((r) => sanitize(r.agent_name)).join(', ');
+  const findingCount = result.reviews.reduce((sum, r) => sum + r.findings.length, 0);
+  const date = now.split('T')[0];
+  const detailSections = result.reviews.map((review) => {
+    const findings = review.findings.length > 0
+      ? `<ul>${review.findings.map((finding) => `<li>${escapeHtml(finding)}</li>`).join('')}</ul>`
+      : '<p><em>none</em></p>';
+    const recommendations = review.recommendations.length > 0
+      ? `<ul>${review.recommendations.map((recommendation) => `<li>${escapeHtml(recommendation)}</li>`).join('')}</ul>`
+      : '<p><em>none</em></p>';
+    const status = review.status === 'ok' ? 'OK' : 'ERROR';
+
+    return [
+      `<section><strong>${status} ${escapeHtml(review.agent_name)}</strong></section>`,
+      `<p>${escapeHtml(review.summary)}</p>`,
+      `<p><strong>Findings (${review.findings.length}):</strong></p>`,
+      findings,
+      `<p><strong>Recommendations (${review.recommendations.length}):</strong></p>`,
+      recommendations,
+    ].join('');
+  }).join('<hr />');
+
+  return [
+    '<tr>',
+    `<td><a href="https://github.com/madlouse/AgenticOS/pull/${result.pr_number}">#${result.pr_number}</a><details><summary>Details</summary>${detailSections}</details></td>`,
+    `<td>${escapeHtml(agentNames)}</td>`,
+    `<td><strong>${escapeHtml(result.overall_recommendation)}</strong></td>`,
+    `<td>${findingCount}</td>`,
+    `<td>${date}</td>`,
+    '</tr>\n',
+  ].join('');
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+async function assertNotSymlink(path: string): Promise<void> {
+  try {
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Refusing to write review log through symlinked path: ${path}`);
+    }
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code === 'ENOENT') {
+      return;
+    }
+    throw err;
+  }
 }
 
 // Agent role definitions for multi-agent review
@@ -75,6 +149,16 @@ interface MultiAgentReviewResult {
 export function mapToClaudeAgentType(agent: string): string {
   const known = ['code-reviewer', 'security-auditor', 'qa-expert', 'architecture-reviewer', 'performance-engineer'];
   return known.includes(agent) ? agent : 'code-reviewer';
+}
+
+function getClaudeAgentTimeoutMs(agentType: string): number {
+  return agentType === 'architecture-reviewer'
+    ? ARCHITECTURE_AGENT_TIMEOUT_MS
+    : DEFAULT_AGENT_TIMEOUT_MS;
+}
+
+function buildPromptTempFilePath(tmpDir: string, pid: number, timestamp: number, uuid: string): string {
+  return `${tmpDir}/claude-agent-prompt-${pid}-${timestamp}-${uuid}.txt`;
 }
 
 async function runGh(repoPath: string, args: string): Promise<string> {
@@ -161,12 +245,12 @@ Format your response exactly as:
 (2-3 sentence assessment)`;
 }
 
-async function runClaudeAgent(
+export async function runClaudeAgent(
   agentType: string,
   prompt: string,
 ): Promise<{ findings: string[]; recommendations: string[]; summary: string }> {
   const tmpDir = process.env.TEMP_DIR || process.env.TMPDIR || '/tmp';
-  const tmpFile = `${tmpDir}/claude-agent-prompt-${process.pid}-${Date.now()}.txt`;
+  const tmpFile = buildPromptTempFilePath(tmpDir, process.pid, Date.now(), randomUUID());
 
   try {
     const agentFlag = mapToClaudeAgentType(agentType);
@@ -177,8 +261,8 @@ async function runClaudeAgent(
     // execFile doesn't invoke a shell, so 'command' builtin isn't available — use execAsync instead
     // Redirect stdin from /dev/null to prevent 'no stdin data received' warning
     const { stdout } = await execAsync(
-      `command claude --print --agent ${agentFlag} --system-prompt-file "${tmpFile}" . --dangerously-skip-permissions < /dev/null`,
-      { timeout: 120000, maxBuffer: 1024 * 1024 * 2 },
+      `command claude --print --agent ${agentFlag} --system-prompt-file ${shellQuote(tmpFile)} . --dangerously-skip-permissions < /dev/null`,
+      { timeout: getClaudeAgentTimeoutMs(agentType), maxBuffer: CLAUDE_MAX_BUFFER_BYTES },
     );
 
     const result = stdout.trim();
@@ -221,7 +305,6 @@ async function runClaudeAgent(
     };
   } finally {
     // Always clean up temp file
-    const { unlink } = await import('fs/promises');
     await unlink(tmpFile).catch(() => {/* ignore */});
   }
 }
@@ -264,7 +347,7 @@ export function aggregateResults(reviews: AgentReviewResult[]): {
   return { summary, recommendation };
 }
 
-async function persistReviewLog(
+export async function persistReviewLog(
   result: MultiAgentReviewResult,
   repoPath: string,
 ): Promise<string> {
@@ -275,62 +358,42 @@ async function persistReviewLog(
     throw new Error('Review log path escaped repository directory');
   }
   const now = new Date().toISOString();
+  const tasksDir = resolve(safeBase, 'tasks');
+  await mkdir(tasksDir, { recursive: true });
+  await assertNotSymlink(tasksDir);
+  await assertNotSymlink(reviewLogPath);
 
-  let existing: string[] = [];
   try {
-    const content = await readFile(reviewLogPath, 'utf-8');
-    existing = content.split('\n');
-  } catch {
-    existing = [
-      '# Global Review Log',
-      '',
-      '| PR | Agents | Recommendation | Findings | Date |',
-      '|---|---|---|---|---|',
-    ];
+    await writeFile(
+      reviewLogPath,
+      [
+        '# Global Review Log',
+        '',
+        '<table>',
+        '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>',
+        '<tbody>',
+        '',
+      ].join('\n'),
+      { encoding: 'utf-8', flag: 'wx' },
+    );
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code !== 'EEXIST') {
+      throw err;
+    }
   }
 
-  const agentNames = result.reviews.map((r) => sanitize(r.agent_name)).join(', ');
-  const findingCount = result.reviews.reduce((sum, r) => sum + r.findings.length, 0);
-  const date = now.split('T')[0];
-
-  const tableRow = `| [#${result.pr_number}](https://github.com/madlouse/AgenticOS/pull/${result.pr_number}) | ${agentNames} | **${result.overall_recommendation}** | ${findingCount} | ${date} |`;
-
-  const lastSepIdx = existing.lastIndexOf('|---|');
-  if (lastSepIdx !== -1) {
-    existing.splice(lastSepIdx + 1, 0, tableRow);
-  }
-
-  const newSection = [
-    '',
-    '---',
-    `## PR #${result.pr_number} — ${now}`,
-    '',
-    `**Agents:** ${agentNames} | **Overall:** ${result.overall_recommendation} | **Duration:** ${result.reviews.reduce((s, r) => s + r.duration_ms, 0)}ms`,
-    '',
-    ...result.reviews.map((r) => {
-      const status = r.status === 'ok' ? '✅' : '❌';
-      return [
-        `### ${status} ${sanitize(r.agent_name)}`,
-        '',
-        `**Summary:** ${sanitize(r.summary)}`,
-        '',
-        `**Findings (${r.findings.length}):**`,
-        ...(r.findings.length > 0 ? r.findings.map((f) => `- ${sanitize(f)}`) : ['_none_']),
-        '',
-        `**Recommendations (${r.recommendations.length}):**`,
-        ...(r.recommendations.length > 0 ? r.recommendations.map((r2) => `- ${sanitize(r2)}`) : ['_none_']),
-        '',
-      ].join('\n');
-    }),
-  ].join('\n');
-
-  const insertIdx = existing.indexOf('| PR | Agents | Recommendation | Findings | Date |');
-  if (insertIdx !== -1) {
-    existing.splice(insertIdx + 5, 0, newSection.trim());
-  }
-
-  await writeFile(reviewLogPath, existing.join('\n'), 'utf-8');
+  await appendFile(reviewLogPath, buildReviewLogRow(result, now), 'utf-8');
   return reviewLogPath;
+}
+
+export async function runAgentReviews<T>(
+  agentTypes: string[],
+  runner: (agentType: string) => Promise<T>,
+  concurrency = AGENT_REVIEW_CONCURRENCY,
+): Promise<PromiseSettledResult<T>[]> {
+  const limit = pLimit(concurrency);
+  return Promise.allSettled(agentTypes.map((agentType) => limit(() => runner(agentType))));
 }
 
 export async function runMultiAgentReview(args: MultiAgentReviewArgs): Promise<string> {
@@ -357,7 +420,7 @@ export async function runMultiAgentReview(args: MultiAgentReviewArgs): Promise<s
     const prDetails = await getPrDetails(repo_path, pr_number);
     const diff = await getFileDiff(repo_path, pr_number);
 
-    const reviewPromises = validAgents.map(async (agentType) => {
+    const settled = await runAgentReviews(validAgents, async (agentType) => {
       const agentRole = AGENT_ROLES[agentType];
       const agentStart = Date.now();
       const prompt = buildReviewPrompt(prDetails, diff, agentRole, pr_number);
@@ -374,8 +437,6 @@ export async function runMultiAgentReview(args: MultiAgentReviewArgs): Promise<s
         duration_ms: Date.now() - agentStart,
       } satisfies AgentReviewResult;
     });
-
-    const settled = await Promise.allSettled(reviewPromises);
 
     const reviews: AgentReviewResult[] = [];
     for (const outcome of settled) {
