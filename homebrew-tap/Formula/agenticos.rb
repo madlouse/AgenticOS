@@ -26,7 +26,8 @@ class Agenticos < Formula
     ohai ""
     ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --first-run"
     ohai "On macOS, first-run mode also enables launchctl persistence for GUI/session inheritance."
-    ohai "To audit the current bootstrap state without changes, use: agenticos-bootstrap --verify"
+    ohai "To audit the current Homebrew/runtime bootstrap state without changes, use: agenticos-config --validate"
+    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --all --verify"
     ohai "Or bootstrap your agent manually (see caveats below) and restart the tool."
   end
 
@@ -75,7 +76,7 @@ class Agenticos < Formula
 
       3. Restart the AI tool.
 
-      4. Verify the selected-client bootstrap state:
+      4. Verify the Homebrew/runtime bootstrap state:
            agenticos-config --validate
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
 

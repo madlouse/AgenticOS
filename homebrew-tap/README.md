@@ -22,7 +22,7 @@ Homebrew does **not**:
 - restart your AI tool
 - verify activation for you
 
-After installation, set `AGENTICOS_HOME` explicitly, bootstrap one officially supported agent, restart it, and verify the selected-client bootstrap state before relying on `agenticos_list`:
+After installation, set `AGENTICOS_HOME` explicitly, bootstrap one officially supported agent, restart it, and verify the Homebrew/runtime bootstrap state before relying on `agenticos_list`:
 
 ```bash
 # Example default workspace path for a Homebrew-only install
@@ -31,10 +31,6 @@ export AGENTICOS_HOME="$(brew --prefix)/var/agenticos"
 
 # Recommended: detect supported agents and register them automatically
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
-
-# Verify config and selected-client bootstrap state
-agenticos-config --validate
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
 
 # Claude Code
 claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
@@ -62,8 +58,15 @@ For Cursor, add this to `~/.cursor/mcp.json`:
 }
 ```
 
-Then restart the AI tool, confirm the server appears in the tool's MCP diagnostics, and verify `agenticos_list` works.
-If you prefer not to edit your shell profile, omit `--first-run` and use the explicit MCP commands below instead.
+Then restart the AI tool and verify the Homebrew/runtime bootstrap state:
+
+```bash
+agenticos-config --validate
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
+```
+
+Then confirm the server appears in the tool's MCP diagnostics and verify `agenticos_list` works.
+If you prefer not to edit your shell profile, omit `--first-run` and use the explicit MCP commands above instead.
 On macOS, `--first-run` also enables `launchctl` persistence so GUI/session processes inherit `AGENTICOS_HOME`.
 Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify` with the same flags to audit the current machine state without mutating it.
 
