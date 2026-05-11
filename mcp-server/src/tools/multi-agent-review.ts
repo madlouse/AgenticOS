@@ -12,6 +12,7 @@ const DEFAULT_AGENT_TIMEOUT_MS = 180000;
 const ARCHITECTURE_AGENT_TIMEOUT_MS = 300000;
 const REVIEW_LOG_MARKER = '<!-- agenticos:global-review-log:v2 -->';
 const REVIEW_LOG_TABLE_HEADER = '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>';
+const MIGRATION_LOCK_STALE_MS = 10 * 60 * 1000;
 
 function sanitize(value: string): string {
   return value
@@ -109,6 +110,10 @@ function stripMarkdown(value: string): string {
   return value.replace(/\*\*/g, '').trim();
 }
 
+function isSafeReviewUrl(url: string, prNumber: string): boolean {
+  return url === `https://github.com/madlouse/AgenticOS/pull/${prNumber}`;
+}
+
 function buildLegacySummaryRow(line: string, now: string): string | null {
   const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
   if (cells.length < 5 || cells[0] === 'PR' || /^-+$/.test(cells[0])) {
@@ -116,7 +121,7 @@ function buildLegacySummaryRow(line: string, now: string): string | null {
   }
 
   const prMatch = cells[0].match(/\[#(\d+)\]\(([^)]+)\)/);
-  const prCell = prMatch
+  const prCell = prMatch && isSafeReviewUrl(prMatch[2], prMatch[1])
     ? `<a href="${escapeHtmlBlock(prMatch[2])}">#${prMatch[1]}</a>`
     : escapeHtml(stripMarkdown(cells[0]));
   const date = stripMarkdown(cells[4]) || now.split('T')[0];
@@ -180,6 +185,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
+async function removeStaleMigrationLock(lockPath: string): Promise<boolean> {
+  try {
+    const stat = await lstat(lockPath);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Refusing to remove symlinked review log migration lock: ${lockPath}`);
+    }
+    if (Date.now() - stat.mtimeMs <= MIGRATION_LOCK_STALE_MS) {
+      return false;
+    }
+    await unlink(lockPath);
+    return true;
+  } catch (err) {
+    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
+    if (code === 'ENOENT') {
+      return true;
+    }
+    throw err;
+  }
+}
+
 async function ensureCanonicalReviewLog(reviewLogPath: string, now: string): Promise<void> {
   try {
     await writeFile(reviewLogPath, buildReviewLogHeader(), { encoding: 'utf-8', flag: 'wx' });
@@ -224,6 +249,9 @@ async function ensureCanonicalReviewLog(reviewLogPath: string, now: string): Pro
       const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
       if (code !== 'EEXIST') {
         throw err;
+      }
+      if (await removeStaleMigrationLock(lockPath)) {
+        continue;
       }
       await sleep(100);
       if (isCanonicalReviewLog(await readReviewLogPrefix(reviewLogPath))) {
