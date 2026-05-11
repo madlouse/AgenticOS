@@ -325,6 +325,15 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
   return lines;
 }
 
+function buildFilesystemAlignmentLines(projectPath: string): string[] {
+  return [
+    `🧰 Filesystem workdir: ${projectPath}`,
+    '⚠️ Project binding changed, but agenticos_switch did not change your shell cwd.',
+    '   Use this project path as workdir for every filesystem operation.',
+    '   Avoid relative-path edits until your shell cwd is aligned to this project.',
+  ];
+}
+
 export async function switchProject(args: any): Promise<string> {
   const { project } = args;
   const registry = await loadRegistry();
@@ -504,8 +513,9 @@ export async function switchProject(args: any): Promise<string> {
     lastRecorded: found.last_recorded,
     committedSnapshotAssessment,
   });
+  const filesystemAlignmentSummary = buildFilesystemAlignmentLines(found.path);
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
