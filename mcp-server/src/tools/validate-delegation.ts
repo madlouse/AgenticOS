@@ -1,5 +1,5 @@
 import { constants } from 'fs';
-import { open, realpath } from 'fs/promises';
+import { lstat, open, realpath } from 'fs/promises';
 import { basename, resolve } from 'path';
 import { validateDelegationContent } from '../utils/delegation-validation.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
@@ -42,7 +42,15 @@ async function readDelegationFileContent(canonicalPath: string, displayPath: str
 }> {
   let handle;
   try {
+    const expectedStat = await lstat(canonicalPath);
     handle = await open(canonicalPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const openedStat = await handle.stat();
+    if (openedStat.dev !== expectedStat.dev || openedStat.ino !== expectedStat.ino) {
+      return {
+        content: null,
+        error: '❌ delegation file changed during validation',
+      };
+    }
     return {
       content: await handle.readFile('utf-8'),
       error: null,

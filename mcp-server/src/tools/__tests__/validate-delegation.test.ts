@@ -10,6 +10,7 @@ import {
 const mockValidate = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
 const mockRealpath = vi.hoisted(() => vi.fn());
+const mockLstat = vi.hoisted(() => vi.fn());
 const mockOpen = vi.hoisted(() => vi.fn());
 
 vi.mock('../../utils/delegation-validation.js', () => ({
@@ -19,6 +20,7 @@ vi.mock('../../utils/project-target.js', () => ({
   resolveManagedProjectTarget: mockResolve,
 }));
 vi.mock('fs/promises', () => ({
+  lstat: mockLstat,
   open: mockOpen,
   realpath: mockRealpath,
 }));
@@ -28,11 +30,14 @@ describe('runValidateDelegation', () => {
     mockValidate.mockReset();
     mockResolve.mockReset();
     mockRealpath.mockReset();
+    mockLstat.mockReset();
     mockOpen.mockReset();
     mockResolve.mockResolvedValue({ projectPath: '/tmp/project' });
     mockRealpath.mockImplementation(async (path: string) => path);
+    mockLstat.mockResolvedValue({ dev: 1, ino: 2 });
     mockOpen.mockResolvedValue({
       readFile: vi.fn().mockResolvedValue('file content'),
+      stat: vi.fn().mockResolvedValue({ dev: 1, ino: 2 }),
       close: vi.fn().mockResolvedValue(undefined),
     });
   });
@@ -40,6 +45,7 @@ describe('runValidateDelegation', () => {
     mockValidate.mockRestore();
     mockResolve.mockRestore();
     mockRealpath.mockRestore();
+    mockLstat.mockRestore();
     mockOpen.mockRestore();
   });
 
@@ -132,6 +138,19 @@ describe('runValidateDelegation', () => {
     expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-006/result.md');
     expect(mockValidate).not.toHaveBeenCalled();
     expect(mockOpen).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a canonicalized file changes before it is read', async () => {
+    mockOpen.mockResolvedValueOnce({
+      readFile: vi.fn().mockResolvedValue('file content'),
+      stat: vi.fn().mockResolvedValue({ dev: 9, ino: 9 }),
+      close: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-009' });
+
+    expect(result).toContain('delegation file changed during validation');
+    expect(mockValidate).not.toHaveBeenCalled();
   });
 
   it('fails closed when canonicalization errors are not missing-file cases', async () => {
