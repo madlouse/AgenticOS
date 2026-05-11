@@ -428,6 +428,38 @@ describe('multi-agent-review', () => {
       expect(renameMock).not.toHaveBeenCalled();
     });
 
+    it('appends after a concurrent migration finishes while waiting on the lock', async () => {
+      vi.useFakeTimers();
+      writeFileMock
+        .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }))
+        .mockRejectedValueOnce(Object.assign(new Error('locked'), { code: 'EEXIST' }));
+      let prefixReadCount = 0;
+      openFileMock.mockImplementation(async () => ({
+        read: async (buffer: Buffer) => {
+          prefixReadCount += 1;
+          const content = prefixReadCount === 1
+            ? '# Global Review Log\n\n| PR | Agents | Recommendation | Findings | Date |\n'
+            : '# Global Review Log\n\n<!-- agenticos:global-review-log:v2 -->\n\n<table>\n<tbody>\n';
+          buffer.write(content);
+          return { bytesRead: Buffer.byteLength(content) };
+        },
+        close: async () => undefined,
+      }));
+
+      const mod = await loadModule();
+      const persistPromise = mod.persistReviewLog(REVIEW_RESULT, '/repo');
+      try {
+        await vi.advanceTimersByTimeAsync(100);
+        await expect(persistPromise).resolves.toBe('/repo/tasks/global-review-log.md');
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(readFileMock).not.toHaveBeenCalled();
+      expect(renameMock).not.toHaveBeenCalled();
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
+    });
+
     it('does not treat arbitrary embedded tables as canonical review logs', async () => {
       writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
       openFileMock.mockImplementation(async () => ({
