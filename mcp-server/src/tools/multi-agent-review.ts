@@ -18,15 +18,50 @@ function sanitize(value: string): string {
     .substring(0, 500);
 }
 
-function buildReviewSummaryRow(
+function escapeHtml(value: string): string {
+  return sanitize(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildReviewLogRow(
   result: MultiAgentReviewResult,
   now: string,
 ): string {
   const agentNames = result.reviews.map((r) => sanitize(r.agent_name)).join(', ');
   const findingCount = result.reviews.reduce((sum, r) => sum + r.findings.length, 0);
   const date = now.split('T')[0];
+  const detailSections = result.reviews.map((review) => {
+    const findings = review.findings.length > 0
+      ? `<ul>${review.findings.map((finding) => `<li>${escapeHtml(finding)}</li>`).join('')}</ul>`
+      : '<p><em>none</em></p>';
+    const recommendations = review.recommendations.length > 0
+      ? `<ul>${review.recommendations.map((recommendation) => `<li>${escapeHtml(recommendation)}</li>`).join('')}</ul>`
+      : '<p><em>none</em></p>';
+    const status = review.status === 'ok' ? 'OK' : 'ERROR';
 
-  return `| [#${result.pr_number}](https://github.com/madlouse/AgenticOS/pull/${result.pr_number}) | ${agentNames} | **${result.overall_recommendation}** | ${findingCount} | ${date} |\n`;
+    return [
+      `<section><strong>${status} ${escapeHtml(review.agent_name)}</strong></section>`,
+      `<p>${escapeHtml(review.summary)}</p>`,
+      `<p><strong>Findings (${review.findings.length}):</strong></p>`,
+      findings,
+      `<p><strong>Recommendations (${review.recommendations.length}):</strong></p>`,
+      recommendations,
+    ].join('');
+  }).join('<hr />');
+
+  return [
+    '<tr>',
+    `<td><a href="https://github.com/madlouse/AgenticOS/pull/${result.pr_number}">#${result.pr_number}</a><details><summary>Details</summary>${detailSections}</details></td>`,
+    `<td>${escapeHtml(agentNames)}</td>`,
+    `<td><strong>${escapeHtml(result.overall_recommendation)}</strong></td>`,
+    `<td>${findingCount}</td>`,
+    `<td>${date}</td>`,
+    '</tr>\n',
+  ].join('');
 }
 
 function shellQuote(value: string): string {
@@ -297,56 +332,15 @@ export function aggregateResults(reviews: AgentReviewResult[]): {
   return { summary, recommendation };
 }
 
-function formatReviewLogEntry(
-  result: MultiAgentReviewResult,
-  now: string,
-): string {
-  const agentNames = result.reviews.map((r) => sanitize(r.agent_name)).join(', ');
-  const findingCount = result.reviews.reduce((sum, r) => sum + r.findings.length, 0);
-  const date = now.split('T')[0];
-
-  return [
-    '',
-    '---',
-    `## PR #${result.pr_number} — ${now}`,
-    '',
-    `- Agents: ${agentNames}`,
-    `- Recommendation: **${result.overall_recommendation}**`,
-    `- Findings: ${findingCount}`,
-    `- Date: ${date}`,
-    `- Duration: ${result.reviews.reduce((s, r) => s + r.duration_ms, 0)}ms`,
-    '',
-    ...result.reviews.map((r) => {
-      const status = r.status === 'ok' ? 'OK' : 'ERROR';
-      return [
-        `### ${status} ${sanitize(r.agent_name)}`,
-        '',
-        `**Summary:** ${sanitize(r.summary)}`,
-        '',
-        `**Findings (${r.findings.length}):**`,
-        ...(r.findings.length > 0 ? r.findings.map((f) => `- ${sanitize(f)}`) : ['_none_']),
-        '',
-        `**Recommendations (${r.recommendations.length}):**`,
-        ...(r.recommendations.length > 0 ? r.recommendations.map((r2) => `- ${sanitize(r2)}`) : ['_none_']),
-        '',
-      ].join('\n');
-    }),
-  ].join('\n');
-}
-
 export async function persistReviewLog(
   result: MultiAgentReviewResult,
   repoPath: string,
 ): Promise<string> {
   const safeBase = resolve(repoPath);
   const reviewLogPath = resolve(safeBase, 'tasks/global-review-log.md');
-  const reviewDetailsPath = resolve(safeBase, 'tasks/global-review-log.details.md');
   // Guard: resolved path must stay within the repo directory
   if (!reviewLogPath.startsWith(safeBase + '/')) {
     throw new Error('Review log path escaped repository directory');
-  }
-  if (!reviewDetailsPath.startsWith(safeBase + '/')) {
-    throw new Error('Review detail log path escaped repository directory');
   }
   const now = new Date().toISOString();
   await mkdir(resolve(safeBase, 'tasks'), { recursive: true });
@@ -357,8 +351,9 @@ export async function persistReviewLog(
       [
         '# Global Review Log',
         '',
-        '| PR | Agents | Recommendation | Findings | Date |',
-        '|---|---|---|---|---|',
+        '<table>',
+        '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>',
+        '<tbody>',
         '',
       ].join('\n'),
       { encoding: 'utf-8', flag: 'wx' },
@@ -370,26 +365,7 @@ export async function persistReviewLog(
     }
   }
 
-  try {
-    await writeFile(
-      reviewDetailsPath,
-      [
-        '# Global Review Log Details',
-        '',
-        'Detailed review entries are appended chronologically.',
-        '',
-      ].join('\n'),
-      { encoding: 'utf-8', flag: 'wx' },
-    );
-  } catch (err) {
-    const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined;
-    if (code !== 'EEXIST') {
-      throw err;
-    }
-  }
-
-  await appendFile(reviewLogPath, buildReviewSummaryRow(result, now), 'utf-8');
-  await appendFile(reviewDetailsPath, formatReviewLogEntry(result, now), 'utf-8');
+  await appendFile(reviewLogPath, buildReviewLogRow(result, now), 'utf-8');
   return reviewLogPath;
 }
 

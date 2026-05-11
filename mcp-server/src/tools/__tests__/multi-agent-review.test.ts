@@ -261,13 +261,18 @@ describe('multi-agent-review', () => {
       const mod = await loadModule();
       await mod.persistReviewLog(REVIEW_RESULT, '/repo');
       expect(appendFileMock).toHaveBeenCalledWith(
-        '/repo/tasks/global-review-log.details.md',
-        expect.stringContaining('## PR #42'),
+        '/repo/tasks/global-review-log.md',
+        expect.stringContaining('<tr>'),
         'utf-8',
       );
       expect(appendFileMock).toHaveBeenCalledWith(
-        '/repo/tasks/global-review-log.details.md',
-        expect.stringContaining('### OK Code Reviewer'),
+        '/repo/tasks/global-review-log.md',
+        expect.stringContaining('<details><summary>Details</summary>'),
+        'utf-8',
+      );
+      expect(appendFileMock).toHaveBeenCalledWith(
+        '/repo/tasks/global-review-log.md',
+        expect.stringContaining('OK Code Reviewer'),
         'utf-8',
       );
     });
@@ -284,33 +289,20 @@ describe('multi-agent-review', () => {
         expect.stringContaining('# Global Review Log'),
         expect.objectContaining({ flag: 'wx' }),
       );
-      expect(writeFileMock).toHaveBeenNthCalledWith(
-        2,
-        '/repo/tasks/global-review-log.details.md',
-        expect.stringContaining('# Global Review Log Details'),
-        expect.objectContaining({ flag: 'wx' }),
-      );
-      expect(appendFileMock).toHaveBeenCalledTimes(2);
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
       expect(appendFileMock).toHaveBeenCalledWith(
         '/repo/tasks/global-review-log.md',
-        expect.stringContaining('| [#42]('),
-        'utf-8',
-      );
-      expect(appendFileMock).toHaveBeenCalledWith(
-        '/repo/tasks/global-review-log.details.md',
-        expect.stringContaining('## PR #42'),
+        expect.stringContaining('<a href="https://github.com/madlouse/AgenticOS/pull/42">#42</a>'),
         'utf-8',
       );
     });
 
     it('treats EEXIST during header creation as a harmless concurrent writer race', async () => {
-      writeFileMock
-        .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }))
-        .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+      writeFileMock.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
 
       const mod = await loadModule();
       await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).resolves.toBe('/repo/tasks/global-review-log.md');
-      expect(appendFileMock).toHaveBeenCalledTimes(2);
+      expect(appendFileMock).toHaveBeenCalledTimes(1);
     });
 
     it('runs the main review path with bounded orchestration and per-agent timeouts', async () => {
