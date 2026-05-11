@@ -12,7 +12,7 @@ const DEFAULT_AGENT_TIMEOUT_MS = 180000;
 const ARCHITECTURE_AGENT_TIMEOUT_MS = 300000;
 const REVIEW_LOG_MARKER = '<!-- agenticos:global-review-log:v2 -->';
 const REVIEW_LOG_TABLE_HEADER = '<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>';
-const MIGRATION_LOCK_ATTEMPTS = 10;
+const MIGRATION_LOCK_ATTEMPTS = 600;
 const MIGRATION_LOCK_RETRY_MS = 100;
 
 function sanitize(value: string): string {

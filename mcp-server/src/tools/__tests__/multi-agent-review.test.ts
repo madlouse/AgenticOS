@@ -400,6 +400,7 @@ describe('multi-agent-review', () => {
     });
 
     it('times out instead of deleting a contended migration lock', async () => {
+      vi.useFakeTimers();
       writeFileMock
         .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }))
         .mockRejectedValue(Object.assign(new Error('locked'), { code: 'EEXIST' }));
@@ -414,7 +415,14 @@ describe('multi-agent-review', () => {
       readFileMock.mockResolvedValueOnce('# Global Review Log\n');
 
       const mod = await loadModule();
-      await expect(mod.persistReviewLog(REVIEW_RESULT, '/repo')).rejects.toThrow('Timed out waiting for review log migration lock');
+      const persistPromise = mod.persistReviewLog(REVIEW_RESULT, '/repo');
+      const expectation = expect(persistPromise).rejects.toThrow('Timed out waiting for review log migration lock');
+      try {
+        await vi.advanceTimersByTimeAsync(60000);
+        await expectation;
+      } finally {
+        vi.useRealTimers();
+      }
 
       expect(unlinkMock).not.toHaveBeenCalledWith('/repo/tasks/global-review-log.md.migration.lock');
       expect(renameMock).not.toHaveBeenCalled();
