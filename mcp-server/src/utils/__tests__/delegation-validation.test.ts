@@ -6,7 +6,7 @@ import {
   makeDelegationLog,
   makeDelegationResult,
 } from '../../__tests__/fixtures/delegation.fixtures.js';
-import { validateDelegationOutput } from '../delegation-validation.js';
+import { validateDelegationContent, validateDelegationOutput } from '../delegation-validation.js';
 
 const tempDirs: string[] = [];
 
@@ -66,5 +66,61 @@ describe('validateDelegationOutput', () => {
     expect(result.pass).toBe(false);
     expect(result.log_pass).toBe(false);
     expect(result.errors).toContain(`log file not found or unreadable at ${logPath}`);
+  });
+});
+
+describe('validateDelegationContent', () => {
+  it('validates delegation log and result markdown content directly', () => {
+    const delegationId = 'delegation-content-001';
+
+    const result = validateDelegationContent(
+      makeDelegationLog(delegationId),
+      makeDelegationResult(delegationId),
+      delegationId,
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.log_pass).toBe(true);
+    expect(result.result_pass).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.log_checks.delegation_id_matches).toBe(true);
+    expect(result.result_checks.delegation_id_matches).toBe(true);
+  });
+
+  it('reports direct content validation failures without reading files', () => {
+    const delegationId = 'delegation-content-002';
+
+    const result = validateDelegationContent(
+      makeDelegationLog(delegationId, {
+        recorded_at: 'not-a-timestamp',
+        status: 'pending',
+        actions: '',
+      }),
+      makeDelegationResult('different-delegation', {
+        summary: 'short',
+        findings: '',
+        recommendations: '',
+      }),
+      delegationId,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.log_pass).toBe(false);
+    expect(result.result_pass).toBe(false);
+    expect(result.errors).toContain('log.md: recorded_at is not ISO 8601 (got not-a-timestamp)');
+    expect(result.errors).toContain('log.md: status must be one of completed|blocked|partial (got pending)');
+    expect(result.errors).toContain('result.md: Delegation ID mismatch (expected delegation-content-002, got different-delegation)');
+    expect(result.errors).toContain('result.md: Summary field is empty or too short');
+    expect(result.errors).toContain('result.md: ## Findings section is empty');
+    expect(result.errors).toContain('result.md: ## Recommendations section is empty');
+    expect(result.warnings).toContain('log.md: ## Actions Taken section is empty');
+    expect(result.log_checks.recorded_at_valid).toBe(false);
+    expect(result.log_checks.status_valid).toBe(false);
+    expect(result.log_checks.actions_taken_nonempty).toBe(false);
+    expect(result.result_checks.delegation_id_matches).toBe(false);
+    expect(result.result_checks.summary_nonempty).toBe(false);
+    expect(result.result_checks.findings_nonempty).toBe(false);
+    expect(result.result_checks.recommendations_nonempty).toBe(false);
   });
 });

@@ -169,6 +169,33 @@ describe('runValidateDelegation', () => {
     expect(mockValidate).not.toHaveBeenCalled();
   });
 
+  it('fails closed before secure read when a canonicalized file path is the delegations root', async () => {
+    mockRealpath
+      .mockResolvedValueOnce('/tmp/project')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations')
+      .mockResolvedValueOnce('/tmp/project/standards/.context/delegations/test-012/result.md');
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-012' });
+
+    expect(result).toContain('delegation file changed during validation');
+    expect(mockOpen).not.toHaveBeenCalled();
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('returns a result.md file error when secure read fails after log.md succeeds', async () => {
+    mockSpawnSync
+      .mockReturnValueOnce({ status: 0, stdout: 'log content', stderr: '', error: undefined })
+      .mockReturnValueOnce({ status: 1, stdout: '', stderr: 'secure read failed', error: undefined });
+
+    const result = await runValidateDelegationActual({ delegation_id: 'test-013' });
+
+    expect(result).toContain('delegation file not found or unreadable at /tmp/project/standards/.context/delegations/test-013/result.md');
+    expect(mockSpawnSync).toHaveBeenCalledTimes(2);
+    expect(mockValidate).not.toHaveBeenCalled();
+  });
+
   it('fails closed when the pinned project root changes before secure read', async () => {
     mockOpen.mockResolvedValueOnce({
       fd: 11,
