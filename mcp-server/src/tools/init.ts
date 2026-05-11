@@ -3,7 +3,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, patchRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
-import { buildProjectTopologyInitializationMessage, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
+import { buildProjectTopologyInitializationMessage, hasDeclaredContextPublicationPolicy, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 import { ensureCaseKnowledgeDirectories } from '../utils/case-knowledge.js';
 
@@ -174,6 +174,9 @@ export async function initProject(args: any): Promise<string> {
     const existingProjectYaml = await loadExistingProjectYaml(projectPath);
     if (!existingProjectYaml?.source_control?.topology) {
       return buildProjectTopologyInitializationMessage(name);
+    }
+    if (existingProjectYaml.source_control.topology === 'local_directory_only' && !hasDeclaredContextPublicationPolicy(existingProjectYaml)) {
+      return `Project "${name}" is missing source_control.context_publication_policy. Use "local_private", "private_continuity", or "public_distilled". Re-run agenticos_init with normalize_existing=true and the intended topology/publication contract.`;
     }
     const publicationValidation = validateContextPublicationPolicy(name, existingProjectYaml);
     if (!publicationValidation.ok) {

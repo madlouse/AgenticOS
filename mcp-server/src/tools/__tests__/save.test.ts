@@ -243,6 +243,10 @@ describe('saveState', () => {
 
     expect(result).toContain('State saved but no git repo found');
     expect(result).toContain('no git repo');
+    const stateYamlCall = fsPromisesMock.writeFile.mock.calls.find((c) => c[0].endsWith('state.yaml'));
+    expect(stateYamlCall).toBeDefined();
+    const writtenState = JSON.parse(stateYamlCall![1] as string);
+    expect(writtenState.session.last_backup).toBeDefined();
   });
 
   it('runs git add, commit, push when git repo exists', async () => {

@@ -241,6 +241,11 @@ describe('recordSession', () => {
     expect(result).toContain('✅ Session recorded for "Test Project"');
     expect(result).toContain('Raw conversation: .context/conversations/');
     expect(result).toContain('State: .context/state.yaml (updated)');
+    expect(fsPromisesMock.writeFile.mock.calls.some((call) => String(call[0]).endsWith('state.yaml'))).toBe(true);
+    expect(registryMock.patchProjectMetadata).toHaveBeenCalledWith(
+      'test-project',
+      expect.objectContaining({ last_recorded: expect.any(String) }),
+    );
   });
 
   it('creates conversation file with correct date-based filename', async () => {

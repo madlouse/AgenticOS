@@ -61,6 +61,10 @@ describe('initProject', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.AGENTICOS_HOME = '/home/testuser/AgenticOS';
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
+    yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
     // Default: simulate registry file does not exist (causes loadRegistry to return default)
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
@@ -393,7 +397,48 @@ describe('initProject', () => {
 
     const result = await initProject({ name: 'Test Project', topology: 'local_directory_only' });
 
-    expect(result).toContain('is not registered');
+    expect(result).toContain('has not completed source-control topology initialization');
+    expect(result).toContain('normalize_existing=true');
+  });
+
+  it('preserves normalize_existing guidance for a registered local_directory_only project missing publication policy', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockImplementation(async (path: any) => {
+      const normalizedPath = String(path);
+      if (normalizedPath.endsWith('registry.yaml')) {
+        return JSON.stringify({
+          version: '1.0.0',
+          last_updated: '2025-01-01T00:00:00.000Z',
+          active_project: 'test-project',
+          projects: [
+            {
+              id: 'test-project',
+              name: 'Test Project',
+              path: '/home/testuser/AgenticOS/projects/test-project',
+              status: 'active',
+              created: '2025-01-01',
+              last_accessed: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        });
+      }
+
+      if (normalizedPath.endsWith('.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: {
+            topology: 'local_directory_only',
+          },
+        });
+      }
+
+      throw new Error(`Unexpected readFile path: ${normalizedPath}`);
+    });
+
+    const result = await initProject({ name: 'Test Project', topology: 'local_directory_only' });
+
+    expect(result).toContain('context_publication_policy');
     expect(result).toContain('normalize_existing=true');
   });
 });
