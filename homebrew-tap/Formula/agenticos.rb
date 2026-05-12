@@ -3,9 +3,9 @@ require "language/node"
 class Agenticos < Formula
   desc "AI-native project management MCP server for coding agents"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.8/agenticos-mcp-0.4.8.tgz"
-  version "0.4.8"
-  sha256 "b9e2e9a46f7d544ae5371c814d551cd15e864ebbb4a551e6e496d4164f16aa00"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.18/agenticos-mcp-0.4.18.tgz"
+  version "0.4.18"
+  sha256 "TODO" # Will be updated by mislav/bump-homebrew-formula-action on next release
   license "MIT"
 
   depends_on "node"
