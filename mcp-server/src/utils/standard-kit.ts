@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile, rm, rename } from 'fs/promises';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import yaml from 'yaml';
@@ -70,6 +70,74 @@ export interface UpgradeCheckTemplateStatus {
   path: string;
   status: 'missing' | 'matches_canonical' | 'diverged_from_canonical';
   canonical_source: string;
+}
+
+// Classification types for template merge analysis
+export type ChangeClassification =
+  | 'template_marker_only'   // Only template version marker differs
+  | 'minor_version_bump'      // Version/comments only, no semantic changes
+  | 'project_customization'   // All changes are project-specific (preserve)
+  | 'standard_improvement'    // All changes are canonical improvements (merge)
+  | 'mixed'                   // Some project-specific, some standard
+  | 'unknown';               // Cannot determine classification
+
+export type MergeRecommendation =
+  | 'safe_to_merge'     // Auto-merge without review
+  | 'review_required'  // Human review needed before merge
+  | 'keep_as_is';      // Preserve local, do not merge
+
+export interface CompareDetail {
+  diff_lines: string[];
+  diff_truncated?: boolean;
+  diff_total_lines?: number;
+  classification: ChangeClassification;
+  merge_recommendation: MergeRecommendation;
+  project_specific_areas: string[];   // What will be preserved
+  standard_improvement_areas: string[]; // What will be merged
+  confidence: 'high' | 'medium' | 'low';
+  summary: string;
+}
+
+export interface UpgradeCheckTemplateStatusWithCompare extends UpgradeCheckTemplateStatus {
+  compare?: CompareDetail;
+}
+
+// Extended result when compare=true
+export interface UpgradeCheckResultWithCompare extends UpgradeCheckResult {
+  copied_templates: UpgradeCheckTemplateStatusWithCompare[];
+}
+
+// Merge result types
+export type MergeAction = 'merged' | 'kept_local' | 'review_required' | 'failed' | 'skipped';
+
+export interface MergeResult {
+  path: string;
+  action: MergeAction;
+  warning?: string;
+  error?: string;
+}
+
+export interface MergePreview {
+  total_files: number;
+  safe_to_merge: string[];
+  review_required: string[];
+  keep_as_is: string[];
+  results: MergeResult[];
+}
+
+export interface MergeOptions {
+  files?: string[];           // Specific files to merge, or all diverged
+  dry_run: boolean;           // Preview only, no mutation
+  auto_safe: boolean;         // Auto-merge only safe_to_merge items
+  interactive?: boolean;      // Stop for review_required files
+}
+
+export interface AdoptResultWithMerge extends Omit<AdoptResult, 'skipped_existing_templates'> {
+  merge_results: MergeResult[];
+  merge_preview?: MergePreview;  // Included when dry_run=true
+  merged_files: string[];
+  kept_local_files: string[];
+  failed_files: string[];
 }
 
 export interface UpgradeCheckResult {
@@ -301,6 +369,635 @@ function renderCopiedTemplate(destinationPath: string, templateContent: string, 
   return templateContent;
 }
 
+// ============================================================================
+// Template Merge Analysis — Classification Heuristics
+// ============================================================================
+
+// Project-specific fields that should be preserved during merge
+const PROJECT_SPECIFIC_FIELDS_PROJECT_YAML = new Set([
+  'meta.name', 'meta.id', 'meta.description', 'meta.created',
+  'source_control.github_repo', 'source_control.branch_strategy',
+  'source_control.topology', 'source_control.context_publication_policy',
+  'status.phase', 'status.last_updated', 'status.next_action',
+  'execution.source_repo_roots',
+]);
+
+// state.yaml fields that should NEVER be merged (operational state)
+const STATE_YAML_PRESERVE_ONLY = new Set([
+  'session', 'current_task', 'working_memory',
+  'guardrail_evidence', 'loaded_context',
+]);
+
+// Fields that are safe to merge even in state.yaml (schema contract)
+const STATE_YAML_MERGEABLE = new Set([
+  'memory_contract',
+]);
+
+interface ClassificationInput {
+  canonicalParsed: any;
+  localParsed: any;
+  filePath: string;
+}
+
+interface ClassificationResult {
+  classification: ChangeClassification;
+  merge_recommendation: MergeRecommendation;
+  project_specific_areas: string[];
+  standard_improvement_areas: string[];
+  confidence: 'high' | 'medium' | 'low';
+  summary: string;
+}
+
+function isObject(val: unknown): val is Record<string, unknown> {
+  return typeof val === 'object' && val !== null && !Array.isArray(val);
+}
+
+function getNestedValue(obj: any, path: string): unknown {
+  return path.split('.').reduce((current, key) => {
+    if (isObject(current)) return current[key];
+    return undefined;
+  }, obj);
+}
+
+function setNestedValue(obj: any, path: string, value: unknown): void {
+  const keys = path.split('.');
+  let current = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (!isObject(current[keys[i]])) current[keys[i]] = {};
+    current = current[keys[i]];
+  }
+  current[keys[keys.length - 1]] = value;
+}
+
+function computeFieldDiff(
+  canonical: any,
+  local: any,
+  basePath: string,
+  projectSpecificFields: Set<string>,
+  preserveOnlyFields: Set<string>,
+  mergeableFields: Set<string>
+): { projectSpecific: string[]; standardImprovement: string[]; skipped: string[] } {
+  const projectSpecific: string[] = [];
+  const standardImprovement: string[] = [];
+  const skipped: string[] = [];
+
+  // Handle arrays specially - compare by index
+  if (Array.isArray(canonical) || Array.isArray(local)) {
+    const canonicalArr = Array.isArray(canonical) ? canonical : [];
+    const localArr = Array.isArray(local) ? local : [];
+    const maxLen = Math.max(canonicalArr.length, localArr.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const path = basePath ? `${basePath}[${i}]` : `[${i}]`;
+      const canonicalVal = canonicalArr[i];
+      const localVal = localArr[i];
+
+      if (canonicalVal === undefined && localVal !== undefined) {
+        // Element only in local - project-specific addition
+        projectSpecific.push(path);
+      } else if (localVal === undefined && canonicalVal !== undefined) {
+        // Element only in canonical - standard improvement removal
+        standardImprovement.push(path);
+      } else if (isObject(canonicalVal) && isObject(localVal)) {
+        // Both are objects - recurse
+        const nested = computeFieldDiff(canonicalVal, localVal, path, projectSpecificFields, preserveOnlyFields, mergeableFields);
+        projectSpecific.push(...nested.projectSpecific);
+        standardImprovement.push(...nested.standardImprovement);
+        skipped.push(...nested.skipped);
+      } else if (JSON.stringify(canonicalVal) !== JSON.stringify(localVal)) {
+        // Values differ
+        if (projectSpecificFields.has(path) || projectSpecificFields.has(String(i))) {
+          projectSpecific.push(path);
+        } else {
+          standardImprovement.push(path);
+        }
+      }
+    }
+    return { projectSpecific, standardImprovement, skipped };
+  }
+
+  const allKeys = new Set<string>();
+  if (isObject(canonical)) Object.keys(canonical).forEach(k => allKeys.add(k));
+  if (isObject(local)) Object.keys(local).forEach(k => allKeys.add(k));
+
+  for (const key of allKeys) {
+    const path = basePath ? `${basePath}.${key}` : key;
+    const canonicalVal = isObject(canonical) ? canonical[key] : undefined;
+    const localVal = isObject(local) ? local[key] : undefined;
+
+    // Skip fields that should never be merged
+    if (preserveOnlyFields.has(key)) {
+      skipped.push(path);
+      continue;
+    }
+
+    // If canonical doesn't have this field but local does, it's project-specific
+    if (canonicalVal === undefined && localVal !== undefined) {
+      projectSpecific.push(path);
+      continue;
+    }
+
+    // If local doesn't have this field but canonical does, it's a standard improvement
+    if (localVal === undefined && canonicalVal !== undefined) {
+      standardImprovement.push(path);
+      continue;
+    }
+
+    // Both have the field - recurse for nested objects
+    if (isObject(canonicalVal) && isObject(localVal)) {
+      const nested = computeFieldDiff(canonicalVal, localVal, path, projectSpecificFields, preserveOnlyFields, mergeableFields);
+      projectSpecific.push(...nested.projectSpecific);
+      standardImprovement.push(...nested.standardImprovement);
+      skipped.push(...nested.skipped);
+    } else if (JSON.stringify(canonicalVal) !== JSON.stringify(localVal)) {
+      // Values differ - classify based on field name
+      if (projectSpecificFields.has(path) || projectSpecificFields.has(key)) {
+        projectSpecific.push(path);
+      } else {
+        standardImprovement.push(path);
+      }
+    }
+  }
+
+  return { projectSpecific, standardImprovement, skipped };
+}
+
+export function classifyYamlChanges(
+  canonicalContent: string,
+  localContent: string,
+  filePath: string
+): ClassificationResult {
+  const canonicalParsed = yaml.parse(canonicalContent);
+  const localParsed = yaml.parse(localContent);
+
+  // Special handling for state.yaml
+  if (filePath === '.context/state.yaml' || filePath.endsWith('/.context/state.yaml')) {
+    return classifyStateYamlChanges(canonicalParsed, localParsed);
+  }
+
+  // For .project.yaml, use project-specific field detection
+  if (filePath === '.project.yaml' || filePath.endsWith('/.project.yaml')) {
+    const diff = computeFieldDiff(
+      canonicalParsed, localParsed, '',
+      PROJECT_SPECIFIC_FIELDS_PROJECT_YAML,
+      new Set(), // No preserve-only fields for project.yaml
+      new Set()
+    );
+
+    if (diff.projectSpecific.length === 0 && diff.standardImprovement.length === 0) {
+      // No difference
+      return {
+        classification: 'template_marker_only',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: [],
+        confidence: 'high',
+        summary: 'Files are identical (ignoring formatting differences)',
+      };
+    }
+
+    if (diff.standardImprovement.length === 0 && diff.projectSpecific.length > 0) {
+      return {
+        classification: 'project_customization',
+        merge_recommendation: 'keep_as_is',
+        project_specific_areas: diff.projectSpecific,
+        standard_improvement_areas: [],
+        confidence: 'high',
+        summary: `All changes are project-specific fields: ${diff.projectSpecific.join(', ')}`,
+      };
+    }
+
+    if (diff.projectSpecific.length === 0 && diff.standardImprovement.length > 0) {
+      return {
+        classification: 'standard_improvement',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: diff.standardImprovement,
+        confidence: 'high',
+        summary: `All changes are canonical improvements: ${diff.standardImprovement.join(', ')}`,
+      };
+    }
+
+    return {
+      classification: 'mixed',
+      merge_recommendation: 'review_required',
+      project_specific_areas: diff.projectSpecific,
+      standard_improvement_areas: diff.standardImprovement,
+      confidence: 'medium',
+      summary: `Mixed changes: ${diff.projectSpecific.length} project-specific, ${diff.standardImprovement.length} standard improvements`,
+    };
+  }
+
+  // Generic YAML classification (for other templates like *.yaml in tasks/templates/)
+  const canonicalLines = canonicalContent.split('\n');
+  const localLines = localContent.split('\n');
+
+  // Check if only template marker differs
+  const templateMarkerRegex = /^#?\s*<!--\s*agenticos-template:\s*v(\d+)\s*-->/;
+  const canonicalMarkerMatch = canonicalContent.match(templateMarkerRegex);
+  const localMarkerMatch = localContent.match(templateMarkerRegex);
+
+  if (canonicalMarkerMatch && localMarkerMatch) {
+    const nonMarkerCanonical = canonicalLines.filter(l => !templateMarkerRegex.test(l.trim())).join('\n');
+    const nonMarkerLocal = localLines.filter(l => !templateMarkerRegex.test(l.trim())).join('\n');
+
+    if (nonMarkerCanonical === nonMarkerLocal) {
+      return {
+        classification: 'template_marker_only',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: [],
+        confidence: 'high',
+        summary: `Only template version marker differs: v${localMarkerMatch[1]} → v${canonicalMarkerMatch[1]}`,
+      };
+    }
+  }
+
+  // Try to parse and diff
+  if (isObject(canonicalParsed) && isObject(localParsed)) {
+    const diff = computeFieldDiff(canonicalParsed, localParsed, '', new Set(), new Set(), new Set());
+
+    if (diff.projectSpecific.length === 0 && diff.standardImprovement.length === 0) {
+      return {
+        classification: 'template_marker_only',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: [],
+        confidence: 'high',
+        summary: 'Files are semantically identical',
+      };
+    }
+
+    if (diff.standardImprovement.length === 0) {
+      return {
+        classification: 'project_customization',
+        merge_recommendation: 'keep_as_is',
+        project_specific_areas: diff.projectSpecific,
+        standard_improvement_areas: [],
+        confidence: 'medium',
+        summary: `Project-specific changes: ${diff.projectSpecific.join(', ')}`,
+      };
+    }
+
+    if (diff.projectSpecific.length === 0) {
+      return {
+        classification: 'standard_improvement',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: diff.standardImprovement,
+        confidence: 'medium',
+        summary: `Standard improvements: ${diff.standardImprovement.join(', ')}`,
+      };
+    }
+
+    return {
+      classification: 'mixed',
+      merge_recommendation: 'review_required',
+      project_specific_areas: diff.projectSpecific,
+      standard_improvement_areas: diff.standardImprovement,
+      confidence: 'medium',
+      summary: `Mixed changes: ${diff.projectSpecific.length} project, ${diff.standardImprovement.length} standard`,
+    };
+  }
+
+  // Fallback: string comparison
+  if (canonicalContent.trim() === localContent.trim()) {
+    return {
+      classification: 'template_marker_only',
+      merge_recommendation: 'safe_to_merge',
+      project_specific_areas: [],
+      standard_improvement_areas: [],
+      confidence: 'high',
+      summary: 'Content is identical (whitespace differences only)',
+    };
+  }
+
+  return {
+    classification: 'unknown',
+    merge_recommendation: 'review_required',
+    project_specific_areas: [],
+    standard_improvement_areas: [],
+    confidence: 'low',
+    summary: 'Cannot classify - file structure not recognized',
+  };
+}
+
+function classifyStateYamlChanges(
+  canonicalParsed: any,
+  localParsed: any
+): ClassificationResult {
+  // For state.yaml, only memory_contract is mergeable
+  // Everything else (session, current_task, working_memory, etc.) is preserve-only
+  const preserveOnlyFields = STATE_YAML_PRESERVE_ONLY;
+  const mergeableFields = STATE_YAML_MERGEABLE;
+
+  const allKeys = new Set<string>();
+  if (isObject(canonicalParsed)) Object.keys(canonicalParsed).forEach(k => allKeys.add(k));
+  if (isObject(localParsed)) Object.keys(localParsed).forEach(k => allKeys.add(k));
+
+  const projectSpecific: string[] = [];
+  const standardImprovement: string[] = [];
+  const skipped: string[] = [];
+
+  for (const key of allKeys) {
+    const canonicalVal = isObject(canonicalParsed) ? canonicalParsed[key] : undefined;
+    const localVal = isObject(localParsed) ? localParsed[key] : undefined;
+
+    if (preserveOnlyFields.has(key)) {
+      skipped.push(key);
+      continue;
+    }
+
+    if (mergeableFields.has(key)) {
+      // memory_contract - check if values differ
+      if (JSON.stringify(canonicalVal) !== JSON.stringify(localVal)) {
+        standardImprovement.push(key);
+      }
+      continue;
+    }
+
+    // Other fields - classify as project-specific
+    if (canonicalVal === undefined && localVal !== undefined) {
+      projectSpecific.push(key);
+    } else if (localVal === undefined && canonicalVal !== undefined) {
+      standardImprovement.push(key);
+    } else if (JSON.stringify(canonicalVal) !== JSON.stringify(localVal)) {
+      projectSpecific.push(key);
+    }
+  }
+
+  if (standardImprovement.length === 0 && projectSpecific.length === 0) {
+    return {
+      classification: 'template_marker_only',
+      merge_recommendation: 'safe_to_merge',
+      project_specific_areas: [],
+      standard_improvement_areas: [],
+      confidence: 'high',
+      summary: 'state.yaml is identical (only template marker may differ)',
+    };
+  }
+
+  if (standardImprovement.length === 0) {
+    return {
+      classification: 'project_customization',
+      merge_recommendation: 'keep_as_is',
+      project_specific_areas: projectSpecific,
+      standard_improvement_areas: [],
+      confidence: 'high',
+      summary: `All changes are operational state (preserve): ${projectSpecific.join(', ')}`,
+    };
+  }
+
+  // If memory_contract changed and all other changes are preserve-only
+  if (projectSpecific.length === 0 && standardImprovement.length > 0) {
+    return {
+      classification: 'standard_improvement',
+      merge_recommendation: 'safe_to_merge',
+      project_specific_areas: [],
+      standard_improvement_areas: standardImprovement,
+      confidence: 'high',
+      summary: `Schema contract changes (safe to merge): ${standardImprovement.join(', ')}`,
+    };
+  }
+
+  return {
+    classification: 'mixed',
+    merge_recommendation: 'review_required',
+    project_specific_areas: projectSpecific,
+    standard_improvement_areas: standardImprovement,
+    confidence: 'medium',
+    summary: `Mixed: preserve operational state (${projectSpecific.join(', ')}), merge schema (${standardImprovement.join(', ')})`,
+  };
+}
+
+// Markdown section classification
+const PROJECT_SPECIFIC_SECTIONS = new Set([
+  'project snapshot', 'key facts', 'current status', 'project overview',
+]);
+
+const STANDARD_IMPROVEMENT_SECTIONS = new Set([
+  'recommended entry documents', 'canonical layers',
+]);
+
+export function classifyMarkdownChanges(
+  canonicalContent: string,
+  localContent: string,
+  filePath: string
+): ClassificationResult {
+  // Check for template marker only difference
+  const templateMarkerRegex = /^#?\s*<!--\s*agenticos-template:\s*v(\d+)\s*-->/;
+  const canonicalMarkerMatch = canonicalContent.match(templateMarkerRegex);
+  const localMarkerMatch = localContent.match(templateMarkerRegex);
+
+  if (canonicalMarkerMatch && localMarkerMatch) {
+    // Strip markers and compare
+    const stripMarker = (c: string) => c
+      .split('\n')
+      .filter(l => !templateMarkerRegex.test(l.trim()))
+      .join('\n')
+      .trim();
+
+    const canonicalStripped = stripMarker(canonicalContent);
+    const localStripped = stripMarker(localContent);
+
+    if (canonicalStripped === localStripped) {
+      return {
+        classification: 'template_marker_only',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: [],
+        confidence: 'high',
+        summary: `Only template version marker differs: v${localMarkerMatch[1]} → v${canonicalMarkerMatch[1]}`,
+      };
+    }
+  }
+
+  // Parse sections by headings
+  interface Section { heading: string; content: string; level: number; }
+
+  const parseSections = (content: string): Section[] => {
+    const sections: Section[] = [];
+    const lines = content.split('\n');
+    let currentSection: Section | null = null;
+
+    for (const line of lines) {
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headingMatch) {
+        if (currentSection) sections.push(currentSection);
+        currentSection = { heading: headingMatch[2].toLowerCase(), content: '', level: headingMatch[1].length };
+      } else if (currentSection) {
+        currentSection.content += line + '\n';
+      }
+    }
+    if (currentSection) sections.push(currentSection);
+    return sections;
+  };
+
+  const canonicalSections = parseSections(canonicalContent);
+  const localSections = parseSections(localContent);
+
+  const canonicalByHeading = new Map(canonicalSections.map(s => [s.heading, s]));
+  const localByHeading = new Map(localSections.map(s => [s.heading, s]));
+
+  const allHeadings = new Set([...canonicalByHeading.keys(), ...localByHeading.keys()]);
+  const projectSpecificAreas: string[] = [];
+  const standardImprovementAreas: string[] = [];
+
+  for (const heading of allHeadings) {
+    const canonicalSection = canonicalByHeading.get(heading);
+    const localSection = localByHeading.get(heading);
+
+    if (!canonicalSection && localSection) {
+      // Section only in local - project-specific
+      projectSpecificAreas.push(heading);
+    } else if (canonicalSection && !localSection) {
+      // Section only in canonical - standard improvement
+      standardImprovementAreas.push(heading);
+    } else if (canonicalSection && localSection) {
+      // Section in both - check if content differs
+      if (canonicalSection.content.trim() !== localSection.content.trim()) {
+        // Classify based on heading name
+        if (PROJECT_SPECIFIC_SECTIONS.has(heading)) {
+          projectSpecificAreas.push(heading);
+        } else if (STANDARD_IMPROVEMENT_SECTIONS.has(heading)) {
+          standardImprovementAreas.push(heading);
+        } else {
+          // Unknown section - treat as mixed
+          projectSpecificAreas.push(heading);
+        }
+      }
+    }
+  }
+
+  if (standardImprovementAreas.length === 0 && projectSpecificAreas.length === 0) {
+    return {
+      classification: 'template_marker_only',
+      merge_recommendation: 'safe_to_merge',
+      project_specific_areas: [],
+      standard_improvement_areas: [],
+      confidence: 'high',
+      summary: 'Markdown content is semantically identical',
+    };
+  }
+
+  if (standardImprovementAreas.length === 0) {
+    return {
+      classification: 'project_customization',
+      merge_recommendation: 'keep_as_is',
+      project_specific_areas: projectSpecificAreas,
+      standard_improvement_areas: [],
+      confidence: 'high',
+      summary: `All changes are project-specific sections: ${projectSpecificAreas.join(', ')}`,
+    };
+  }
+
+  if (projectSpecificAreas.length === 0) {
+    return {
+      classification: 'standard_improvement',
+      merge_recommendation: 'safe_to_merge',
+      project_specific_areas: [],
+      standard_improvement_areas: standardImprovementAreas,
+      confidence: 'medium',
+      summary: `Standard improvements: ${standardImprovementAreas.join(', ')}`,
+    };
+  }
+
+  return {
+    classification: 'mixed',
+    merge_recommendation: 'review_required',
+    project_specific_areas: projectSpecificAreas,
+    standard_improvement_areas: standardImprovementAreas,
+    confidence: 'medium',
+    summary: `Mixed: preserve (${projectSpecificAreas.join(', ')}), merge (${standardImprovementAreas.join(', ')})`,
+  };
+}
+
+function computeUnifiedDiff(canonicalContent: string, localContent: string): string[] {
+  const canonicalLines = canonicalContent.split('\n');
+  const localLines = localContent.split('\n');
+  const diff: string[] = [];
+
+  // Simple line-by-line diff
+  const maxLen = Math.max(canonicalLines.length, localLines.length);
+  let i = 0;
+
+  while (i < maxLen) {
+    const cLine = canonicalLines[i];
+    const lLine = localLines[i];
+
+    if (cLine === lLine) {
+      diff.push(`  ${cLine || ''}`);
+    } else {
+      if (cLine !== undefined) diff.push(`- ${cLine}`);
+      if (lLine !== undefined) diff.push(`+ ${lLine}`);
+    }
+    i++;
+  }
+
+  return diff;
+}
+
+export function analyzeTemplateDiff(
+  canonicalContent: string,
+  localContent: string,
+  filePath: string
+): CompareDetail {
+  const isYaml = filePath.endsWith('.yaml') || filePath.endsWith('.yml');
+  const isMarkdown = filePath.endsWith('.md');
+
+  let result: ClassificationResult;
+
+  if (isYaml) {
+    result = classifyYamlChanges(canonicalContent, localContent, filePath);
+  } else if (isMarkdown) {
+    result = classifyMarkdownChanges(canonicalContent, localContent, filePath);
+  } else {
+    // Fallback: treat as plain text, only check for marker difference
+    const templateMarkerRegex = /^#?\s*<!--\s*agenticos-template:\s*v(\d+)\s*-->/;
+    const cMatch = canonicalContent.match(templateMarkerRegex);
+    const lMatch = localContent.match(templateMarkerRegex);
+
+    if (cMatch && lMatch && canonicalContent.replace(cMatch[0], '').trim() === localContent.replace(lMatch[0], '').trim()) {
+      result = {
+        classification: 'template_marker_only',
+        merge_recommendation: 'safe_to_merge',
+        project_specific_areas: [],
+        standard_improvement_areas: [],
+        confidence: 'high',
+        summary: `Only template marker differs`,
+      };
+    } else {
+      result = {
+        classification: 'unknown',
+        merge_recommendation: 'review_required',
+        project_specific_areas: [],
+        standard_improvement_areas: [],
+        confidence: 'low',
+        summary: 'Cannot classify file type',
+      };
+    }
+  }
+
+  const diffLines = computeUnifiedDiff(canonicalContent, localContent);
+  const truncated = diffLines.length > 100;
+
+  return {
+    diff_lines: diffLines.slice(0, 100),
+    diff_truncated: truncated,
+    diff_total_lines: diffLines.length,
+    classification: result.classification,
+    merge_recommendation: result.merge_recommendation,
+    project_specific_areas: result.project_specific_areas,
+    standard_improvement_areas: result.standard_improvement_areas,
+    confidence: result.confidence,
+    summary: result.summary,
+  };
+}
+
+// ============================================================================
+// End Template Merge Analysis
+// ============================================================================
+
 function getGeneratedEntries(manifest: StandardKitManifest): StandardKitEntry[] {
   return manifest.layers.generated_files?.entries || [];
 }
@@ -390,14 +1087,20 @@ export async function adoptStandardKit(args: { project_path?: string; project?: 
   };
 }
 
-export async function checkStandardKitUpgrade(args: { project_path?: string; project?: string; project_name?: string; project_description?: string }): Promise<UpgradeCheckResult> {
+export async function checkStandardKitUpgrade(args: {
+  project_path?: string;
+  project?: string;
+  project_name?: string;
+  project_description?: string;
+  compare?: boolean;
+}): Promise<UpgradeCheckResult | UpgradeCheckResultWithCompare> {
   const manifest = await loadStandardKitManifest();
   const projectPath = await resolveProjectPath(args.project_path, args.project);
   const project = await resolveProjectIdentity(projectPath, args.project_name, args.project_description);
 
   const missingRequiredFiles: string[] = [];
   const generatedFiles: UpgradeCheckGeneratedStatus[] = [];
-  const copiedTemplates: UpgradeCheckTemplateStatus[] = [];
+  const copiedTemplatesWithCompare: UpgradeCheckTemplateStatusWithCompare[] = [];
 
   for (const requiredPath of manifest.adoption?.required_files || []) {
     if (!existsSync(join(project.projectPath, requiredPath))) {
@@ -431,7 +1134,7 @@ export async function checkStandardKitUpgrade(args: { project_path?: string; pro
     if (!entry.canonical_source) continue;
     const destination = join(project.projectPath, entry.path);
     if (!existsSync(destination)) {
-      copiedTemplates.push({
+      copiedTemplatesWithCompare.push({
         path: entry.path,
         status: 'missing',
         canonical_source: entry.canonical_source,
@@ -441,14 +1144,25 @@ export async function checkStandardKitUpgrade(args: { project_path?: string; pro
 
     const destinationContent = readFileSync(destination, 'utf-8');
     const canonicalContent = readFileSync(resolveCanonicalSourcePath(entry.canonical_source), 'utf-8');
-    copiedTemplates.push({
+    const basicStatus: UpgradeCheckTemplateStatus = {
       path: entry.path,
       status: destinationContent === canonicalContent ? 'matches_canonical' : 'diverged_from_canonical',
       canonical_source: entry.canonical_source,
-    });
+    };
+
+    // Add compare detail if requested and file is diverged
+    if (args.compare && basicStatus.status === 'diverged_from_canonical') {
+      const compareDetail = analyzeTemplateDiff(canonicalContent, destinationContent, entry.path);
+      copiedTemplatesWithCompare.push({
+        ...basicStatus,
+        compare: compareDetail,
+      });
+    } else {
+      copiedTemplatesWithCompare.push(basicStatus);
+    }
   }
 
-  return {
+  const baseResult = {
     command: 'agenticos_standard_kit_upgrade_check',
     status: 'CHECKED',
     project_path: project.projectPath,
@@ -458,9 +1172,266 @@ export async function checkStandardKitUpgrade(args: { project_path?: string; pro
     kit_version: manifest.kit_version,
     missing_required_files: missingRequiredFiles,
     generated_files: generatedFiles,
-    copied_templates: copiedTemplates,
+    copied_templates: copiedTemplatesWithCompare,
   };
+
+  if (args.compare) {
+    return baseResult as UpgradeCheckResultWithCompare;
+  }
+  return baseResult as UpgradeCheckResult;
 }
+
+// ============================================================================
+// Standard-Kit Merge with Transaction Semantics
+// ============================================================================
+
+async function getMergeBackupDir(projectPath: string): Promise<string> {
+  const backupDir = join(projectPath, '.agent-workspace', 'merge-backup', `backup-${Date.now()}`);
+  await mkdir(backupDir, { recursive: true });
+  return backupDir;
+}
+
+async function backupFile(backupDir: string, filePath: string): Promise<string> {
+  const absolutePath = join(backupDir, filePath.replace(/[/\\]/g, '_'));
+  const content = await readFile(filePath, 'utf-8');
+  await writeFile(absolutePath, content, 'utf-8');
+  return absolutePath;
+}
+
+async function restoreFromBackup(backupDir: string, filePath: string): Promise<void> {
+  const backupPath = join(backupDir, filePath.replace(/[/\\]/g, '_'));
+  if (existsSync(backupPath)) {
+    const absolutePath = filePath;
+    await writeFile(absolutePath, await readFile(backupPath, 'utf-8'), 'utf-8');
+  }
+}
+
+async function cleanupBackup(backupDir: string): Promise<void> {
+  try {
+    await rm(backupDir, { recursive: true, force: true });
+  } catch {
+    // Best effort cleanup
+  }
+}
+
+function selectMergeStrategy(
+  classification: ChangeClassification,
+  mergeRecommendation: MergeRecommendation,
+  options: MergeOptions
+): 'merge' | 'keep' | 'skip' | 'review' {
+  if (mergeRecommendation === 'keep_as_is') {
+    return 'keep';
+  }
+
+  if (mergeRecommendation === 'safe_to_merge' && options.auto_safe) {
+    return 'merge';
+  }
+
+  if (mergeRecommendation === 'review_required') {
+    if (options.interactive) {
+      return 'review';
+    }
+    return 'skip';
+  }
+
+  if (mergeRecommendation === 'safe_to_merge' && !options.auto_safe) {
+    return 'skip'; // Default to skip unless auto_safe is enabled
+  }
+
+  return 'skip';
+}
+
+async function mergeSingleTemplate(
+  destinationPath: string,
+  canonicalPath: string,
+  classification: ChangeClassification,
+  filePath: string
+): Promise<MergeResult> {
+  try {
+    const canonicalContent = readFileSync(canonicalPath, 'utf-8');
+    const destinationContent = readFileSync(destinationPath, 'utf-8');
+
+    // For state.yaml, we need special handling - preserve operational state, merge only memory_contract
+    if (filePath === '.context/state.yaml' || filePath.endsWith('/.context/state.yaml')) {
+      const merged = mergeStateYamlContent(destinationContent, canonicalContent);
+      await writeFile(destinationPath, merged, 'utf-8');
+      return { path: filePath, action: 'merged' };
+    }
+
+    // For template_marker_only, just update the marker/content
+    if (classification === 'template_marker_only') {
+      await writeFile(destinationPath, canonicalContent, 'utf-8');
+      return { path: filePath, action: 'merged' };
+    }
+
+    // For standard_improvement, replace with canonical
+    if (classification === 'standard_improvement') {
+      await writeFile(destinationPath, canonicalContent, 'utf-8');
+      return { path: filePath, action: 'merged' };
+    }
+
+    // For mixed, we need field-level merge - for now, skip (review required)
+    return {
+      path: filePath,
+      action: 'review_required',
+      warning: 'Mixed changes require manual review',
+    };
+  } catch (error) {
+    return {
+      path: filePath,
+      action: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function mergeStateYamlContent(localContent: string, canonicalContent: string): string {
+  const local = yaml.parse(localContent) as any;
+  const canonical = yaml.parse(canonicalContent) as any;
+
+  // Preserve these operational fields
+  const preservedFields = ['session', 'current_task', 'working_memory', 'guardrail_evidence', 'loaded_context'];
+
+  for (const field of preservedFields) {
+    if (local[field] !== undefined) {
+      canonical[field] = local[field];
+    }
+  }
+
+  return yaml.stringify(canonical);
+}
+
+export async function mergeStandardKit(args: {
+  project_path?: string;
+  project?: string;
+  merge: MergeOptions;
+}): Promise<MergeResult[]> {
+  const manifest = await loadStandardKitManifest();
+  const projectPath = await resolveProjectPath(args.project_path, args.project);
+
+  // First, analyze all diverged templates
+  const upgradeResult = await checkStandardKitUpgrade({
+    project_path: projectPath,
+    compare: true,
+  }) as UpgradeCheckResultWithCompare;
+
+  const divergedTemplates = upgradeResult.copied_templates.filter(
+    t => t.status === 'diverged_from_canonical' && t.compare
+  );
+
+  // Filter by specific files if requested
+  const templatesToProcess = args.merge.files
+    ? divergedTemplates.filter(t => args.merge.files!.includes(t.path))
+    : divergedTemplates;
+
+  if (templatesToProcess.length === 0) {
+    return [];
+  }
+
+  // Dry-run mode: return preview without any mutations
+  if (args.merge.dry_run) {
+    const results: MergeResult[] = [];
+    for (const template of templatesToProcess) {
+      const strategy = selectMergeStrategy(
+        template.compare!.classification,
+        template.compare!.merge_recommendation,
+        args.merge
+      );
+
+      if (strategy === 'merge') {
+        results.push({ path: template.path, action: 'merged', warning: 'Would merge (dry-run)' });
+      } else if (strategy === 'keep') {
+        results.push({ path: template.path, action: 'kept_local', warning: 'Would preserve local (dry-run)' });
+      } else if (strategy === 'review') {
+        results.push({ path: template.path, action: 'review_required', warning: 'Would require review (dry-run)' });
+      } else {
+        results.push({ path: template.path, action: 'skipped', warning: 'Would skip (dry-run)' });
+      }
+    }
+    return results;
+  }
+
+  // Real merge with transaction semantics
+  let backupDir: string | null = null;
+  const results: MergeResult[] = [];
+  const filesToMerge: Array<{ template: typeof templatesToProcess[0]; strategy: string }> = [];
+
+  try {
+    // Phase 1: Compute strategy for each file and backup originals
+    backupDir = await getMergeBackupDir(projectPath);
+
+    for (const template of templatesToProcess) {
+      const strategy = selectMergeStrategy(
+        template.compare!.classification,
+        template.compare!.merge_recommendation,
+        args.merge
+      );
+
+      if (strategy === 'merge' || strategy === 'keep') {
+        const destinationPath = join(projectPath, template.path);
+        await backupFile(backupDir, destinationPath);
+      }
+
+      filesToMerge.push({ template, strategy });
+    }
+
+    // Phase 2: Execute merges
+    for (const { template, strategy } of filesToMerge) {
+      const destinationPath = join(projectPath, template.path);
+      const canonicalPath = resolveCanonicalSourcePath(template.canonical_source);
+
+      if (strategy === 'merge') {
+        const result = await mergeSingleTemplate(
+          destinationPath,
+          canonicalPath,
+          template.compare!.classification,
+          template.path
+        );
+        results.push(result);
+      } else if (strategy === 'keep') {
+        results.push({ path: template.path, action: 'kept_local' });
+      } else if (strategy === 'review') {
+        results.push({
+          path: template.path,
+          action: 'review_required',
+          warning: `Interactive review needed for ${template.path}: ${template.compare!.summary}`,
+        });
+      } else {
+        results.push({ path: template.path, action: 'skipped' });
+      }
+    }
+
+    // Phase 3: Cleanup backup on success
+    await cleanupBackup(backupDir);
+    backupDir = null; // Mark as cleaned
+
+  } catch (error) {
+    // Rollback on failure
+    if (backupDir) {
+      for (const { template } of filesToMerge) {
+        const destinationPath = join(projectPath, template.path);
+        try {
+          await restoreFromBackup(backupDir, destinationPath);
+        } catch {
+          // Best effort restore
+        }
+      }
+      await cleanupBackup(backupDir);
+    }
+
+    results.push({
+      path: '*',
+      action: 'failed',
+      error: `Transaction rolled back: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  return results;
+}
+
+// ============================================================================
+// End Standard-Kit Merge
+// ============================================================================
 
 export async function checkStandardKitConformance(args: { project_path?: string; project?: string; project_name?: string; project_description?: string }): Promise<StandardKitConformanceResult> {
   const manifest = await loadStandardKitManifest();

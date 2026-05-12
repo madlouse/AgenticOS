@@ -319,6 +319,157 @@ describe('standard kit commands', () => {
     expect(subAgentHandoffStatus).toMatchObject({ status: 'missing' });
   });
 
+  it('upgrade check with compare=true returns detailed diff and classification for diverged templates', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await mkdir(join(projectRoot, '.context'), { recursive: true });
+    await mkdir(join(projectRoot, 'tasks', 'templates'), { recursive: true });
+    await writeFile(join(projectRoot, '.project.yaml'), `meta:
+  name: Local Project
+  id: local-project
+  version: 1.0.0
+  created: "2026-01-01"
+  description: Local description
+source_control:
+  topology: github_versioned
+  github_repo: owner/repo
+status:
+  phase: implementation
+`, 'utf-8');
+    await writeFile(join(projectRoot, '.context', 'quick-start.md'), '# Quick Start\n\n## Project Snapshot\n- **Project**: Local\n', 'utf-8');
+
+    const result = JSON.parse(await runStandardKitUpgradeCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      compare: true,
+    })) as {
+      status: string;
+      copied_templates: Array<{
+        path: string;
+        status: string;
+        compare?: {
+          diff_lines: string[];
+          classification: string;
+          merge_recommendation: string;
+          project_specific_areas: string[];
+          standard_improvement_areas: string[];
+          confidence: string;
+          summary: string;
+        };
+      }>;
+    };
+
+    expect(result.status).toBe('CHECKED');
+
+    // Check that diverged templates have compare detail
+    const projectYamlCompare = result.copied_templates.find((t) => t.path === '.project.yaml');
+    expect(projectYamlCompare).toBeDefined();
+    expect(projectYamlCompare?.status).toBe('diverged_from_canonical');
+    expect(projectYamlCompare?.compare).toBeDefined();
+    expect(projectYamlCompare?.compare?.diff_lines).toBeDefined();
+    expect(projectYamlCompare?.compare?.diff_lines.length).toBeGreaterThan(0);
+    expect(['project_customization', 'mixed']).toContain(projectYamlCompare?.compare?.classification);
+
+    // quick-start.md should be diverged and have compare detail
+    const quickStartCompare = result.copied_templates.find((t) => t.path === '.context/quick-start.md');
+    expect(quickStartCompare).toBeDefined();
+    expect(quickStartCompare?.status).toBe('diverged_from_canonical');
+    expect(quickStartCompare?.compare).toBeDefined();
+  });
+
+  it('upgrade check with compare=true includes template_marker_only classification', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await mkdir(join(projectRoot, '.context'), { recursive: true });
+    // Create quick-start.md identical to canonical
+    await writeFile(
+      join(projectRoot, '.context', 'quick-start.md'),
+      await readFile(join(home, 'projects', 'agenticos', '.meta', 'templates', 'quick-start.md'), 'utf-8'),
+      'utf-8'
+    );
+
+    const result = JSON.parse(await runStandardKitUpgradeCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      compare: true,
+    })) as {
+      copied_templates: Array<{
+        path: string;
+        status: string;
+        compare?: {
+          classification: string;
+          merge_recommendation: string;
+        };
+      }>;
+    };
+
+    const quickStartCompare = result.copied_templates.find((t) => t.path === '.context/quick-start.md');
+    expect(quickStartCompare?.status).toBe('matches_canonical');
+    // matches_canonical should NOT have compare detail
+    expect(quickStartCompare?.compare).toBeUndefined();
+  });
+
+  it('conformance check fails when sub-agent-handoff.md is missing', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    // Run adopt but manually delete the sub-agent-handoff.md
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      project_description: 'Test project',
+    });
+
+    // Delete the sub-agent-handoff.md file to trigger FAIL
+    const { rm } = await import('fs/promises');
+    try {
+      await rm(join(projectRoot, 'tasks', 'templates', 'sub-agent-handoff.md'));
+    } catch { /* ignore if already deleted */ }
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+      behavior_checks: Array<{ behavior: string; status: string; summary: string }>;
+    };
+
+    // Should have at least one FAIL due to missing sub-agent-handoff
+    const subAgentCheck = result.behavior_checks.find((b) => b.behavior === 'sub_agent_context_inheritance');
+    expect(subAgentCheck).toBeDefined();
+    expect(subAgentCheck?.status).toBe('FAIL');
+    expect(subAgentCheck?.summary).toContain('missing');
+  });
+
+  it('conformance check fails when adapter surfaces are missing', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      project_description: 'Test project',
+    });
+
+    // Delete CLAUDE.md to trigger official_agent_adapter_surfaces FAIL
+    const { rm } = await import('fs/promises');
+    await rm(join(projectRoot, 'CLAUDE.md'));
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+      behavior_checks: Array<{ behavior: string; status: string; summary: string }>;
+    };
+
+    const adapterCheck = result.behavior_checks.find((b) => b.behavior === 'official_agent_adapter_surfaces');
+    expect(adapterCheck).toBeDefined();
+    expect(adapterCheck?.status).toBe('FAIL');
+  });
+
   it('adopt can resolve the session-local project and upgrades stale generated files while skipping current ones', async () => {
     const { home, projectRoot } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
