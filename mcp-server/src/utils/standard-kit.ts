@@ -88,6 +88,8 @@ export type MergeRecommendation =
 
 export interface CompareDetail {
   diff_lines: string[];
+  diff_truncated?: boolean;
+  diff_total_lines?: number;
   classification: ChangeClassification;
   merge_recommendation: MergeRecommendation;
   project_specific_areas: string[];   // What will be preserved
@@ -439,6 +441,41 @@ function computeFieldDiff(
   const standardImprovement: string[] = [];
   const skipped: string[] = [];
 
+  // Handle arrays specially - compare by index
+  if (Array.isArray(canonical) || Array.isArray(local)) {
+    const canonicalArr = Array.isArray(canonical) ? canonical : [];
+    const localArr = Array.isArray(local) ? local : [];
+    const maxLen = Math.max(canonicalArr.length, localArr.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const path = basePath ? `${basePath}[${i}]` : `[${i}]`;
+      const canonicalVal = canonicalArr[i];
+      const localVal = localArr[i];
+
+      if (canonicalVal === undefined && localVal !== undefined) {
+        // Element only in local - project-specific addition
+        projectSpecific.push(path);
+      } else if (localVal === undefined && canonicalVal !== undefined) {
+        // Element only in canonical - standard improvement removal
+        standardImprovement.push(path);
+      } else if (isObject(canonicalVal) && isObject(localVal)) {
+        // Both are objects - recurse
+        const nested = computeFieldDiff(canonicalVal, localVal, path, projectSpecificFields, preserveOnlyFields, mergeableFields);
+        projectSpecific.push(...nested.projectSpecific);
+        standardImprovement.push(...nested.standardImprovement);
+        skipped.push(...nested.skipped);
+      } else if (JSON.stringify(canonicalVal) !== JSON.stringify(localVal)) {
+        // Values differ
+        if (projectSpecificFields.has(path) || projectSpecificFields.has(String(i))) {
+          projectSpecific.push(path);
+        } else {
+          standardImprovement.push(path);
+        }
+      }
+    }
+    return { projectSpecific, standardImprovement, skipped };
+  }
+
   const allKeys = new Set<string>();
   if (isObject(canonical)) Object.keys(canonical).forEach(k => allKeys.add(k));
   if (isObject(local)) Object.keys(local).forEach(k => allKeys.add(k));
@@ -456,12 +493,7 @@ function computeFieldDiff(
 
     // If canonical doesn't have this field but local does, it's project-specific
     if (canonicalVal === undefined && localVal !== undefined) {
-      // Check if this is a project-specific field
-      if (projectSpecificFields.has(path) || projectSpecificFields.has(key)) {
-        projectSpecific.push(path);
-      } else {
-        projectSpecific.push(path);
-      }
+      projectSpecific.push(path);
       continue;
     }
 
@@ -947,9 +979,12 @@ export function analyzeTemplateDiff(
   }
 
   const diffLines = computeUnifiedDiff(canonicalContent, localContent);
+  const truncated = diffLines.length > 100;
 
   return {
-    diff_lines: diffLines.slice(0, 100), // Limit to first 100 lines
+    diff_lines: diffLines.slice(0, 100),
+    diff_truncated: truncated,
+    diff_total_lines: diffLines.length,
     classification: result.classification,
     merge_recommendation: result.merge_recommendation,
     project_specific_areas: result.project_specific_areas,
