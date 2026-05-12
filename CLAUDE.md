@@ -1,4 +1,4 @@
-<!-- agenticos-template: v12 -->
+<!-- agenticos-template: v14 -->
 # CLAUDE.md — AgenticOS
 
 ## Adapter Role
@@ -15,21 +15,25 @@ It must expose the same canonical policy as other agent adapters while allowing 
 ## Claude Runtime Notes
 
 - Claude CLI-managed user MCP config is the canonical Claude bootstrap surface.
-- Claude-specific stop hooks are optional local reminders, not canonical guardrails.
+- Claude-specific stop hooks remain optional local stop-hook reminders rather than canonical guardrails.
+- Optional local stop-hook reminders should call `agenticos-record-reminder`, not a source-checkout `tools/record-reminder.sh` path.
+- If migrating from a legacy source-checkout hook, replace `bash /path/to/tools/record-reminder.sh` with the installed `agenticos-record-reminder` command.
 ## Stop-Hook (Optional)
 
 If your runtime supports local stop hooks, configure `agenticos-record-reminder` as a local reminder. This is optional, not a canonical guardrail.
+
 ## Task Intake Rule
 
 **Before writing any code or plan, verify three things:**
 
-1. **Intent**: What is the user actually trying to achieve? (Not what they said — what they mean)
+1. **Intent**: What is the operator actually trying to achieve? (Not what they said — what they mean)
 2. **Data Source**: What source should I trust? Do not assume; verify.
 3. **Scope**: Can this be done in one session? If not, where are the checkpoints?
 
 If any of these cannot be answered clearly, **stop and ask**. Do not proceed with fuzzy assumptions.
 
 Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.
+
 ## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with `agenticos_status`; if no session project is bound or the bound project is not the intended one, call `agenticos_switch`.
@@ -52,8 +56,6 @@ If any guardrail command returns `BLOCK`, stop and resolve the blocking reason b
 
 **Before session ends**: Call `agenticos_record` with complete summary, then `agenticos_save` to commit to Git.
 
----
-
 ## Session Start Protocol
 
 On session start:
@@ -63,19 +65,3 @@ On session start:
 3. Read `.project.yaml`, `standards/.context/quick-start.md`, and `standards/.context/state.yaml`
 4. If implementation work requested, enter Guardrail Protocol before editing
 5. Greet with: project name, last progress, pending items, suggested next step
-
-## Design Philosophy
-
-**Why**: AI-assisted development loses context on session interruption, agent switch, or when tracing decisions.
-
-**Goal**: Make AI development traceable, resumable, and collaborative.
-
-**Mechanisms**:
-- Persistent Context: write decisions to disk, not just memory
-- Isolated Execution: Git worktree per issue for reproducibility
-- Progressive Disclosure: universal patterns in docs, contextual knowledge loaded on demand
-
-**What this means for you**:
-- Session ends with `agenticos_record` + `agenticos_save` — or context is lost
-- Implementation starts with guardrail checks — reproducibility infrastructure, not bureaucracy
-- Task intake verifies intent, data source, and scope before building the wrong thing
