@@ -1,6 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { mkdir, readFile, rename, writeFile, rm } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, isAbsolute } from 'path';
+import { join, isAbsolute, normalize } from 'path';
+import { execFile } from 'child_process';
 import yaml from 'yaml';
 import { getAgenticOSHome } from './registry.js';
 
@@ -28,8 +29,7 @@ export interface PwdAlignmentResult {
 let currentSessionProject: SessionProjectBinding | null = null;
 
 export function bindSessionProject(
-  binding: Omit<SessionProjectBinding, 'boundAt'> & { boundAt?: string },
-  options?: { persist?: boolean; sessionId?: string }
+  binding: Omit<SessionProjectBinding, 'boundAt'> & { boundAt?: string }
 ): SessionProjectBinding {
   const fullBinding: SessionProjectBinding = {
     ...binding,
@@ -37,8 +37,6 @@ export function bindSessionProject(
   };
 
   currentSessionProject = fullBinding;
-
-  // Async persistence is handled separately via bindSessionProjectAsync
   return fullBinding;
 }
 
@@ -79,8 +77,8 @@ export function validatePathSecurity(targetPath: string): { valid: boolean; erro
     return { valid: false, error: 'Path must be absolute' };
   }
 
-  // Must not contain .. traversal
-  const normalized = join(targetPath);
+  // Must not contain .. traversal - use normalize() to detect actual ..
+  const normalized = normalize(targetPath);
   if (normalized.includes('..')) {
     return { valid: false, error: 'Path traversal (..) is not allowed' };
   }
@@ -97,7 +95,7 @@ export function validatePathInAgenticosHome(targetPath: string): { valid: boolea
   }
 
   // Must not contain .. traversal
-  const normalized = join(targetPath);
+  const normalized = normalize(targetPath);
   if (normalized.includes('..')) {
     return { valid: false, error: 'Path traversal (..) is not allowed' };
   }
@@ -110,30 +108,76 @@ export function validatePathInAgenticosHome(targetPath: string): { valid: boolea
   return { valid: true };
 }
 
+function getSessionLockPath(sessionId: string): string {
+  return join(getAgenticOSHome(), '.agent-workspace', 'sessions', `${sessionId}.lock`);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withSessionLock<T>(sessionId: string, callback: () => Promise<T>): Promise<T> {
+  const lockPath = getSessionLockPath(sessionId);
+
+  let locked = false;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await mkdir(lockPath);
+      locked = true;
+      break;
+    } catch {
+      await sleep(10);
+    }
+  }
+
+  if (!locked) {
+    throw new Error(`failed to acquire session lock for ${sessionId}`);
+  }
+
+  try {
+    return await callback();
+  } finally {
+    // Clean up lock - ignore errors since lock cleanup is best-effort
+    try {
+      await rm(lockPath, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup error
+    }
+  }
+}
+
 async function writeSessionBindingAtomic(
   sessionId: string,
   binding: SessionBindingRecord
 ): Promise<void> {
-  const sessionsDir = join(
-    getAgenticOSHome(),
-    '.agent-workspace',
-    'sessions',
-    sessionId
-  );
-
   // Security check - AGENTICOS_HOME required for session binding
   const security = validatePathInAgenticosHome(binding.projectPath);
   if (!security.valid) {
     throw new Error(`Security validation failed: ${security.error}`);
   }
 
-  await mkdir(sessionsDir, { recursive: true });
+  await withSessionLock(sessionId, async () => {
+    const sessionsDir = join(
+      getAgenticOSHome(),
+      '.agent-workspace',
+      'sessions',
+      sessionId
+    );
 
-  const filePath = join(sessionsDir, 'active-project');
-  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+    await mkdir(sessionsDir, { recursive: true });
 
-  await writeFile(tempPath, yaml.stringify(binding), 'utf-8');
-  await rename(tempPath, filePath);
+    const filePath = join(sessionsDir, 'active-project');
+    const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+
+    try {
+      await writeFile(tempPath, yaml.stringify(binding), 'utf-8');
+      await rename(tempPath, filePath);
+    } catch (error) {
+      // Clean up temp file on failure - best effort
+      try { await rm(tempPath, { force: true }); } catch { /* ignore */ }
+      throw error;
+    }
+  });
 }
 
 export async function getSessionBinding(sessionId: string): Promise<SessionBindingRecord | null> {
@@ -164,7 +208,6 @@ export function detectAgentType(): 'claude-code' | 'codex' | 'other' {
 }
 
 export async function checkIsGitRepo(dirPath: string): Promise<boolean> {
-  const { execFile } = await import('child_process');
   return new Promise((resolve) => {
     execFile('git', ['-C', dirPath, 'rev-parse', '--git-dir'], (error) => {
       resolve(error === null);
