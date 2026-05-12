@@ -170,8 +170,8 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('Path: /test/path');
       expect(result).toContain('Status: active');
       expect(result).toContain('🧰 Filesystem workdir: /test/path');
-      expect(result).toContain('agenticos_switch did not change your shell cwd');
-      expect(result).toContain('Avoid relative-path edits until your shell cwd is aligned to this project.');
+      // New PWD alignment behavior: shows warning when directory doesn't exist
+      expect(result).toContain('[WARN] PWD alignment skipped');
       expect(result.indexOf('Status: active')).toBeLessThan(result.indexOf('🧰 Filesystem workdir: /test/path'));
       expect(result.indexOf('🧰 Filesystem workdir: /test/path')).toBeLessThan(result.indexOf('Context loaded from:'));
     });

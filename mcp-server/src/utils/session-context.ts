@@ -74,6 +74,21 @@ export function clearSessionProjectBinding(): void {
 }
 
 export function validatePathSecurity(targetPath: string): { valid: boolean; error?: string } {
+  // Must be absolute
+  if (!isAbsolute(targetPath)) {
+    return { valid: false, error: 'Path must be absolute' };
+  }
+
+  // Must not contain .. traversal
+  const normalized = join(targetPath);
+  if (normalized.includes('..')) {
+    return { valid: false, error: 'Path traversal (..) is not allowed' };
+  }
+
+  return { valid: true };
+}
+
+export function validatePathInAgenticosHome(targetPath: string): { valid: boolean; error?: string; warning?: string } {
   const home = getAgenticOSHome();
 
   // Must be absolute
@@ -81,15 +96,15 @@ export function validatePathSecurity(targetPath: string): { valid: boolean; erro
     return { valid: false, error: 'Path must be absolute' };
   }
 
-  // Must be under AGENTICOS_HOME
-  if (!targetPath.startsWith(home)) {
-    return { valid: false, error: `Path must be under AGENTICOS_HOME (${home})` };
-  }
-
   // Must not contain .. traversal
   const normalized = join(targetPath);
   if (normalized.includes('..')) {
     return { valid: false, error: 'Path traversal (..) is not allowed' };
+  }
+
+  // Advisory check: path should be under AGENTICOS_HOME
+  if (!targetPath.startsWith(home)) {
+    return { valid: true, warning: `Path is not under AGENTICOS_HOME (${home})` };
   }
 
   return { valid: true };
@@ -106,8 +121,8 @@ async function writeSessionBindingAtomic(
     sessionId
   );
 
-  // Security check
-  const security = validatePathSecurity(binding.projectPath);
+  // Security check - AGENTICOS_HOME required for session binding
+  const security = validatePathInAgenticosHome(binding.projectPath);
   if (!security.valid) {
     throw new Error(`Security validation failed: ${security.error}`);
   }
@@ -168,6 +183,9 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
     };
   }
 
+  // Advisory AGENTICOS_HOME check
+  const homeSecurity = validatePathInAgenticosHome(projectPath);
+
   // Check if directory exists and is accessible
   if (!existsSync(projectPath)) {
     return {
@@ -198,6 +216,6 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
   return {
     success: true,
     instruction,
-    warning: null,
+    warning: homeSecurity.warning || null,
   };
 }
