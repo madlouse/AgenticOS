@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
 
       - name: Install and build
         working-directory: mcp-server
@@ -33,13 +35,25 @@ jobs:
         working-directory: mcp-server
         run: npm pack
 
+      - name: Move tarball to root
+        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
+
+      - name: Verify tarball exists
+        run: |
+          if [ ! -f ./agenticos-mcp.tgz ]; then
+            echo "ERROR: agenticos-mcp.tgz not found"
+            exit 1
+          fi
+          echo "Tarball found: $(du -sh agenticos-mcp.tgz)"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: agenticos-mcp-*.tgz
+          files: agenticos-mcp.tgz
           generate_release_notes: true
 
       - name: Update Homebrew formula
+        timeout-minutes: 10
         uses: mislav/bump-homebrew-formula-action@v4
         with:
           formula-name: agenticos
