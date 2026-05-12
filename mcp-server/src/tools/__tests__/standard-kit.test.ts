@@ -443,6 +443,33 @@ status:
     expect(subAgentCheck?.summary).toContain('missing');
   });
 
+  it('conformance check fails when adapter surfaces are missing', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await runStandardKitAdopt({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+      project_description: 'Test project',
+    });
+
+    // Delete CLAUDE.md to trigger official_agent_adapter_surfaces FAIL
+    const { rm } = await import('fs/promises');
+    await rm(join(projectRoot, 'CLAUDE.md'));
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+      behavior_checks: Array<{ behavior: string; status: string; summary: string }>;
+    };
+
+    const adapterCheck = result.behavior_checks.find((b) => b.behavior === 'official_agent_adapter_surfaces');
+    expect(adapterCheck).toBeDefined();
+    expect(adapterCheck?.status).toBe('FAIL');
+  });
+
   it('adopt can resolve the session-local project and upgrades stale generated files while skipping current ones', async () => {
     const { home, projectRoot } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
