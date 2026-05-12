@@ -7,13 +7,19 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
+env:
+  FORMULA_NAME: agenticos
+  FORMULA_PATH: Formula/agenticos.rb
+  HOMEBREW_TAP: madlouse/homebrew-agenticos
+
 jobs:
-  release:
+  build-and-release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -36,29 +42,62 @@ jobs:
         run: npm pack
 
       - name: Move tarball to root
-        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
+        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp-${{ github.ref_name }}.tgz
 
       - name: Verify tarball exists
         run: |
-          if [ ! -f ./agenticos-mcp.tgz ]; then
-            echo "ERROR: agenticos-mcp.tgz not found"
+          if [ ! -f ./agenticos-mcp-${{ github.ref_name }}.tgz ]; then
+            echo "ERROR: tarball not found"
             exit 1
           fi
-          echo "Tarball found: $(du -sh agenticos-mcp.tgz)"
+          echo "Tarball: $(du -sh agenticos-mcp-${{ github.ref_name }}.tgz)"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: agenticos-mcp.tgz
+          files: agenticos-mcp-${{ github.ref_name }}.tgz
           generate_release_notes: true
 
-      - name: Update Homebrew formula
-        timeout-minutes: 10
+  bump-homebrew:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download release artifact
+        run: |
+          curl -sL -o agenticos-mcp-${{ github.ref_name }}.tgz \
+            "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp-${{ github.ref_name }}.tgz"
+
+      - name: Update Homebrew formula in tap repo
         uses: mislav/bump-homebrew-formula-action@v4
         with:
-          formula-name: agenticos
-          formula-path: Formula/agenticos.rb
-          homebrew-tap: madlouse/agenticos
+          formula-name: ${{ env.FORMULA_NAME }}
+          formula-path: ${{ env.FORMULA_PATH }}
+          homebrew-tap: ${{ env.HOMEBREW_TAP }}
           tag-name: ${{ github.ref_name }}
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
+
+      - name: Sync formula to source repo
+        run: |
+          # After mislav bumps the tap repo, sync the version back to source
+          # This ensures both copies stay in sync
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          SHA=$(shasum -a 256 agenticos-mcp-${TAG}.tgz | cut -d' ' -f1)
+          sed -i.bak \
+            -e "s|releases/download/v[0-9.]*/agenticos-mcp-[^/]*\.tgz|releases/download/v${VERSION}/agenticos-mcp-${VERSION}.tgz|" \
+            -e "s|version \"[0-9.]*\"|version \"${VERSION}\"|" \
+            -e "s| sha256 \"[a-f0-9]*\"| sha256 \"${SHA}\"|" \
+            homebrew-tap/Formula/agenticos.rb
+          rm homebrew-tap/Formula/agenticos.rb.bak
+          git add homebrew-tap/Formula/agenticos.rb
+          git commit -m "chore: sync formula to v${VERSION} [skip ci]"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify on Homebrew update failure
+        if: failure()
+        run: |
+          echo "Homebrew formula update failed for ${{ github.ref_name }}"
+          echo "Manual intervention required in ${{ env.HOMEBREW_TAP }} repository"
