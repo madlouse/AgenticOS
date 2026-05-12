@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { classifyYamlChanges, classifyMarkdownChanges, analyzeTemplateDiff } from '../standard-kit.js';
 
+// Import internal functions for coverage testing
+import * as standardKit from '../standard-kit.js';
+
 describe('classifyYamlChanges', () => {
   describe('template_marker_only classification', () => {
     it('detects when only template marker version differs', () => {
@@ -290,5 +293,246 @@ describe('analyzeTemplateDiff', () => {
     const result = analyzeTemplateDiff(canonical, local, 'unknown.ext');
     expect(result.classification).toBe('unknown');
     expect(result.merge_recommendation).toBe('review_required');
+  });
+
+  it('returns diff_truncated and diff_total_lines for large diffs', () => {
+    const canonicalLines: string[] = [];
+    const localLines: string[] = [];
+    for (let i = 0; i < 150; i++) {
+      canonicalLines.push(`field_${i}: canonical_value_${i}`);
+      localLines.push(`field_${i}: local_value_${i}`);
+    }
+    const result = analyzeTemplateDiff(canonicalLines.join('\n'), localLines.join('\n'), '.project.yaml');
+    expect(result.diff_truncated).toBe(true);
+    expect(result.diff_total_lines).toBeGreaterThan(100);
+    expect(result.diff_lines.length).toBe(100);
+  });
+
+  it('classifies YAML file with primitive value differences', () => {
+    // This tests the else-if branch where values differ but neither is an object
+    const canonical = `meta:
+  name: Canonical Name
+  version: 1.0.0
+  count: 10
+`;
+    const local = `meta:
+  name: Canonical Name
+  version: 2.0.0
+  count: 10
+`;
+    const result = analyzeTemplateDiff(canonical, local, '.project.yaml');
+    expect(result.classification).toBe('standard_improvement');
+  });
+});
+
+describe('classifyYamlChanges - additional coverage', () => {
+  describe('generic YAML classification', () => {
+    it('classifies tasks template YAML with template marker only', () => {
+      const canonical = `# <!-- agenticos-template: v2 -->
+name: Test Template
+purpose: Testing
+`;
+      const local = `# <!-- agenticos-template: v1 -->
+name: Test Template
+purpose: Testing
+`;
+      const result = classifyYamlChanges(canonical, local, 'tasks/templates/test.yaml');
+      expect(result.classification).toBe('template_marker_only');
+      expect(result.merge_recommendation).toBe('safe_to_merge');
+    });
+
+    it('classifies generic YAML with primitive differences', () => {
+      // For generic YAML, both fields are not in projectSpecificFields
+      // so they default to standard_improvement
+      const canonical = `name: Canonical
+value: 100
+`;
+      const local = `name: Local
+value: 100
+`;
+      const result = classifyYamlChanges(canonical, local, 'tasks/templates/test.yaml');
+      // Both name and value are not project-specific, so they're classified as standard improvement
+      expect(result.standard_improvement_areas.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('classifyStateYamlChanges', () => {
+    it('handles identical state.yaml', () => {
+      const canonical = `# <!-- agenticos-template: v1 -->
+session:
+  id: session-001
+memory_contract:
+  version: 1
+`;
+      const local = `# <!-- agenticos-template: v1 -->
+session:
+  id: session-001
+memory_contract:
+  version: 1
+`;
+      const result = classifyYamlChanges(canonical, local, '.context/state.yaml');
+      expect(result.classification).toBe('template_marker_only');
+      expect(result.merge_recommendation).toBe('safe_to_merge');
+    });
+
+    it('handles state.yaml with extra local fields', () => {
+      const canonical = `# <!-- agenticos-template: v1 -->
+session:
+  id: session-001
+memory_contract:
+  version: 1
+`;
+      const local = `# <!-- agenticos-template: v1 -->
+session:
+  id: session-001
+memory_contract:
+  version: 1
+custom_field:
+  data: something
+`;
+      const result = classifyYamlChanges(canonical, local, '.context/state.yaml');
+      expect(result.classification).toBe('project_customization');
+      expect(result.merge_recommendation).toBe('keep_as_is');
+      expect(result.project_specific_areas).toContain('custom_field');
+    });
+
+    it('handles state.yaml with extra canonical fields', () => {
+      const canonical = `# <!-- agenticos-template: v1 -->
+session:
+  id: session-001
+memory_contract:
+  version: 1
+new_canonical_field:
+  data: new
+`;
+      const local = `# <!-- agenticos-template: v1 -->
+session:
+  id: session-001
+memory_contract:
+  version: 1
+`;
+      const result = classifyYamlChanges(canonical, local, '.context/state.yaml');
+      expect(result.classification).toBe('standard_improvement');
+      expect(result.merge_recommendation).toBe('safe_to_merge');
+      expect(result.standard_improvement_areas).toContain('new_canonical_field');
+    });
+
+    it('handles state.yaml with mixed changes', () => {
+      const canonical = `# <!-- agenticos-template: v1 -->
+session:
+  id: canonical-session
+memory_contract:
+  version: 2
+new_field: value
+`;
+      const local = `# <!-- agenticos-template: v1 -->
+session:
+  id: local-session
+memory_contract:
+  version: 1
+custom_extra: data
+`;
+      const result = classifyYamlChanges(canonical, local, '.context/state.yaml');
+      // Mixed: memory_contract is standard_improvement, session is preserved, custom_extra is project
+      expect(['mixed', 'standard_improvement', 'project_customization']).toContain(result.classification);
+    });
+  });
+});
+
+describe('classifyMarkdownChanges - additional coverage', () => {
+  it('handles markdown with only heading text difference', () => {
+    const canonical = `# Quick Start
+
+## Project Snapshot
+- **Name**: Canonical
+`;
+    const local = `# Quick Start
+
+## Project Snapshot
+- **Name**: Local
+`;
+    const result = classifyMarkdownChanges(canonical, local, '.context/quick-start.md');
+    expect(result.project_specific_areas).toContain('project snapshot');
+  });
+
+  it('handles markdown with section removed in local', () => {
+    const canonical = `# Quick Start
+
+## Section A
+Content A
+
+## Section B
+Content B
+`;
+    const local = `# Quick Start
+
+## Section A
+Content A
+`;
+    const result = classifyMarkdownChanges(canonical, local, '.context/quick-start.md');
+    // Section B only in canonical - standard improvement
+    expect(result.standard_improvement_areas).toContain('section b');
+  });
+
+  it('handles markdown with section added in local', () => {
+    const canonical = `# Quick Start
+
+## Section A
+Content A
+`;
+    const local = `# Quick Start
+
+## Section A
+Content A
+
+## Section B
+Content B
+`;
+    const result = classifyMarkdownChanges(canonical, local, '.context/quick-start.md');
+    // Section B only in local - project specific
+    expect(result.project_specific_areas).toContain('section b');
+  });
+});
+
+describe('edge cases', () => {
+  it('handles deeply nested YAML structures', () => {
+    const canonical = `a:
+  b:
+    c:
+      d: canonical_value
+`;
+    const local = `a:
+  b:
+    c:
+      d: local_value
+`;
+    const result = classifyYamlChanges(canonical, local, '.project.yaml');
+    expect(result.standard_improvement_areas.some(a => a.includes('d'))).toBe(true);
+  });
+
+  it('handles YAML with number changes', () => {
+    const canonical = `count: 100
+`;
+    const local = `count: 200
+`;
+    const result = classifyYamlChanges(canonical, local, '.project.yaml');
+    // count value changed - should be classified as standard improvement
+    expect(result.standard_improvement_areas.some(a => a.includes('count'))).toBe(true);
+  });
+
+  it('handles array comparisons', () => {
+    // For arrays, elements at same index with different values are compared
+    // Arrays of different lengths will have extra elements classified
+    const canonical = `items:
+  - name: item1
+  - name: item2
+`;
+    const local = `items:
+  - name: item1
+  - name: item2modified
+`;
+    const result = classifyYamlChanges(canonical, local, '.project.yaml');
+    // item2 changed from canonical's perspective
+    expect(result.standard_improvement_areas.length).toBeGreaterThan(0);
   });
 });
