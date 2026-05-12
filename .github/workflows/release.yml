@@ -33,31 +33,11 @@ jobs:
         working-directory: mcp-server
         run: npm pack
 
-      - name: Move tarball to root
-        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: agenticos-mcp.tgz
+          files: agenticos-mcp-*.tgz
           generate_release_notes: true
-
-      - name: Wait for release asset propagation
-        run: |
-          echo "Waiting for release asset to become globally reachable..."
-          for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              --max-time 10 --connect-timeout 5 \
-              "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz")
-            echo "Attempt $i: HTTP status $STATUS"
-            if [ "$STATUS" = "200" ]; then
-              echo "Release asset is reachable"
-              exit 0
-            fi
-            echo "Retrying in $((i * 2)) seconds..."
-            sleep $((i * 2))
-          done
-          echo "Warning: release asset may not be fully propagated yet"
 
       - name: Update Homebrew formula
         uses: mislav/bump-homebrew-formula-action@v4
