@@ -16,7 +16,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
-import { bindSessionProject, getSessionProjectBinding } from '../utils/session-context.js';
+import { bindSessionProject, getSessionProjectBinding, bindSessionProjectAsync, alignPwd } from '../utils/session-context.js';
 import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
@@ -325,13 +325,21 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
   return lines;
 }
 
-function buildFilesystemAlignmentLines(projectPath: string): string[] {
-  return [
-    `🧰 Filesystem workdir: ${projectPath}`,
-    '⚠️ Project binding changed, but agenticos_switch did not change your shell cwd.',
-    '   Use this project path as workdir for every filesystem operation.',
-    '   Avoid relative-path edits until your shell cwd is aligned to this project.',
-  ];
+function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { success: boolean; instruction: string | null; warning: string | null }): string[] {
+  const lines = [`🧰 Filesystem workdir: ${projectPath}`];
+
+  if (pwdResult?.success && pwdResult.instruction) {
+    lines.push(`📍 To align your shell PWD, run:`);
+    lines.push(`   ${pwdResult.instruction}`);
+  } else if (pwdResult?.warning) {
+    lines.push(`⚠️ ${pwdResult.warning}`);
+  } else {
+    lines.push('⚠️ Project binding changed, but agenticos_switch did not change your shell cwd.');
+    lines.push('   Use this project path as workdir for every filesystem operation.');
+    lines.push('   Avoid relative-path edits until your shell cwd is aligned to this project.');
+  }
+
+  return lines;
 }
 
 export async function switchProject(args: any): Promise<string> {
@@ -361,11 +369,16 @@ export async function switchProject(args: any): Promise<string> {
   }
 
   found.last_accessed = new Date().toISOString();
-  bindSessionProject({
+
+  // Bind with atomic session persistence
+  await bindSessionProjectAsync({
     projectId: found.id,
     projectName: found.name,
     projectPath: found.path,
-  });
+  }, { persist: true });
+
+  // Get PWD alignment instruction
+  const pwdResult = await alignPwd(found.path);
 
   // Check if entry surface writes are allowed in this checkout
   const writeProtection = await detectCanonicalMainWriteProtection(found.path);
@@ -513,7 +526,7 @@ export async function switchProject(args: any): Promise<string> {
     lastRecorded: found.last_recorded,
     committedSnapshotAssessment,
   });
-  const filesystemAlignmentSummary = buildFilesystemAlignmentLines(found.path);
+  const filesystemAlignmentSummary = buildFilesystemAlignmentLines(found.path, pwdResult);
 
   return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
