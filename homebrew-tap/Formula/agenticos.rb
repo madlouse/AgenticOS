@@ -5,7 +5,7 @@ class Agenticos < Formula
   homepage "https://github.com/madlouse/AgenticOS"
   url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.18/agenticos-mcp-0.4.18.tgz"
   version "0.4.18"
-  sha256 "TODO" # Will be updated by mislav/bump-homebrew-formula-action on next release
+  sha256 "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
   license "MIT"
 
   depends_on "node"

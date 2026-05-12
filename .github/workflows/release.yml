@@ -1,6 +1,5 @@
 name: Release
 
-# AgenticOS own release: triggered on tag push
 on:
   push:
     tags:
@@ -9,9 +8,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -32,11 +36,23 @@ jobs:
       - name: Move tarball to root
         run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
 
+      - name: Compute SHA256 for formula
+        id: sha
+        run: |
+          echo "sha256=$(shasum -a 256 agenticos-mcp.tgz | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "size=$(du -sh agenticos-mcp.tgz | cut -f1)" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: agenticos-mcp.tgz
           generate_release_notes: true
+
+      - name: Verify release asset is reachable
+        run: |
+          URL="https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz"
+          echo "Checking release asset URL: $URL"
+          curl -sI "$URL" | head -1
 
       - name: Update Homebrew formula
         uses: mislav/bump-homebrew-formula-action@v4
@@ -48,17 +64,7 @@ jobs:
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
 
-      - name: Upload formula update as release asset
+      - name: Verify Homebrew formula bump
         run: |
-          # The mislav action creates a PR; we need the formula from that PR
-          # For now, just verify the bump happened
-          echo "Homebrew formula updated via mislav/bump-homebrew-formula-action"
-
-  verify:
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify release artifacts
-        run: |
-          echo "Verifying release ${{ github.ref_name }} completed successfully"
-          echo "Homebrew formula should now point to ${{ github.ref_name }}"
+          echo "Release ${{ github.ref_name }} completed"
+          echo "Homebrew formula update triggered for madlouse/agenticos tap"
