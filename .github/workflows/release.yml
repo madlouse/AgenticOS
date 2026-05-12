@@ -34,25 +34,29 @@ jobs:
         run: npm pack
 
       - name: Move tarball to root
-        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
-
-      - name: Compute SHA256 for formula
-        id: sha
-        run: |
-          echo "sha256=$(shasum -a 256 agenticos-mcp.tgz | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "size=$(du -sh agenticos-mcp.tgz | cut -f1)" >> $GITHUB_OUTPUT
+        run: mv mcp-server/agenticos-mcp-*.tgz ./
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: agenticos-mcp.tgz
+          files: agenticos-mcp-*.tgz
           generate_release_notes: true
 
-      - name: Verify release asset is reachable
+      - name: Wait for release asset propagation
         run: |
-          URL="https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz"
-          echo "Checking release asset URL: $URL"
-          curl -sI "$URL" | head -1
+          # Wait for GitHub CDN to propagate the release asset (5-30s typically)
+          echo "Waiting for release asset to become globally reachable..."
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz")
+            echo "Attempt $i: HTTP status $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Release asset is reachable"
+              exit 0
+            fi
+            echo "Retrying in 5 seconds..."
+            sleep 5
+          done
+          echo "Warning: release asset may not be fully propagated yet"
 
       - name: Update Homebrew formula
         uses: mislav/bump-homebrew-formula-action@v4
@@ -63,8 +67,3 @@ jobs:
           tag-name: ${{ github.ref_name }}
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
-
-      - name: Verify Homebrew formula bump
-        run: |
-          echo "Release ${{ github.ref_name }} completed"
-          echo "Homebrew formula update triggered for madlouse/agenticos tap"
