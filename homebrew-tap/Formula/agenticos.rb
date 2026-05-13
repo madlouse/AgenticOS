@@ -3,9 +3,9 @@ require "language/node"
 class Agenticos < Formula
   desc "AI-native project management MCP server for coding agents"
   homepage "https://github.com/madlouse/AgenticOS"
-  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.18/agenticos-mcp-0.4.18.tgz"
+  url "https://github.com/madlouse/AgenticOS/releases/download/v0.4.18/agenticos-mcp.tgz"
   version "0.4.18"
-  sha256 "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
+  sha256 "75f5f9bb7481462df624938440955eb9cb6f663698a92fe3d2e6c38eec31c8f9"
   license "MIT"
 
   depends_on "node"
@@ -16,7 +16,6 @@ class Agenticos < Formula
   end
 
   def post_install
-    # Provision a clean workspace directory separate from any source checkout
     (var/"agenticos").mkpath
     ohai "AgenticOS installed!"
     ohai "Workspace directory created at: #{var}/agenticos"
