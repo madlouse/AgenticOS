@@ -39,13 +39,20 @@ jobs:
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> $GITHUB_ENV
 
       - name: Update package.json version
         working-directory: mcp-server
         run: |
-          echo "Updating package.json from $(cat package.json | grep '"version"' | cut -d'"' -f4) to $VERSION"
-          npm version $VERSION --no-git-tag-version
-          cat package.json | grep '"version"'
+          CURRENT=$(grep '"version"' package.json | cut -d'"' -f4)
+          echo "Current version: $CURRENT, Target: $VERSION"
+          if [ "$CURRENT" != "$VERSION" ]; then
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
+            echo "Updated package.json to $VERSION"
+          else
+            echo "Version already $VERSION, no update needed"
+          fi
+          grep '"version"' package.json
 
       - name: Install and build
         working-directory: mcp-server
