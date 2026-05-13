@@ -24,12 +24,28 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need full history for npm version to work properly
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
           cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Set version from tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Update package.json version
+        working-directory: mcp-server
+        run: |
+          echo "Updating package.json from $(cat package.json | grep '"version"' | cut -d'"' -f4) to $VERSION"
+          npm version $VERSION --no-git-tag-version
+          cat package.json | grep '"version"'
 
       - name: Install and build
         working-directory: mcp-server
@@ -42,20 +58,25 @@ jobs:
         run: npm pack
 
       - name: Move tarball to root
-        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp-${{ github.ref_name }}.tgz
+        run: mv mcp-server/agenticos-mcp-*.tgz ./agenticos-mcp.tgz
 
       - name: Verify tarball exists
         run: |
-          if [ ! -f ./agenticos-mcp-${{ github.ref_name }}.tgz ]; then
+          if [ ! -f ./agenticos-mcp.tgz ]; then
             echo "ERROR: tarball not found"
             exit 1
           fi
-          echo "Tarball: $(du -sh agenticos-mcp-${{ github.ref_name }}.tgz)"
+          echo "Tarball: $(du -sh agenticos-mcp.tgz)"
+
+      - name: Verify tarball version
+        run: |
+          echo "Checking version in tarball..."
+          tar -tzf agenticos-mcp.tgz | xargs grep '"version"' | head -1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: agenticos-mcp-${{ github.ref_name }}.tgz
+          files: agenticos-mcp.tgz
           generate_release_notes: true
 
   bump-homebrew:
@@ -65,8 +86,8 @@ jobs:
     steps:
       - name: Download release artifact
         run: |
-          curl -sL -o agenticos-mcp-${{ github.ref_name }}.tgz \
-            "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp-${{ github.ref_name }}.tgz"
+          curl -sL -o agenticos-mcp.tgz \
+            "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz"
 
       - name: Update Homebrew formula in tap repo
         uses: mislav/bump-homebrew-formula-action@v4
@@ -81,12 +102,12 @@ jobs:
       - name: Sync formula to source repo
         run: |
           # After mislav bumps the tap repo, sync the version back to source
-          # This ensures both copies stay in sync
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
-          SHA=$(shasum -a 256 agenticos-mcp-${TAG}.tgz | cut -d' ' -f1)
+          SHA=$(shasum -a 256 agenticos-mcp.tgz | cut -d' ' -f1)
+          # Update URL to match the actual release asset name (no version in filename)
           sed -i.bak \
-            -e "s|releases/download/v[0-9.]*/agenticos-mcp-[^/]*\.tgz|releases/download/v${VERSION}/agenticos-mcp-${VERSION}.tgz|" \
+            -e "s|releases/download/v[0-9.]*/agenticos-mcp-[^/]*\.tgz|releases/download/v${VERSION}/agenticos-mcp.tgz|" \
             -e "s|version \"[0-9.]*\"|version \"${VERSION}\"|" \
             -e "s| sha256 \"[a-f0-9]*\"| sha256 \"${SHA}\"|" \
             homebrew-tap/Formula/agenticos.rb
