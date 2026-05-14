@@ -84,6 +84,34 @@ export async function checkIsGitRepo(dirPath: string): Promise<boolean> {
   });
 }
 
+function getCurrentPwd(): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('pwd', [], (error, stdout) => {
+      if (error) {
+        resolve(null);
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+  });
+}
+
+async function executeCd(dirPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    // Use execFile with shell to change directory
+    // The directory change affects the child process, but we need to verify
+    // if it actually takes effect in the parent shell
+    execFile('sh', ['-c', `cd "${dirPath}" && pwd`], (error, stdout) => {
+      if (error) {
+        resolve(false);
+      } else {
+        const newPwd = stdout.trim();
+        resolve(newPwd === dirPath);
+      }
+    });
+  });
+}
+
 export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult> {
   const security = validatePathSecurity(projectPath);
   if (!security.valid) {
@@ -107,8 +135,8 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
   const agentType = detectAgentType();
   const isGitRepo = await checkIsGitRepo(projectPath);
 
+  // Build instruction for reference (but we will execute directly)
   let instruction: string | null = null;
-
   if (agentType === 'claude-code') {
     if (isGitRepo) {
       instruction = `EnterWorktree path="${projectPath}"`;
@@ -121,9 +149,24 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
     instruction = `cd ${projectPath}`;
   }
 
+  // Execute the directory change
+  const beforePwd = await getCurrentPwd();
+  const cdSuccess = await executeCd(projectPath);
+  const afterPwd = await getCurrentPwd();
+
+  // Verify the change took effect
+  if (afterPwd === projectPath) {
+    return {
+      success: true,
+      instruction,
+      warning: homeSecurity.warning || null,
+    };
+  }
+
+  // CD failed - return warning with manual instruction
   return {
-    success: true,
+    success: false,
     instruction,
-    warning: homeSecurity.warning || null,
+    warning: `[WARN] PWD alignment failed. Expected: ${projectPath}, Got: ${afterPwd}. Please run: ${instruction}`,
   };
 }

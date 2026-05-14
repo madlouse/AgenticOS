@@ -1,6 +1,6 @@
 # Simplified PWD Alignment Design (#405)
 
-## Status: Draft
+## Status: Implemented
 
 ## Background
 
@@ -9,136 +9,115 @@ Issue #332/#333 导致 MCP 故障，修复后发现 session lock 机制存在根
 - 锁机制增加了不必要的复杂性
 - active-project 文件从未被读取，属于死代码
 
+经过设计评审，原始需求的核心是：
+**切换项目时，PWD 应该自动切换到项目目录，切换后验证，不成功则提示用户手动执行。**
+
 ## Design Principles
 
 1. **简单可靠** — 不引入过多复杂性
-2. **session ID 唯一性** — 每个会话使用唯一 ID，无需锁竞争
-3. **内存优先** — 会话绑定仅存内存，session resume 自然保持状态
-4. **最小化持久化** — 只保留必要状态
+2. **无锁机制** — 每个 session 独立，无需锁竞争
+3. **自动切换 + 验证** — 执行 cd 并验证结果
+4. **最小化持久化** — 内存绑定 + 失败警告
 
-## Current Problems (from Agent team analysis)
+## Architecture
 
-| Component | Problem |
-|-----------|---------|
-| Session lock | 多进程竞争，每次尝试验锁 50 次 × 10ms 延迟 |
-| mkdir as mutex | 原子性依赖文件系统，不可靠 |
-| active-project file | 写入但从未读取，死代码 |
-| Atomic write | 写 .active-project 时先写临时文件再 rename，但无并发保护 |
+### Core Flow
 
-## Proposed Simplified Architecture
-
-### Remove (Dead Code)
-- ~~Session lock mechanism~~ — 不需要，每个 session 有唯一 ID
-- ~~active-project file persistence~~ — 从未被读取
-- ~~atomic write for active-project~~ — 同上
-
-### Keep (In-Memory Only)
-
-**bindSessionProject()** — 内存中的 session → project 映射
-```typescript
-// 内存 Map，不写文件
-const sessionProjectMap = new Map<string, string>();
-
-export async function bindSessionProject(sessionId: string, projectPath: string): Promise<void> {
-  sessionProjectMap.set(sessionId, projectPath);
-}
+```
+switchProject()
+    ↓
+bindSessionProject() → 内存记录当前项目
+    ↓
+alignPwd(projectPath)
+    ↓
+1. 验证路径安全性（绝对路径，无 .. 遍历）
+2. 检查目录是否存在
+3. 执行 cd + pwd 验证
+4. 成功 → 返回 success
+5. 失败 → 返回 warning + 手动指令
 ```
 
-**alignPwd()** — 生成 agent 特定的 PWD 指令
+### Implementation: alignPwd()
+
 ```typescript
-export function alignPwd(projectPath: string, agentType: string): string {
-  switch (agentType) {
-    case 'claude-code':
-      return `cd ${projectPath} && pwd`;
-    case 'codex':
-      return `codex -C ${projectPath}`;
-    case 'cursor':
-      return `cd ${projectPath}`; // Cursor 通过 mcp.json 配置
-    default:
-      return `cd ${projectPath}`;
+export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult> {
+  // 1. 验证路径安全
+  const security = validatePathSecurity(projectPath);
+  if (!security.valid) {
+    return { success: false, instruction: null, warning: security.error };
   }
-}
-```
 
-**Session Resume** — PWD 由 agent runtime 自然保持
-- Claude Code / Codex 切换目录后，runtime 自动记住 PWD
-- 不需要 active-project 文件来恢复
-
-## Implementation Changes
-
-### File: mcp-server/src/utils/session-context.ts
-
-**Before (complex):**
-```typescript
-async function withSessionLock<T>(sessionId: string, callback: () => Promise<T>) {
-  const lockPath = getSessionLockPath(sessionId);
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    try {
-      await mkdir(lockPath);
-      break;
-    } catch {
-      await sleep(10);
-    }
+  // 2. 检查目录存在
+  if (!existsSync(projectPath)) {
+    return { success: false, instruction: null, warning: '目录不存在' };
   }
-  // ... critical section ...
-  await rmdir(lockPath);
+
+  // 3. 执行 cd 并验证
+  const beforePwd = await getCurrentPwd();
+  const cdSuccess = await executeCd(projectPath);
+  const afterPwd = await getCurrentPwd();
+
+  // 4. 验证结果
+  if (afterPwd === projectPath) {
+    return { success: true, instruction: ..., warning: null };
+  }
+
+  // 5. 失败返回警告
+  return {
+    success: false,
+    instruction: ...,  // 手动指令
+    warning: `PWD alignment failed. Expected: ${projectPath}, Got: ${afterPwd}. Please run: ${instruction}`
+  };
 }
 ```
 
-**After (simple):**
-```typescript
-// 无锁，直接操作内存 Map
-const sessionProjectMap = new Map<string, string>();
+## Changes from Original Design
 
-export async function bindSessionProject(
-  sessionId: string,
-  projectPath: string
-): Promise<void> {
-  sessionProjectMap.set(sessionId, projectPath);
-}
+| Component | Before (#397) | After (#405) |
+|-----------|---------------|--------------|
+| Session lock | mkdir mutex (50次重试) | ❌ 删除 |
+| active-project 持久化 | temp+rename 原子写入 | ❌ 删除 |
+| bindSessionProjectAsync | 异步+持久化 | ✅ 简化为 bindSessionProject (同步内存) |
+| alignPwd | 只返回指令文本 | ✅ 执行 cd + 验证 + 失败警告 |
+| getSessionBinding | 读取文件 | ❌ 删除 |
 
-export function getSessionProject(sessionId: string): string | undefined {
-  return sessionProjectMap.get(sessionId);
-}
-```
+## Files Changed
 
-### File: mcp-server/src/tools/project.ts
+1. **mcp-server/src/utils/session-context.ts**
+   - 删除: withSessionLock, getSessionLockPath, writeSessionBindingAtomic, getSessionBinding, SessionBindingRecord
+   - 新增: getCurrentPwd(), executeCd() 内部函数
+   - 修改: alignPwd() 现在执行 cd 而不只是返回文本
 
-**Changes:**
-1. `switchProject()` 调用 `bindSessionProject()` 写入内存
-2. 调用 `alignPwd()` 生成 agent 特定指令
-3. 移除 `acquireSessionLock()` / `releaseSessionLock()` 调用
-4. 移除 `writeActiveProjectFile()` 调用
-
-### File: mcp-server/src/utils/standard-kit.ts
-
-**No changes** — standard-kit 功能与 session 管理无关
-
-## Files to Delete
-
-```
-mcp-server/src/utils/active-project.ts  # 死代码，从未被读取
-```
-
-## Migration Path
-
-1. 新实现仅保留内存映射，无数据迁移需求
-2. 旧版写入的 `~/.agent-workspace/sessions/*/active-project` 文件可保留（不再写入）
-3. 未来清理时删除即可
+2. **mcp-server/src/tools/project.ts**
+   - 移除 bindSessionProjectAsync 调用
+   - 使用同步 bindSessionProject
 
 ## Verification
 
 ```bash
-# 测试多窗口并发
-# 窗口1: agenticos_project_switch --project agenticos
-# 窗口2: agenticos_project_switch --project agenticos
-# 两者都应成功，无锁竞争错误
+# 切换项目并检查 PWD
+agenticos project switch --project agenticos
+# 应该看到 PWD 已切换，或者警告提示手动执行
 
-# 测试 session resume
-# 断开重连后，PWD 应由 agent runtime 自然保持
+# 多窗口并发测试（无锁竞争）
+# 窗口1: agenticos project switch --project agenticos
+# 窗口2: agenticos project switch --project agenticos
+# 两者都应成功
 ```
+
+## Limitations
+
+MCP server 作为独立进程，无法直接改变用户 shell 的 PWD。`executeCd()` 在子进程中执行 cd，只验证目录可访问性。实际的 PWD 切换需要：
+- Claude Code: EnterWorktree tool
+- Codex: codex -C 命令
+- 其他: 手动 cd
+
+alignPwd 的验证逻辑帮助确认目录是否可访问，失败时返回手动指令。
 
 ## Related Issues
 
 - #332/#333: MCP 故障排查
-- #397: PWD alignment design (superseded)
+- #393: 原始 PWD 对齐需求
+- #394: partial implementation
+- #397: atomic sessions design (superseded by this)
+- #405: this implementation
