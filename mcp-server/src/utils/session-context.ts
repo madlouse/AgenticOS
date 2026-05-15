@@ -84,29 +84,15 @@ export async function checkIsGitRepo(dirPath: string): Promise<boolean> {
   });
 }
 
-function getCurrentPwd(): Promise<string | null> {
+async function verifyDirectoryAccessible(dirPath: string): Promise<boolean> {
+  // Verify the directory exists and is accessible by running pwd in a subshell
   return new Promise((resolve) => {
-    execFile('pwd', [], (error, stdout) => {
-      if (error) {
-        resolve(null);
-      } else {
-        resolve(stdout.trim());
-      }
-    });
-  });
-}
-
-async function executeCd(dirPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    // Use execFile with shell to change directory
-    // The directory change affects the child process, but we need to verify
-    // if it actually takes effect in the parent shell
     execFile('sh', ['-c', `cd "${dirPath}" && pwd`], (error, stdout) => {
       if (error) {
         resolve(false);
       } else {
-        const newPwd = stdout.trim();
-        resolve(newPwd === dirPath);
+        const verifiedPwd = stdout.trim();
+        resolve(verifiedPwd === dirPath);
       }
     });
   });
@@ -135,7 +121,6 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
   const agentType = detectAgentType();
   const isGitRepo = await checkIsGitRepo(projectPath);
 
-  // Build instruction for reference (but we will execute directly)
   let instruction: string | null = null;
   if (agentType === 'claude-code') {
     if (isGitRepo) {
@@ -149,13 +134,10 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
     instruction = `cd ${projectPath}`;
   }
 
-  // Execute the directory change
-  const beforePwd = await getCurrentPwd();
-  const cdSuccess = await executeCd(projectPath);
-  const afterPwd = await getCurrentPwd();
+  // Verify directory is accessible (subshell cd succeeds)
+  const accessible = await verifyDirectoryAccessible(projectPath);
 
-  // Verify the change took effect
-  if (afterPwd === projectPath) {
+  if (accessible) {
     return {
       success: true,
       instruction,
@@ -163,10 +145,10 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
     };
   }
 
-  // CD failed - return warning with manual instruction
+  // Directory not accessible
   return {
     success: false,
     instruction,
-    warning: `[WARN] PWD alignment failed. Expected: ${projectPath}, Got: ${afterPwd}. Please run: ${instruction}`,
+    warning: `[WARN] PWD alignment failed. Directory not accessible: ${projectPath}. Please run: ${instruction}`,
   };
 }
