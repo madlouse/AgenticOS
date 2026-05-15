@@ -329,11 +329,16 @@ function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { succes
   const lines = [`🧰 Filesystem workdir: ${projectPath}`];
 
   if (pwdResult?.success && pwdResult.instruction) {
-    // Format as executable command - agent should recognize and execute this
     lines.push('');
+    lines.push('Execute to switch directory:');
     lines.push('```');
     lines.push(pwdResult.instruction);
     lines.push('```');
+    lines.push('');
+    lines.push('After executing, verify with: pwd');
+    if (pwdResult.warning) {
+      lines.push(`⚠️ ${pwdResult.warning}`);
+    }
   } else if (pwdResult?.warning) {
     lines.push(`⚠️ ${pwdResult.warning}`);
     if (pwdResult.instruction) {
