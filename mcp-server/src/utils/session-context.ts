@@ -120,10 +120,14 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
 
   const agentType = detectAgentType();
 
+  // Generate the cd instruction for the agent to execute
+  // Note: The actual PWD switch is handled by:
+  // - Claude Code: PostToolUse hook in ~/.claude/settings.json (recommended)
+  // - Codex: codex -C <path> flag (handled at startup)
+  // - Other agents: manual cd command
   let instruction: string | null = null;
   if (agentType === 'claude-code') {
-    // Direct cd approach - more reliably executed by LLM/agent
-    instruction = `cd ${projectPath} && claude`;
+    instruction = `cd ${projectPath}`;
   } else if (agentType === 'codex') {
     instruction = `codex -C ${projectPath}`;
   } else {
