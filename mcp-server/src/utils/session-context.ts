@@ -119,15 +119,11 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
   }
 
   const agentType = detectAgentType();
-  const isGitRepo = await checkIsGitRepo(projectPath);
 
   let instruction: string | null = null;
   if (agentType === 'claude-code') {
-    if (isGitRepo) {
-      instruction = `EnterWorktree path="${projectPath}"`;
-    } else {
-      instruction = `cd ${projectPath}`;
-    }
+    // Direct cd approach - more reliably executed by LLM/agent
+    instruction = `cd ${projectPath} && claude`;
   } else if (agentType === 'codex') {
     instruction = `codex -C ${projectPath}`;
   } else {
