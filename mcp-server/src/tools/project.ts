@@ -330,12 +330,14 @@ function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { succes
 
   if (pwdResult?.success && pwdResult.instruction) {
     lines.push('');
-    lines.push('Execute to switch directory:');
-    lines.push('```');
+    lines.push('⚠️ 重要: Claude Code 无法自动切换工作目录');
+    lines.push('   请在下方终端手动执行命令:');
+    lines.push('');
+    lines.push('```bash');
     lines.push(pwdResult.instruction);
     lines.push('```');
     lines.push('');
-    lines.push('After executing, verify with: pwd');
+    lines.push('然后执行 pwd 确认切换成功');
     if (pwdResult.warning) {
       lines.push(`⚠️ ${pwdResult.warning}`);
     }
@@ -343,8 +345,8 @@ function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { succes
     lines.push(`⚠️ ${pwdResult.warning}`);
     if (pwdResult.instruction) {
       lines.push('');
-      lines.push('Manual switch required:');
-      lines.push('```');
+      lines.push('⚠️ 请在终端手动执行:');
+      lines.push('```bash');
       lines.push(pwdResult.instruction);
       lines.push('```');
     }
