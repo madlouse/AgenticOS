@@ -329,10 +329,20 @@ function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { succes
   const lines = [`🧰 Filesystem workdir: ${projectPath}`];
 
   if (pwdResult?.success && pwdResult.instruction) {
-    lines.push(`📍 To align your shell PWD, run:`);
-    lines.push(`   ${pwdResult.instruction}`);
+    // Format as executable command - agent should recognize and execute this
+    lines.push('');
+    lines.push('```');
+    lines.push(pwdResult.instruction);
+    lines.push('```');
   } else if (pwdResult?.warning) {
     lines.push(`⚠️ ${pwdResult.warning}`);
+    if (pwdResult.instruction) {
+      lines.push('');
+      lines.push('Manual switch required:');
+      lines.push('```');
+      lines.push(pwdResult.instruction);
+      lines.push('```');
+    }
   } else {
     lines.push('⚠️ Project binding changed, but agenticos_switch did not change your shell cwd.');
     lines.push('   Use this project path as workdir for every filesystem operation.');
