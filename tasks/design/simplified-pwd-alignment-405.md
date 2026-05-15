@@ -85,12 +85,18 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
 
 1. **mcp-server/src/utils/session-context.ts**
    - 删除: withSessionLock, getSessionLockPath, writeSessionBindingAtomic, getSessionBinding, SessionBindingRecord
-   - 新增: getCurrentPwd(), executeCd() 内部函数
-   - 修改: alignPwd() 现在执行 cd 而不只是返回文本
+   - alignPwd() 返回简单 `cd <path>` 指令，实际切换由 PostToolUse hook 执行
 
 2. **mcp-server/src/tools/project.ts**
    - 移除 bindSessionProjectAsync 调用
    - 使用同步 bindSessionProject
+
+3. **mcp-server/src/utils/config-audit.ts**
+   - 新增 readClaudeHooksSource() 检测 PostToolUse hook 是否配置
+   - agenticos_config 现在会报告 PWD alignment hook 状态
+
+4. **mcp-server/src/__tests__/mcp-regression-baseline.json**
+   - 更新基线版本到 v0.4.22
 
 ## Verification
 
@@ -107,12 +113,30 @@ agenticos project switch --project agenticos
 
 ## Limitations
 
-MCP server 作为独立进程，无法直接改变用户 shell 的 PWD。`executeCd()` 在子进程中执行 cd，只验证目录可访问性。实际的 PWD 切换需要：
-- Claude Code: EnterWorktree tool
-- Codex: codex -C 命令
-- 其他: 手动 cd
+MCP server 作为独立进程，无法直接改变用户 shell 的 PWD。实际的 PWD 切换依赖各 Agent 的机制：
 
-alignPwd 的验证逻辑帮助确认目录是否可访问，失败时返回手动指令。
+- **Claude Code**: PostToolUse hook 自动执行 `cd`
+  - 用户需在 `~/.claude/settings.json` 中配置：
+  ```json
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "mcp__agenticos__agenticos_switch",
+      "hooks": [{
+        "type": "command",
+        "command": "cd \"$(echo '$ARGUMENTS' | jq -r '.tool_response.path // empty' 2>/dev/null)\" 2>/dev/null || true",
+        "shell": "bash",
+        "timeout": 5
+      }]
+    }]
+  }
+  ```
+  - `agenticos_config --validate` 会检测此 hook 是否配置（scope: mcp）
+
+- **Codex**: `codex -C <path>` 在启动时传入即可自动切换
+
+- **其他 Agent**: 手动执行 `cd <path>`
+
+alignPwd 返回的 instruction 文本也会包含手动切换指令，作为 fallback。
 
 ## Related Issues
 
