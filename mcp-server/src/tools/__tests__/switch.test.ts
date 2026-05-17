@@ -203,6 +203,37 @@ describe('switchProject — agenticos_switch tests', () => {
       }
     });
 
+    it('detects Codex from current runtime environment variables', async () => {
+      const previousCodex = process.env.CODEX;
+      const previousCodexCi = process.env.CODEX_CI;
+      const previousCodexThreadId = process.env.CODEX_THREAD_ID;
+      const previousCodexManagedByNpm = process.env.CODEX_MANAGED_BY_NPM;
+      delete process.env.CODEX;
+      process.env.CODEX_CI = '1';
+      process.env.CODEX_THREAD_ID = 'test-thread-id';
+      process.env.CODEX_MANAGED_BY_NPM = '1';
+      try {
+        fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
+        vi.spyOn(process, 'cwd').mockReturnValue('/home/testuser');
+        registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+        mockDefaultReads();
+
+        const result = await switchProject({ project: 'test-project' });
+
+        expect(result).toContain('Codex current-session cwd cannot be changed by MCP output');
+        expect(result).toContain('codex -C /test/path');
+      } finally {
+        if (previousCodex === undefined) delete process.env.CODEX;
+        else process.env.CODEX = previousCodex;
+        if (previousCodexCi === undefined) delete process.env.CODEX_CI;
+        else process.env.CODEX_CI = previousCodexCi;
+        if (previousCodexThreadId === undefined) delete process.env.CODEX_THREAD_ID;
+        else process.env.CODEX_THREAD_ID = previousCodexThreadId;
+        if (previousCodexManagedByNpm === undefined) delete process.env.CODEX_MANAGED_BY_NPM;
+        else process.env.CODEX_MANAGED_BY_NPM = previousCodexManagedByNpm;
+      }
+    });
+
     it('marks the MCP process PWD as matching when it equals the project path', async () => {
       fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
       vi.spyOn(process, 'cwd').mockReturnValue('/test/path');

@@ -206,7 +206,12 @@ export async function getSessionBinding(sessionId: string): Promise<SessionBindi
 
 export function detectAgentType(): 'claude-code' | 'codex' | 'other' {
   if (process.env.CLAUDE_CODE !== undefined) return 'claude-code';
-  if (process.env.CODEX !== undefined) return 'codex';
+  if (
+    process.env.CODEX !== undefined ||
+    process.env.CODEX_CI !== undefined ||
+    process.env.CODEX_THREAD_ID !== undefined ||
+    process.env.CODEX_MANAGED_BY_NPM !== undefined
+  ) return 'codex';
   return 'other';
 }
 

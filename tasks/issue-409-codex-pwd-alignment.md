@@ -28,6 +28,11 @@ MCP can observe `process.cwd()` for the MCP server process, but that is not the
 same thing as the client shell/tool cwd. The client shell cwd is unavailable to
 AgenticOS MCP unless a future client integration passes it explicitly.
 
+Runtime detection also needs to account for the environment Codex actually
+passes to tool processes. The current Codex session exposes `CODEX_CI`,
+`CODEX_THREAD_ID`, and `CODEX_MANAGED_BY_NPM`, but not a plain `CODEX`
+variable, so Codex detection cannot rely on `process.env.CODEX` alone.
+
 ## Classification
 
 Current Codex behavior requires explicit per-command `workdir` in the active
