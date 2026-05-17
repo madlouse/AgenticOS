@@ -169,11 +169,49 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('✅ Switched to project "Test Project"');
       expect(result).toContain('Path: /test/path');
       expect(result).toContain('Status: active');
-      expect(result).toContain('🧰 Filesystem workdir: /test/path');
+      expect(result).toContain('🧰 Project path: /test/path');
+      expect(result).toContain('🧰 Filesystem workdir for tool calls: /test/path');
+      expect(result).toContain('Client shell PWD: unavailable to MCP');
       // New PWD alignment behavior: shows warning when directory doesn't exist
       expect(result).toContain('[WARN] PWD alignment skipped');
-      expect(result.indexOf('Status: active')).toBeLessThan(result.indexOf('🧰 Filesystem workdir: /test/path'));
-      expect(result.indexOf('🧰 Filesystem workdir: /test/path')).toBeLessThan(result.indexOf('Context loaded from:'));
+      expect(result.indexOf('Status: active')).toBeLessThan(result.indexOf('🧰 Project path: /test/path'));
+      expect(result.indexOf('🧰 Project path: /test/path')).toBeLessThan(result.indexOf('Context loaded from:'));
+    });
+
+    it('does not imply Codex current-session cwd changed after switch', async () => {
+      const previousCodex = process.env.CODEX;
+      process.env.CODEX = '1';
+      try {
+        fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
+        vi.spyOn(process, 'cwd').mockReturnValue('/home/testuser');
+        registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+        mockDefaultReads();
+
+        const result = await switchProject({ project: 'test-project' });
+
+        expect(result).toContain('🧰 Project path: /test/path');
+        expect(result).toContain('🧭 Observed MCP process PWD: /home/testuser (differs from project path)');
+        expect(result).toContain('Client shell PWD: unavailable to MCP');
+        expect(result).toContain('Codex current-session cwd cannot be changed by MCP output');
+        expect(result).toContain('Use this project path as explicit workdir');
+        expect(result).toContain('To start a new Codex session in this project, run:');
+        expect(result).toContain('codex -C /test/path');
+        expect(result).not.toContain('To align your shell PWD, run:');
+      } finally {
+        if (previousCodex === undefined) delete process.env.CODEX;
+        else process.env.CODEX = previousCodex;
+      }
+    });
+
+    it('marks the MCP process PWD as matching when it equals the project path', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
+      vi.spyOn(process, 'cwd').mockReturnValue('/test/path');
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      const result = await switchProject({ project: 'test-project' });
+
+      expect(result).toContain('🧭 Observed MCP process PWD: /test/path (matches project path)');
     });
 
     it('finds project by name', async () => {
