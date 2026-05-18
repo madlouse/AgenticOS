@@ -7,7 +7,7 @@ import { STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 14;
+export const CURRENT_TEMPLATE_VERSION = 15;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -77,6 +77,14 @@ If any of these cannot be answered clearly, **stop and ask**. Do not proceed wit
 
 Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.` as const;
 
+export const PROJECT_SWITCH_ROUTING_TITLE = 'Project Switch Routing';
+export const PROJECT_SWITCH_ROUTING_CONTENT = `When the operator asks to switch, enter, or continue an AgenticOS project, including phrases such as "switch project", "enter project", "continue project", "切换项目", "进入项目", or "继续项目", route through AgenticOS MCP before filesystem discovery.
+
+1. If AgenticOS MCP tools are not visible yet, first use deferred tool discovery for AgenticOS MCP tools; in Codex-like clients, use \`tool_search\` before shell directory search.
+2. If \`agenticos_switch\` is available, call it before running shell commands to locate project directories.
+3. Use the returned project path / filesystem workdir as the explicit working directory for subsequent shell commands.
+4. Fall back to shell directory search only when AgenticOS MCP is unavailable or \`agenticos_switch\` cannot resolve the requested project.` as const;
+
 export const DESIGN_PHILOSOPHY_TITLE = 'Design Philosophy';
 
 /**
@@ -97,13 +105,6 @@ export const CONTINUITY_CONTRACT_BULLETS = [
 export function extractTemplateVersion(content: string): number {
   const match = content.match(/<!--\s*agenticos-template:\s*v(\d+)\s*-->/);
   return match ? parseInt(match[1], 10) : 0;
-}
-
-/** Update version marker in existing content to current version */
-function ensureVersionMarker(content: string): string {
-  if (content.includes(`agenticos-template: v${CURRENT_TEMPLATE_VERSION}`)) return content;
-  const cleaned = content.replace(/<!--\s*agenticos-template:\s*v\d+\s*-->\n?/, '');
-  return `${VERSION_MARKER}\n${cleaned}`;
 }
 
 function renderSharedPolicySection(): string {
@@ -168,6 +169,10 @@ export function generateAgentsMd(
     {
       name: 'task-intake-rule',
       content: `## ${TASK_INTAKE_RULE_TITLE}\n\n${TASK_INTAKE_RULE_CONTENT}`
+    },
+    {
+      name: 'project-switch-routing',
+      content: `## ${PROJECT_SWITCH_ROUTING_TITLE}\n\n${PROJECT_SWITCH_ROUTING_CONTENT}`
     },
     {
       name: 'guardrail-protocol',
@@ -235,6 +240,7 @@ export const STANDARD_SECTION_NAMES = [
   'runtime-notes',
   'stop-hook',
   'task-intake-rule',
+  'project-switch-routing',
   'guardrail-protocol',
   'recording-protocol',
   'session-start-protocol',
@@ -254,6 +260,7 @@ const SECTION_TITLES: Record<string, string> = {
   'runtime-notes': 'Claude Runtime Notes',
   'stop-hook': 'Stop-Hook (Optional)',
   'task-intake-rule': 'Task Intake Rule',
+  'project-switch-routing': 'Project Switch Routing',
   'guardrail-protocol': 'Guardrail Protocol (MANDATORY)',
   'recording-protocol': 'MANDATORY: Recording Protocol',
   'session-start-protocol': 'Session Start Protocol',
@@ -319,6 +326,10 @@ export function generateClaudeMd(
     {
       name: 'task-intake-rule',
       content: `## ${TASK_INTAKE_RULE_TITLE}\n\n${TASK_INTAKE_RULE_CONTENT}`
+    },
+    {
+      name: 'project-switch-routing',
+      content: `## ${PROJECT_SWITCH_ROUTING_TITLE}\n\n${PROJECT_SWITCH_ROUTING_CONTENT}`
     },
     {
       name: 'guardrail-protocol',
@@ -425,6 +436,7 @@ function extractProjectSpecificSections(existingContent: string): string[] {
           'runtime-notes': ['Claude Runtime Notes', 'Codex / Generic Runtime Notes'],
           'stop-hook': ['Stop-Hook (Optional)'],
           'task-intake-rule': ['Task Intake Rule'],
+          'project-switch-routing': ['Project Switch Routing'],
           'guardrail-protocol': ['Guardrail Protocol (MANDATORY)'],
           'recording-protocol': ['MANDATORY: Recording Protocol', 'Recording Protocol (MANDATORY)'],
           'session-start-protocol': ['Session Start Protocol'],
