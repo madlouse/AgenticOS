@@ -26,7 +26,7 @@ export interface PwdAlignmentResult {
   instruction: string | null;
   instructionKind: 'current-session' | 'new-session' | 'manual-cd' | null;
   warning: string | null;
-  observedMcpProcessPwd: string | null;
+  observedMcpProcessPwd: string;
 }
 
 let currentSessionProject: SessionProjectBinding | null = null;

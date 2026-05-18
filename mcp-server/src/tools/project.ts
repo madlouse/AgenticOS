@@ -16,7 +16,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
-import { bindSessionProject, getSessionProjectBinding, bindSessionProjectAsync, alignPwd } from '../utils/session-context.js';
+import { bindSessionProject, getSessionProjectBinding, bindSessionProjectAsync, alignPwd, type PwdAlignmentResult } from '../utils/session-context.js';
 import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
@@ -327,42 +327,30 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
 
 function buildFilesystemAlignmentLines(
   projectPath: string,
-  pwdResult?: {
-    success: boolean;
-    agentType?: 'claude-code' | 'codex' | 'other';
-    instruction: string | null;
-    instructionKind?: 'current-session' | 'new-session' | 'manual-cd' | null;
-    warning: string | null;
-    observedMcpProcessPwd?: string | null;
-  },
+  pwdResult: PwdAlignmentResult,
 ): string[] {
   const lines = [
     `🧰 Project path: ${projectPath}`,
     `🧰 Filesystem workdir for tool calls: ${projectPath}`,
   ];
 
-  const observedMcpPwd = pwdResult?.observedMcpProcessPwd;
-  if (observedMcpPwd) {
-    const relation = observedMcpPwd === projectPath ? 'matches project path' : 'differs from project path';
-    lines.push(`🧭 Observed MCP process PWD: ${observedMcpPwd} (${relation})`);
-  } else {
-    lines.push('🧭 Observed MCP process PWD: unavailable');
-  }
+  const relation = pwdResult.observedMcpProcessPwd === projectPath ? 'matches project path' : 'differs from project path';
+  lines.push(`🧭 Observed MCP process PWD: ${pwdResult.observedMcpProcessPwd} (${relation})`);
 
   lines.push('⚠️ Client shell PWD: unavailable to MCP; verify with `pwd` in the client shell.');
 
-  if (pwdResult?.warning) {
+  if (pwdResult.warning) {
     lines.push(`⚠️ ${pwdResult.warning}`);
   }
 
-  if (pwdResult?.agentType === 'codex') {
+  if (pwdResult.agentType === 'codex') {
     lines.push('⚠️ Codex current-session cwd cannot be changed by MCP output.');
     lines.push('   Use this project path as explicit workdir for every filesystem operation.');
     if (pwdResult.instruction) {
       lines.push('   To start a new Codex session in this project, run:');
       lines.push(`   ${pwdResult.instruction}`);
     }
-  } else if (pwdResult?.instruction) {
+  } else if (pwdResult.instruction) {
     lines.push('📍 Client alignment hint:');
     lines.push(`   ${pwdResult.instruction}`);
     lines.push('   Treat this as a hint; verify the client shell PWD before using relative paths.');
