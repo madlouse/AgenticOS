@@ -62,14 +62,6 @@ working_memory:
       phrases + memory_contract"
     - 所有 YELLOW 项目的 WIP 占位符已清理
     - 所有 3 项目均保留 divergent 状态（custom .project.yaml 和 state.yaml 符合项目实际需求）
-    - Updated switch output contract in project.ts to distinguish project path,
-      filesystem workdir, MCP process PWD, and unavailable client shell PWD.
-    - Updated alignPwd metadata to report agentType, instructionKind, and
-      observed MCP process PWD.
-    - Expanded Codex detection to CODEX, CODEX_CI, CODEX_THREAD_ID, and
-      CODEX_MANAGED_BY_NPM.
-    - Added switch tests covering Codex current-session cwd warning, current
-      runtime env detection, and MCP PWD match/mismatch.
   decisions:
     - "Root-Git Exit: no further action needed — plan was already executed
       before this session"
@@ -87,30 +79,20 @@ working_memory:
     - YELLOW 项目统一用 adopt 工具 + 手动补字段方式处理
     - 所有 YELLOW 项目的 public_transcript_isolation_contract 行为检查持续
       FAIL，但文本要求（transcript isolation phrases）均已满足——这是 MCP 工具级问题
-    - Treat Codex current-session cwd mutation as unsupported by current MCP
-      text response contract; use explicit per-command workdir in active
-      sessions.
-    - "Keep #406 focused on hook/config detection and #408 focused on output
-      contract wording; #409 fixes Codex-specific contract clarity and runtime
-      detection."
-    - "Do not fix unrelated full-suite failures in #409: mcp-regression baseline
-      version mismatch, mcp-transport tools/list timeout, and guardrail-evidence
-      lock metadata timeout."
   pending:
-    - "Push fix/409-codex-pwd-alignment and open/merge PR for #409, or continue
-      with local issue queue if PR creation is intentionally deferred."
-    - "Investigate unrelated full-suite baseline failures separately if still
-      present after #409 lands."
+    - 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
+    - "agent-cli-api #82 等待用户处理"
+    - T5T/dev-report/workforce-analytics 不需要 git，但可选择性补 knowledge/ 和 standards/
 session:
-  last_backup: 2026-05-17T16:12:36.469Z
+  last_backup: 2026-04-22T07:11:50.602Z
   id: entry-refresh-2026-04-10
   started: 2026-04-10T10:58:11.098Z
   agent: agenticos-entry-refresh
   last_entry_surface_refresh: 2026-04-22T05:43:35.171Z
 current_task:
-  title: "Issue #409 Codex project-switch PWD alignment regression"
+  title: 14 项目合规审查 + YELLOW 项目修复
   status: completed
-  updated: 2026-05-17T16:12:36.469Z
+  updated: 2026-04-22T07:11:01.526Z
   next_step: Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
 loaded_context:
   - .project.yaml
