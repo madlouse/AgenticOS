@@ -5,6 +5,8 @@ import {
   CLAUDE_ADAPTER_LINES,
   CLAUDE_RUNTIME_GUIDANCE_TITLE,
   CURRENT_TEMPLATE_VERSION,
+  PROJECT_SWITCH_ROUTING_CONTENT,
+  PROJECT_SWITCH_ROUTING_TITLE,
   SHARED_POLICY_BULLETS,
   SHARED_POLICY_TITLE,
   TASK_INTAKE_RULE_TITLE,
@@ -12,6 +14,8 @@ import {
   generateClaudeMd,
   upgradeClaudeMd,
   upgradeAgentsMd,
+  updateClaudeMdState,
+  extractTemplateVersion,
   mergeSections,
   STANDARD_SECTION_NAMES,
 } from '../distill.js';
@@ -24,8 +28,8 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template version and minimal required sections', () => {
     const content = generateAgentsMd('Demo Project', 'Test project');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(14);
-    expect(content).toContain('<!-- agenticos-template: v14 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(15);
+    expect(content).toContain('<!-- agenticos-template: v15 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -42,6 +46,13 @@ describe('distill templates', () => {
     expect(content).toContain('**Intent**');
     expect(content).toContain('**Data Source**');
     expect(content).toContain('**Scope**');
+    expect(content).toContain(`## ${PROJECT_SWITCH_ROUTING_TITLE}`);
+    expect(content).toContain(PROJECT_SWITCH_ROUTING_CONTENT);
+    expect(content).toContain('tool_search');
+    expect(content).toContain('切换项目');
+    expect(content).toContain('进入项目');
+    expect(content).toContain('continue project');
+    expect(content).toContain('Fall back to shell directory search only when AgenticOS MCP is unavailable');
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
     expect(content).toContain('agenticos_status');
@@ -65,8 +76,8 @@ describe('distill templates', () => {
   it('generates CLAUDE.md with minimal required sections', () => {
     const content = generateClaudeMd('Demo Project', 'Test project');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(14);
-    expect(content).toContain('<!-- agenticos-template: v14 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(15);
+    expect(content).toContain('<!-- agenticos-template: v15 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(CLAUDE_ADAPTER_LINES[0]);
     expect(content).toContain(CLAUDE_ADAPTER_LINES[1]);
@@ -83,6 +94,10 @@ describe('distill templates', () => {
     expect(content).toContain('**Intent**');
     expect(content).toContain('**Data Source**');
     expect(content).toContain('**Scope**');
+    expect(content).toContain(`## ${PROJECT_SWITCH_ROUTING_TITLE}`);
+    expect(content).toContain('tool_search');
+    expect(content).toContain('switch project');
+    expect(content).toContain('继续项目');
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('## MANDATORY: Recording Protocol');
     expect(content).toContain('## Session Start Protocol');
@@ -127,7 +142,7 @@ describe('section markers', () => {
     expect(content).toContain('<!-- agenticos-section: recording-protocol -->');
 
     // All standard sections should be marked
-    expect(STANDARD_SECTION_NAMES.length).toBe(8);
+    expect(STANDARD_SECTION_NAMES.length).toBe(9);
   });
 
   it('mergeSections preserves project-specific content from existing file', () => {
@@ -206,8 +221,8 @@ Old guardrail text
       expect(result).toContain('用户入口保持小写');
       expect(result).toContain('1Password 是唯一事实源');
 
-      // Should have v14 marker
-      expect(result).toContain('v14');
+      // Should have v15 marker
+      expect(result).toContain('v15');
     } finally {
       await unlink(tempPath);
     }
@@ -225,6 +240,10 @@ describe('merge sections edge cases', () => {
     const template = generateClaudeMd('Test', '');
     const result = mergeSections(template, '');
     expect(result).toBe(template);
+  });
+
+  it('mergeSections without section markers falls back to the template content', () => {
+    expect(mergeSections('plain template', 'plain existing')).toBe('plain template');
   });
 
   it('mergeSections with existing section markers preserves project-specific sections', () => {
@@ -314,6 +333,37 @@ Old recording
     expect(result).toContain('Custom Project Section');
     expect(result).toContain('Project-specific bullet');
   });
+
+  it('mergeSections preserves matching non-standard template sections from existing', () => {
+    const template = `<!-- agenticos-section: project-specific -->
+## Project Specific
+
+Template content
+<!-- /agenticos-section -->`;
+    const existing = `<!-- agenticos-section: project-specific -->
+## Project Specific
+
+Existing content
+<!-- /agenticos-section -->`;
+
+    const result = mergeSections(template, existing);
+
+    expect(result).toContain('Existing content');
+    expect(result).not.toContain('Template content');
+  });
+
+  it('mergeSections parses marker sections without markdown titles', () => {
+    const template = `<!-- agenticos-section: custom -->
+No title template
+<!-- /agenticos-section -->`;
+    const existing = `<!-- agenticos-section: custom -->
+No title existing
+<!-- /agenticos-section -->`;
+
+    const result = mergeSections(template, existing);
+
+    expect(result).toContain('No title existing');
+  });
 });
 
 describe('upgrade functions edge cases', () => {
@@ -322,7 +372,7 @@ describe('upgrade functions edge cases', () => {
     const result = upgradeClaudeMd(nonExistentPath, 'Test', 'Test desc');
 
     // Should generate template without errors
-    expect(result).toContain('<!-- agenticos-template: v14 -->');
+    expect(result).toContain('<!-- agenticos-template: v15 -->');
     expect(result).toContain('## Adapter Role');
   });
 
@@ -354,7 +404,7 @@ More custom content
       const result = upgradeClaudeMd(tempPath, 'Legacy Project', '');
 
       // Should have new template content
-      expect(result).toContain('v14');
+      expect(result).toContain('v15');
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
 
       // Should preserve custom sections
@@ -391,7 +441,7 @@ CLI adapter role
       const result = upgradeAgentsMd(tempPath, 'CLI Project', '');
 
       // Should have new template content
-      expect(result).toContain('v14');
+      expect(result).toContain('v15');
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
 
       // Should preserve project-specific sections
@@ -399,6 +449,96 @@ CLI adapter role
       expect(result).toContain('Command 1');
       expect(result).toContain('Secret Contract');
       expect(result).toContain('Secret 1');
+    } finally {
+      await unlink(tempPath);
+    }
+  });
+
+  it('upgradeClaudeMd preserves unknown sections before legacy recording protocol headers', async () => {
+    const existingContent = `<!-- agenticos-template: v13 -->
+# CLAUDE.md — Legacy Project
+
+## Custom Operations
+
+- Keep this custom operation
+
+## Recording Protocol
+
+Legacy recording instructions
+`;
+
+    const tempPath = join(tmpdir(), 'test-legacy-recording-claude.md');
+    await writeFile(tempPath, existingContent, 'utf-8');
+
+    try {
+      const result = upgradeClaudeMd(tempPath, 'Legacy Project', '');
+
+      expect(result).toContain('Custom Operations');
+      expect(result).toContain('Keep this custom operation');
+      expect(result).not.toContain('Legacy recording instructions');
+    } finally {
+      await unlink(tempPath);
+    }
+  });
+
+  it('upgradeClaudeMd splits adjacent unknown legacy sections conservatively', async () => {
+    const existingContent = `<!-- agenticos-template: v13 -->
+# CLAUDE.md — Legacy Project
+
+## First Unknown
+## Second Unknown
+
+Second body
+`;
+
+    const tempPath = join(tmpdir(), 'test-adjacent-unknown-claude.md');
+    await writeFile(tempPath, existingContent, 'utf-8');
+
+    try {
+      const result = upgradeClaudeMd(tempPath, 'Legacy Project', '');
+
+      expect(result).toContain('First Unknown');
+      expect(result).toContain('Second Unknown');
+      expect(result).toContain('Second body');
+    } finally {
+      await unlink(tempPath);
+    }
+  });
+
+  it('upgradeAgentsMd with non-existent file generates fresh template', () => {
+    const nonExistentPath = join(tmpdir(), 'non-existent-agents-' + Date.now() + '.md');
+    const result = upgradeAgentsMd(nonExistentPath, 'Test', 'Test desc');
+
+    expect(result).toContain('<!-- agenticos-template: v15 -->');
+    expect(result).toContain('## Project Switch Routing');
+  });
+
+  it('upgradeAgentsMd with section markers uses mergeSections', async () => {
+    const existingContent = `<!-- agenticos-template: v13 -->
+# AGENTS.md — Marked Project
+
+<!-- agenticos-section: canonical-policy -->
+## Canonical Policy
+Old canonical
+<!-- /agenticos-section -->
+
+<!-- agenticos-section: custom-agent-content -->
+## Custom Agent Content
+
+- Agent bullet
+<!-- /agenticos-section -->
+`;
+
+    const tempPath = join(tmpdir(), 'test-marked-agents.md');
+    await writeFile(tempPath, existingContent, 'utf-8');
+
+    try {
+      const result = upgradeAgentsMd(tempPath, 'Marked Project', '');
+
+      expect(result).toContain('This project has one canonical AgenticOS execution policy');
+      expect(result).not.toContain('Old canonical');
+      expect(result).toContain('Custom Agent Content');
+      expect(result).toContain('Agent bullet');
     } finally {
       await unlink(tempPath);
     }
@@ -444,6 +584,11 @@ Old canonical
 });
 
 describe('section markers format consistency', () => {
+  it('extractTemplateVersion returns parsed version or zero when absent', () => {
+    expect(extractTemplateVersion('<!-- agenticos-template: v15 -->')).toBe(15);
+    expect(extractTemplateVersion('# No marker')).toBe(0);
+  });
+
   it('generateClaudeMd produces consistent marker format', () => {
     const content = generateClaudeMd('Test', '');
 
@@ -479,5 +624,13 @@ describe('section markers format consistency', () => {
     expect(STANDARD_SECTION_NAMES).toContain('runtime-notes');
     expect(STANDARD_SECTION_NAMES).toContain('stop-hook');
     expect(STANDARD_SECTION_NAMES).toContain('task-intake-rule');
+    expect(STANDARD_SECTION_NAMES).toContain('project-switch-routing');
+  });
+
+  it('updateClaudeMdState is a no-op because state lives in state.yaml', async () => {
+    await expect(updateClaudeMdState('/tmp/CLAUDE.md', {})).resolves.toEqual({
+      updated: false,
+      created: false,
+    });
   });
 });

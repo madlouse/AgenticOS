@@ -1,4 +1,4 @@
-<!-- agenticos-template: v14 -->
+<!-- agenticos-template: v15 -->
 # AGENTS.md — AgenticOS
 
 ## Adapter Role
@@ -33,6 +33,15 @@ If your runtime supports local stop hooks, configure `agenticos-record-reminder`
 If any of these cannot be answered clearly, **stop and ask**. Do not proceed with fuzzy assumptions.
 
 Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.
+
+## Project Switch Routing
+
+When the operator asks to switch, enter, or continue an AgenticOS project, including phrases such as "switch project", "enter project", "continue project", "切换项目", "进入项目", or "继续项目", route through AgenticOS MCP before filesystem discovery.
+
+1. If AgenticOS MCP tools are not visible yet, first use deferred tool discovery for AgenticOS MCP tools; in Codex-like clients, use `tool_search` before shell directory search.
+2. If `agenticos_switch` is available, call it before running shell commands to locate project directories.
+3. Use the returned project path / filesystem workdir as the explicit working directory for subsequent shell commands.
+4. Fall back to shell directory search only when AgenticOS MCP is unavailable or `agenticos_switch` cannot resolve the requested project.
 
 ## Guardrail Protocol (MANDATORY)
 

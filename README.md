@@ -143,6 +143,13 @@ first managed project:
 4. **Verify persistence** — on the second session, ask the tool to run
    `agenticos_status` and confirm it shows your previous context
 
+For natural-language switch requests such as "switch project", "enter project",
+"continue project", "切换项目", or "进入项目", agents should discover and call
+AgenticOS MCP `agenticos_switch` before shell directory search. In Codex-like
+clients where MCP tools may be deferred, use `tool_search` to discover
+AgenticOS MCP tools first. Fall back to shell directory search only when
+AgenticOS MCP is unavailable or cannot resolve the requested project.
+
 For a full walkthrough with `agenticos-bootstrap --first-run`, see
 [mcp-server/README.md](mcp-server/README.md).
 
