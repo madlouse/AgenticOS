@@ -16,7 +16,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
-import { bindSessionProject, getSessionProjectBinding, bindSessionProjectAsync, alignPwd } from '../utils/session-context.js';
+import { bindSessionProject, getSessionProjectBinding, bindSessionProjectAsync, alignPwd, type PwdAlignmentResult } from '../utils/session-context.js';
 import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
@@ -325,18 +325,38 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
   return lines;
 }
 
-function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { success: boolean; instruction: string | null; warning: string | null }): string[] {
-  const lines = [`🧰 Filesystem workdir: ${projectPath}`];
+function buildFilesystemAlignmentLines(
+  projectPath: string,
+  pwdResult: PwdAlignmentResult,
+): string[] {
+  const lines = [
+    `🧰 Project path: ${projectPath}`,
+    `🧰 Filesystem workdir for tool calls: ${projectPath}`,
+  ];
 
-  if (pwdResult?.success && pwdResult.instruction) {
-    lines.push(`📍 To align your shell PWD, run:`);
-    lines.push(`   ${pwdResult.instruction}`);
-  } else if (pwdResult?.warning) {
+  const relation = pwdResult.observedMcpProcessPwd === projectPath ? 'matches project path' : 'differs from project path';
+  lines.push(`🧭 Observed MCP process PWD: ${pwdResult.observedMcpProcessPwd} (${relation})`);
+
+  lines.push('⚠️ Client shell PWD: unavailable to MCP; verify with `pwd` in the client shell.');
+
+  if (pwdResult.warning) {
     lines.push(`⚠️ ${pwdResult.warning}`);
+  }
+
+  if (pwdResult.agentType === 'codex') {
+    lines.push('⚠️ Codex current-session cwd cannot be changed by MCP output.');
+    lines.push('   Use this project path as explicit workdir for every filesystem operation.');
+    if (pwdResult.instruction) {
+      lines.push('   To start a new Codex session in this project, run:');
+      lines.push(`   ${pwdResult.instruction}`);
+    }
+  } else if (pwdResult.instruction) {
+    lines.push('📍 Client alignment hint:');
+    lines.push(`   ${pwdResult.instruction}`);
+    lines.push('   Treat this as a hint; verify the client shell PWD before using relative paths.');
   } else {
-    lines.push('⚠️ Project binding changed, but agenticos_switch did not change your shell cwd.');
-    lines.push('   Use this project path as workdir for every filesystem operation.');
-    lines.push('   Avoid relative-path edits until your shell cwd is aligned to this project.');
+    lines.push('   Use this project path as explicit workdir for every filesystem operation.');
+    lines.push('   Avoid relative-path edits until your client shell PWD is verified.');
   }
 
   return lines;

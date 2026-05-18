@@ -22,8 +22,11 @@ export interface SessionBindingRecord {
 
 export interface PwdAlignmentResult {
   success: boolean;
+  agentType: 'claude-code' | 'codex' | 'other';
   instruction: string | null;
+  instructionKind: 'current-session' | 'new-session' | 'manual-cd' | null;
   warning: string | null;
+  observedMcpProcessPwd: string;
 }
 
 let currentSessionProject: SessionProjectBinding | null = null;
@@ -203,7 +206,12 @@ export async function getSessionBinding(sessionId: string): Promise<SessionBindi
 
 export function detectAgentType(): 'claude-code' | 'codex' | 'other' {
   if (process.env.CLAUDE_CODE !== undefined) return 'claude-code';
-  if (process.env.CODEX !== undefined) return 'codex';
+  if (
+    process.env.CODEX !== undefined ||
+    process.env.CODEX_CI !== undefined ||
+    process.env.CODEX_THREAD_ID !== undefined ||
+    process.env.CODEX_MANAGED_BY_NPM !== undefined
+  ) return 'codex';
   return 'other';
 }
 
@@ -216,13 +224,19 @@ export async function checkIsGitRepo(dirPath: string): Promise<boolean> {
 }
 
 export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult> {
+  const agentType = detectAgentType();
+  const observedMcpProcessPwd = process.cwd();
+
   // Security check
   const security = validatePathSecurity(projectPath);
   if (!security.valid) {
     return {
       success: false,
+      agentType,
       instruction: null,
+      instructionKind: null,
       warning: `[WARN] PWD alignment skipped: ${security.error}`,
+      observedMcpProcessPwd,
     };
   }
 
@@ -233,32 +247,42 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
   if (!existsSync(projectPath)) {
     return {
       success: false,
+      agentType,
       instruction: null,
+      instructionKind: null,
       warning: '[WARN] PWD alignment skipped: target directory does not exist',
+      observedMcpProcessPwd,
     };
   }
 
   // Generate agent-specific instruction
-  const agentType = detectAgentType();
   const isGitRepo = await checkIsGitRepo(projectPath);
 
   let instruction: string | null = null;
+  let instructionKind: PwdAlignmentResult['instructionKind'] = null;
 
   if (agentType === 'claude-code') {
     if (isGitRepo) {
       instruction = `EnterWorktree path="${projectPath}"`;
+      instructionKind = 'current-session';
     } else {
       instruction = `cd ${projectPath}`;
+      instructionKind = 'manual-cd';
     }
   } else if (agentType === 'codex') {
     instruction = `codex -C ${projectPath}`;
+    instructionKind = 'new-session';
   } else {
     instruction = `cd ${projectPath}`;
+    instructionKind = 'manual-cd';
   }
 
   return {
     success: true,
+    agentType,
     instruction,
+    instructionKind,
     warning: homeSecurity.warning || null,
+    observedMcpProcessPwd,
   };
 }
