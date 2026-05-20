@@ -3,7 +3,13 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import yaml from 'yaml';
-import { buildHelpLines, parseCliArgs, resolveSelectedAgents, runBootstrapCli } from '../bootstrap-cli.js';
+import {
+  buildDryRunLines,
+  buildHelpLines,
+  parseCliArgs,
+  resolveSelectedAgents,
+  runBootstrapCli,
+} from '../bootstrap-cli.js';
 
 function createDeps() {
   const files = new Map<string, string>();
@@ -102,6 +108,24 @@ describe('bootstrap cli', () => {
         apply: false,
         verify: false,
         firstRun: false,
+        all: true,
+        agents: [],
+        help: false,
+        persistShellEnv: false,
+        persistLaunchctlEnv: false,
+        autoConfigureHooks: false,
+      },
+      [
+        { id: 'codex', label: 'Codex', installed: true, detection_hint: 'test' },
+        { id: 'claude-code', label: 'Claude Code', installed: false, detection_hint: 'test' },
+      ],
+    )).toEqual(['codex', 'claude-code']);
+
+    expect(resolveSelectedAgents(
+      {
+        apply: false,
+        verify: false,
+        firstRun: false,
         all: false,
         agents: [],
         help: false,
@@ -114,6 +138,83 @@ describe('bootstrap cli', () => {
         { id: 'claude-code', label: 'Claude Code', installed: false, detection_hint: 'test' },
       ],
     )).toEqual(['codex']);
+  });
+
+  it('renders dry-run state for missing agents', () => {
+    const lines = buildDryRunLines(
+      '/tmp/workspace',
+      'explicit --workspace',
+      [
+        { id: 'codex', label: 'Codex', installed: true, detection_hint: 'test' },
+        { id: 'claude-code', label: 'Claude Code', installed: false, detection_hint: 'test' },
+      ],
+      ['claude-code'],
+      {
+        apply: false,
+        verify: false,
+        firstRun: false,
+        all: false,
+        agents: ['claude-code'],
+        help: false,
+        persistShellEnv: true,
+        persistLaunchctlEnv: true,
+        autoConfigureHooks: true,
+      },
+      undefined,
+      '/Users/tester',
+    );
+
+    expect(lines.join('\n')).toContain('- claude-code: no (test)');
+    expect(lines.join('\n')).toContain('launchctl setenv AGENTICOS_HOME');
+  });
+
+  it('reports non-Error thrown failures', () => {
+    const detectHarness = createDeps();
+    detectHarness.deps.commandExists = () => {
+      throw 'detect exploded';
+    };
+
+    expect(runBootstrapCli(['--workspace', '/tmp/workspace'], detectHarness.deps)).toBe(1);
+    expect(detectHarness.stderr).toContain('detect exploded');
+
+    const cursorHarness = createDeps();
+    cursorHarness.deps.writeFile = () => {
+      throw 'cursor config locked';
+    };
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'cursor', '--apply'],
+      cursorHarness.deps,
+    )).toBe(1);
+    expect(cursorHarness.stdout.some((line) => line.includes('FAIL cursor: cursor config locked'))).toBe(true);
+
+    const profileHarness = createDeps();
+    profileHarness.deps.writeFile = (path: string, content: string) => {
+      if (path === 'profile') throw 'profile locked';
+      profileHarness.files.set(path, content);
+    };
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--persist-shell-env', '--shell-profile', 'profile', '--apply'],
+      profileHarness.deps,
+    )).toBe(1);
+    expect(profileHarness.stdout.some((line) => line.includes('FAIL shell-profile: profile locked'))).toBe(true);
+
+    const hookHarness = createDeps();
+    hookHarness.deps.writeFile = () => {
+      throw 'hook settings locked';
+    };
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      hookHarness.deps,
+    )).toBe(1);
+    expect(hookHarness.stdout.some((line) => line.includes('FAIL claude-pwd-hook'))).toBe(true);
+
+    const stateHarness = createDeps();
+    stateHarness.deps.writeFile = (path: string, content: string) => {
+      if (path.endsWith('bootstrap-state.yaml')) throw 'state locked';
+      stateHarness.files.set(path, content);
+    };
+    expect(runBootstrapCli(['--workspace', '/tmp/workspace', '--agent', 'codex', '--apply'], stateHarness.deps)).toBe(1);
+    expect(stateHarness.stdout.some((line) => line.includes('FAIL bootstrap-state: state locked'))).toBe(true);
   });
 
   it('applies codex bootstrap and persists shell env', () => {
@@ -434,6 +535,21 @@ describe('bootstrap cli', () => {
       verifyHarness.deps,
     )).toBe(1);
     expect(verifyHarness.stdout.some((line) => line.includes('FAIL launchctl: /tmp/other'))).toBe(true);
+
+    const emptyVerifyHarness = createDeps();
+    emptyVerifyHarness.deps.runCommand = (command: string, args: string[], failOnError: boolean) => {
+      emptyVerifyHarness.commands.push({ command, args, failOnError });
+      if ([command, ...args].join(' ') === 'launchctl getenv AGENTICOS_HOME') {
+        return { ok: false, detail: '' };
+      }
+      return { ok: true, detail: 'ok' };
+    };
+
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--persist-launchctl-env', '--apply'],
+      emptyVerifyHarness.deps,
+    )).toBe(1);
+    expect(emptyVerifyHarness.stdout.some((line) => line.includes('launchctl getenv did not report'))).toBe(true);
   });
 
   it('fails launchctl persistence on non-macos platforms', () => {
@@ -500,6 +616,19 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.some((line) => line.includes('OK shell-profile'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK launchctl'))).toBe(true);
     expect(harness.files.has('/tmp/workspace/.agent-workspace/bootstrap-state.yaml')).toBe(false);
+  });
+
+  it('verifies shell profile through the default shell path', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.profile', 'export AGENTICOS_HOME="/tmp/workspace"\n');
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--persist-shell-env', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK shell-profile: verified /Users/tester/.profile'))).toBe(true);
   });
 
   it('verifies codex redacted output through config file fallback', () => {

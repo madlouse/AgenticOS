@@ -364,7 +364,7 @@ function getRecoveryCommand(agentId: SupportedAgentId): string {
     'cursor': 'agenticos-bootstrap --agents cursor',
     'gemini-cli': 'agenticos-bootstrap --agents gemini-cli',
   };
-  return commands[agentId] || '';
+  return commands[agentId];
 }
 
 function runVerification(
