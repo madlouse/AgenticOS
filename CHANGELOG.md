@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.23] — 2026-05-20
+
+### Added
+- mcp-server: Claude Code PWD guidance hook binary `agenticos-claude-pwd-hook` now ships with the package and can be auto-configured by bootstrap.
+- mcp-server: project status now reads runtime bootstrap state from `${AGENTICOS_HOME}/.agent-workspace/bootstrap-state.yaml` before falling back to legacy project-local state.
+- ci: release workflow now publishes `agenticos-mcp.tgz` and performs Homebrew formula synchronization from the tag release flow.
+
+### Fixed
+- mcp-server: Claude Code hook setup no longer relies on a brittle inline shell snippet and now parses Claude `PostToolUse` input in TypeScript.
+- mcp-server: Codex and shell PWD alignment guidance now shell-quotes project paths, including paths with spaces, quotes, semicolons, and command substitutions.
+- mcp-server: bootstrap guidance uses the correct `--agent claude-code` option and documents that Claude hooks provide cwd guidance rather than mutating the parent shell.
+- release: Homebrew bump automation now uses a single pinned action path, checks out the source repository before syncing the source formula, rewrites both current and legacy tarball URL shapes, and pushes the source formula sync commit.
+
+### Changed
+- docs: PWD alignment and Homebrew distribution guidance now reflect the installed hook binary, stable release artifact name, and pinned Homebrew bump action.
+
 ## [0.4.5] — 2026-04-21
 
 ### Fixed
