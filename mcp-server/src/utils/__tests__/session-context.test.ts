@@ -186,6 +186,14 @@ describe('session-context', () => {
       expect(shellQuote('/tmp/a; echo hacked $(pwd)')).toBe("'/tmp/a; echo hacked $(pwd)'");
     });
 
+    it('rejects paths with control characters before rendering guidance', async () => {
+      const result = await alignPwd('/tmp/project\nINJECT');
+
+      expect(result.success).toBe(false);
+      expect(result.instruction).toBeNull();
+      expect(result.warning).toContain('control characters');
+    });
+
     it('returns failure for relative path', async () => {
       const result = await alignPwd('relative/path');
       expect(result.success).toBe(false);
@@ -205,6 +213,17 @@ describe('session-context', () => {
       expect(result.success).toBe(true);
       expect(result.instruction).toContain("cd '/tmp'");
       expect(result.warning).toContain('not under AGENTICOS_HOME');
+    });
+
+    it('uses path containment instead of raw prefix matching for AGENTICOS_HOME warnings', async () => {
+      agenticosHomeMock.value = join(tmpdir(), 'agenticos');
+      const projectPath = join(tmpdir(), 'agenticos-evil');
+      mkdirSync(projectPath, { recursive: true });
+      const result = await alignPwd(projectPath);
+
+      expect(result.success).toBe(true);
+      expect(result.warning).toContain('not under AGENTICOS_HOME');
+      rmSync(projectPath, { recursive: true, force: true });
     });
 
     it('returns null warning for accessible directory inside AGENTICOS_HOME', async () => {

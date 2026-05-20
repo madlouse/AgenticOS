@@ -79,7 +79,7 @@ import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as distill from '../../utils/distill.js';
 import * as fs from 'fs';
-import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
+import { bindSessionProject, clearSessionProjectBinding, getSessionProjectBinding } from '../../utils/session-context.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -123,8 +123,10 @@ describe('switchProject', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearSessionProjectBinding();
-    // By default, mock existsSync to return false (no CLAUDE.md/AGENTS.md)
-    fsMock.existsSync.mockReturnValue(false);
+    // By default, only the registered project root exists; entry surfaces are absent.
+    fsMock.existsSync.mockImplementation((path: string) => (
+      path === '/test/path' || path === '/workspace/projects/agenticos'
+    ));
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
@@ -1373,7 +1375,7 @@ describe('switchProject', () => {
     }
   });
 
-  it('uses explicit workdir fallback when non-Codex alignment has no instruction', async () => {
+  it('does not bind a session when the registered project path is missing', async () => {
     const previousClaudeCode = process.env.CLAUDE_CODE;
     process.env.CLAUDE_CODE = '1';
     try {
@@ -1408,9 +1410,9 @@ describe('switchProject', () => {
 
       const result = await switchProject({ project: 'my-project' });
 
-      expect(result).toContain('[WARN] PWD alignment skipped: target directory does not exist');
-      expect(result).toContain('Use this project path as explicit workdir for every filesystem operation.');
-      expect(result).toContain('Avoid relative-path edits until your client shell PWD is verified.');
+      expect(result).toContain('❌ Project "My Project" cannot be switched');
+      expect(result).toContain('target directory does not exist');
+      expect(getSessionProjectBinding()).toBeNull();
     } finally {
       if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;
       else process.env.CLAUDE_CODE = previousClaudeCode;

@@ -104,6 +104,16 @@ describe('initProject', () => {
     ).rejects.toThrow('context_publication_policy is required');
   });
 
+  it('rejects custom paths with control characters', async () => {
+    await expect(
+      initProject({
+        name: 'Test Project',
+        path: '/home/testuser/AgenticOS/projects/test-project\nINJECT',
+        topology: 'local_directory_only',
+      }),
+    ).rejects.toThrow('control characters');
+  });
+
   it('creates directories with correct structure', async () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockRejectedValue(new Error('ENOENT'));

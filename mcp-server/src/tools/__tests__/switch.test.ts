@@ -128,7 +128,7 @@ describe('switchProject — agenticos_switch tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearSessionProjectBinding();
-    fsMock.existsSync.mockReturnValue(false);
+    fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
@@ -170,12 +170,22 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('Path: /test/path');
       expect(result).toContain('Status: active');
       expect(result).toContain('🧰 Project path: /test/path');
-      expect(result).toContain('🧰 Filesystem workdir for tool calls: /test/path');
+      expect(result).toContain('🧰 Recommended explicit workdir for tool calls: /test/path');
       expect(result).toContain('Client shell PWD: unavailable to MCP');
-      // New PWD alignment behavior: shows warning when directory doesn't exist
-      expect(result).toContain('[WARN] PWD alignment skipped');
       expect(result.indexOf('Status: active')).toBeLessThan(result.indexOf('🧰 Project path: /test/path'));
       expect(result.indexOf('🧰 Project path: /test/path')).toBeLessThan(result.indexOf('Context loaded from:'));
+    });
+
+    it('does not bind or report success when the registered project path is missing', async () => {
+      fsMock.existsSync.mockReturnValue(false);
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+
+      const result = await switchProject({ project: 'test-project' });
+
+      expect(result).toContain('❌ Project "Test Project" cannot be switched');
+      expect(result).toContain('target directory does not exist');
+      expect(getSessionProjectBinding()).toBeNull();
+      expect(registryMock.patchProjectMetadata).not.toHaveBeenCalled();
     });
 
     it('does not imply Codex current-session cwd changed after switch', async () => {

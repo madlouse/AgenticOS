@@ -336,10 +336,10 @@ describe('bootstrap cli', () => {
     expect(exitCode).toBe(0);
     expect(harness.files.has('/Users/tester/.claude/settings.json')).toBe(false);
     expect(harness.stdout.some((line) => line.includes('claude-pwd-hook'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('add agenticos_switch PostToolUse hook'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('add agenticos_switch PostToolUse cwd guidance hook'))).toBe(true);
   });
 
-  it('adds Claude PWD alignment hook during apply when requested', () => {
+  it('adds Claude cwd guidance hook during apply when requested', () => {
     const harness = createDeps();
 
     const exitCode = runBootstrapCli(
@@ -369,7 +369,7 @@ describe('bootstrap cli', () => {
     expect(bootstrapState.claude_pwd_hook.fatal).toBe(false);
   });
 
-  it('does not duplicate an existing Claude PWD alignment hook', () => {
+  it('does not duplicate an existing Claude cwd guidance hook', () => {
     const harness = createDeps();
     harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
       hooks: {
@@ -706,6 +706,42 @@ describe('bootstrap cli', () => {
     expect(exitCode).toBe(1);
     expect(harness.stdout.some((line) => line.includes('FAIL claude-code'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('Recovery: claude mcp add'))).toBe(true);
+  });
+
+  it('verifies the Claude cwd guidance hook when claude-code is selected', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
+          },
+        ],
+      },
+    }));
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK claude-code'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
+  });
+
+  it('fails Claude verification when the cwd guidance hook is missing', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL claude-pwd-hook'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('--auto-configure-hooks --apply'))).toBe(true);
   });
 
   it('verifies gemini and cursor agents', () => {
