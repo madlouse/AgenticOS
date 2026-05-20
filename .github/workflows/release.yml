@@ -97,7 +97,7 @@ jobs:
             "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz"
 
       - name: Update Homebrew formula in tap repo
-        uses: mislav/bump-homebrew-formula-action@v4
+        uses: mislav/bump-homebrew-formula-action@ccf2332299a883f6af50a1d2d41e5df7904dd769 # v4.1
         with:
           formula-name: ${{ env.FORMULA_NAME }}
           formula-path: ${{ env.FORMULA_PATH }}

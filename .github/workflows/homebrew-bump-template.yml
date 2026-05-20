@@ -6,7 +6,7 @@ name: Bump Homebrew Formula (Template)
 # Usage from caller:
 #   jobs:
 #     call-homebrew-bump:
-#       uses: madlouse/agenticos/.github/workflows/homebrew-bump-template.yml@main
+#       uses: madlouse/agenticos/.github/workflows/homebrew-bump-template.yml@<tag-or-sha>
 #       with:
 #         formula-name: mytool
 #         formula-path: Formula/mytool.rb   # optional; empty = root
@@ -45,7 +45,7 @@ jobs:
     if: "!contains(github.ref_name, '-')"
     steps:
       - name: Bump Homebrew formula
-        uses: mislav/bump-homebrew-formula-action@v4
+        uses: mislav/bump-homebrew-formula-action@ccf2332299a883f6af50a1d2d41e5df7904dd769 # v4.1
         with:
           formula-name: ${{ inputs.formula-name }}
           formula-path: ${{ inputs.formula-path }}

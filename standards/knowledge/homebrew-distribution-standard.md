@@ -4,6 +4,8 @@
 
 This standard defines how managed projects publish release tags as Homebrew formula updates via the shared reusable workflow in `madlouse/agenticos`. It ensures consistent, auditable, and secure distribution across all projects.
 
+AgenticOS itself is different from downstream managed projects: its release workflow already owns the Homebrew bump after the GitHub release asset is created. Do not add a second tag-triggered Homebrew bump workflow to AgenticOS itself.
+
 ## Prerequisites
 
 - A GitHub Personal Access Token (PAT) stored as a repository secret with write access to the target Homebrew tap.
@@ -23,13 +25,15 @@ git push origin v<version>
 
 Tags must follow semver format (`v*.*.*`). Prerelease tags containing `-` (e.g. `v1.0.0-alpha`) are automatically skipped by the workflow to avoid polluting the stable formula.
 
-### Step 2: CI Triggers the Caller Workflow
+### Step 2: CI Triggers Exactly One Homebrew Bump Path
 
-The caller workflow at `.github/workflows/homebrew-bump.yml` fires on any `v*` tag push. It calls the reusable template with the project's parameters.
+Downstream projects may use a caller workflow at `.github/workflows/homebrew-bump.yml` that fires on any `v*` tag push. It calls the reusable template with the project's parameters.
+
+For projects that already have a release workflow which publishes the archive before bumping Homebrew, keep that single release workflow path instead. Do not run both a standalone tag workflow and a release workflow bump for the same tag.
 
 ### Step 3: Reusable Template Bumps the Formula
 
-The reusable template (`homebrew-bump-template.yml`) calls `mislav/bump-homebrew-formula-action@v4`, which:
+The reusable template (`homebrew-bump-template.yml`) calls `mislav/bump-homebrew-formula-action` pinned to an audited commit SHA, which:
 
 1. Fetches the current formula from the tap.
 2. Updates the `url`, `sha256`, and `tag` fields.
@@ -76,7 +80,7 @@ Template secrets:
 
 1. Add a caller workflow file to the project's `.github/workflows/` directory.
 2. Set `on.push.tags: ['v*']` to trigger on version tags.
-3. Reference the reusable template with `uses: madlouse/agenticos/.github/workflows/homebrew-bump-template.yml@main`.
+3. Reference the reusable template with `uses: madlouse/agenticos/.github/workflows/homebrew-bump-template.yml@<tag-or-sha>`. Do not use `@main` for PAT-handling release automation.
 4. Provide the three `with` parameters and the `committer-token` secret.
 5. Store the tap PAT as a repository secret in the calling repo.
 6. Document the project in the parameter table above.
