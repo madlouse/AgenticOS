@@ -95,9 +95,10 @@ export function mergeClaudePwdAlignmentHook(settingsContent: string | null): Cla
   }
 
   if (hasClaudePwdAlignmentHook(parsed)) {
+    const configuredContent = settingsContent as string;
     return {
       changed: false,
-      content: settingsContent?.endsWith('\n') ? settingsContent : `${settingsContent || '{}'}\n`,
+      content: configuredContent.endsWith('\n') ? configuredContent : `${configuredContent}\n`,
     };
   }
 

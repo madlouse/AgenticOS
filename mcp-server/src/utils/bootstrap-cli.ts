@@ -548,9 +548,7 @@ function configureClaudePwdAlignmentHook(
     return {
       ok: true,
       fatal: false,
-      detail: merged.changed
-        ? `updated ${settingsPath}`
-        : `already configured in ${settingsPath}`,
+      detail: `updated ${settingsPath}`,
     };
   } catch (error) {
     return {
