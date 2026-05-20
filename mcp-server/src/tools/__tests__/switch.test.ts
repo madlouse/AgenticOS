@@ -195,7 +195,7 @@ describe('switchProject — agenticos_switch tests', () => {
         expect(result).toContain('Codex current-session cwd cannot be changed by MCP output');
         expect(result).toContain('Use this project path as explicit workdir');
         expect(result).toContain('To start a new Codex session in this project, run:');
-        expect(result).toContain('codex -C /test/path');
+        expect(result).toContain("codex -C '/test/path'");
         expect(result).not.toContain('To align your shell PWD, run:');
       } finally {
         if (previousCodex === undefined) delete process.env.CODEX;
@@ -221,7 +221,7 @@ describe('switchProject — agenticos_switch tests', () => {
         const result = await switchProject({ project: 'test-project' });
 
         expect(result).toContain('Codex current-session cwd cannot be changed by MCP output');
-        expect(result).toContain('codex -C /test/path');
+        expect(result).toContain("codex -C '/test/path'");
       } finally {
         if (previousCodex === undefined) delete process.env.CODEX;
         else process.env.CODEX = previousCodex;

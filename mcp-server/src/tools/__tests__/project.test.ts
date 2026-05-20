@@ -1365,7 +1365,7 @@ describe('switchProject', () => {
       const result = await switchProject({ project: 'my-project' });
 
       expect(result).toContain('📍 Client alignment hint:');
-      expect(result).toContain('cd /test/path');
+      expect(result).toContain("cd '/test/path'");
       expect(result).toContain('Treat this as a hint; verify the client shell PWD');
     } finally {
       if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;
