@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.24] — 2026-05-20
+
+### Fixed
+- mcp-server: `agenticos_switch` now validates the registered project path before binding session context, so stale or missing paths fail closed instead of producing a successful switch.
+- mcp-server: path validation now rejects control characters and uses path-aware containment checks for `AGENTICOS_HOME` instead of raw prefix matching.
+- mcp-server: Claude Code cwd guidance now shell-quotes project paths and suppresses unsafe hook output for control-character paths.
+
+### Changed
+- mcp-server: switch output now describes the project path as the recommended explicit workdir for tool calls and clarifies that MCP output cannot mutate the client shell PWD.
+- bootstrap: `--verify` now checks the Claude Code cwd guidance hook and reports recovery commands when the hook is missing.
+
 ## [0.4.23] — 2026-05-20
 
 ### Added
