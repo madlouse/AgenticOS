@@ -265,6 +265,22 @@ async function buildWorktreeTopologySummaryLines(projectPath: string, projectYam
   return lines;
 }
 
+async function readBootstrapState(projectPath: string): Promise<any | null> {
+  const paths = [
+    join(getAgenticOSHome(), '.agent-workspace', 'bootstrap-state.yaml'),
+    join(projectPath, '.agent-workspace', 'bootstrap-state.yaml'),
+  ];
+  const uniquePaths = Array.from(new Set(paths));
+
+  for (const bootstrapStatePath of uniquePaths) {
+    try {
+      return yaml.parse(await readFile(bootstrapStatePath, 'utf-8')) || null;
+    } catch {}
+  }
+
+  return null;
+}
+
 function extractQuickStartSummary(quickStart?: string): string | null {
   if (!quickStart) return null;
 
@@ -690,20 +706,15 @@ export async function getStatus(args: any = {}): Promise<string> {
     }
   }
 
-  // Check bootstrap state for failures
-  const bootstrapStatePath = `${resolved.projectPath}/.agent-workspace/bootstrap-state.yaml`;
-  try {
-    const bootstrapContent = await readFile(bootstrapStatePath, 'utf-8');
-    const bootstrapState = yaml.parse(bootstrapContent) as any;
-    if (bootstrapState?.failed_agents?.length > 0) {
-      lines.push('');
-      lines.push('⚠️ Bootstrap Issues:');
-      for (const agent of bootstrapState.failed_agents as string[]) {
-        lines.push(`   - ${agent}: verification failed`);
-      }
-      lines.push('   Run: agenticos-bootstrap --verify');
+  const bootstrapState = await readBootstrapState(resolved.projectPath);
+  if (bootstrapState?.failed_agents?.length > 0) {
+    lines.push('');
+    lines.push('⚠️ Bootstrap Issues:');
+    for (const agent of bootstrapState.failed_agents as string[]) {
+      lines.push(`   - ${agent}: verification failed`);
     }
-  } catch {}
+    lines.push('   Run: agenticos-bootstrap --verify');
+  }
 
   return lines.join('\n');
 }
