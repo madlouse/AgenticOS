@@ -95,9 +95,13 @@ describe('claude-pwd-hook', () => {
   });
 
   it('extracts switched project paths from Claude hook stdin payloads', () => {
+    expect(extractProjectPathFromClaudeHookPayload(null)).toBeNull();
+    expect(extractProjectPathFromClaudeHookPayload({ tool_response: null })).toBeNull();
+    expect(extractProjectPathFromClaudeHookPayload({ tool_response: { path: '  ' } })).toBeNull();
+
     expect(extractProjectPathFromClaudeHookPayload({
       tool_response: {
-        path: '/tmp/project',
+        path: ' /tmp/project ',
       },
     })).toBe('/tmp/project');
 
@@ -111,6 +115,16 @@ describe('claude-pwd-hook', () => {
         ],
       },
     })).toBe('/tmp/from-text');
+
+    expect(extractProjectPathFromClaudeHookPayload({
+      tool_response: {
+        content: [
+          null,
+          { type: 'text' },
+          { type: 'text', text: 'Status: active' },
+        ],
+      },
+    })).toBeNull();
   });
 
   it('renders hook JSON that adds cwd guidance for Claude instead of cd in a child shell', () => {
@@ -137,5 +151,7 @@ describe('claude-pwd-hook', () => {
     expect(output).not.toBeNull();
     expect(JSON.parse(output || '{}').hookSpecificOutput.additionalContext).toContain('/tmp/agenticos');
     expect(runClaudePwdHook('{bad json')).toBeNull();
+    expect(runClaudePwdHook('')).toBeNull();
+    expect(runClaudePwdHook(JSON.stringify({ tool_response: { content: [] } }))).toBeNull();
   });
 });
