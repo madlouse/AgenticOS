@@ -10,9 +10,6 @@ const worktreeTopologyMock = vi.hoisted(() => ({
   deriveExpectedWorktreeRoot: vi.fn(() => '/home/testuser/AgenticOS/worktrees/project-1'),
   inspectProjectWorktreeTopology: vi.fn(),
 }));
-const canonicalMainGuardMock = vi.hoisted(() => ({
-  detectCanonicalMainWriteProtection: vi.fn(),
-}));
 const standardKitMock = vi.hoisted(() => ({
   adoptStandardKit: vi.fn(),
   checkStandardKitUpgrade: vi.fn(),
@@ -74,23 +71,15 @@ vi.mock('../../utils/standard-kit.js', () => ({
 }));
 
 vi.mock('../../utils/canonical-main-guard.js', () => ({
-  detectCanonicalMainWriteProtection: canonicalMainGuardMock.detectCanonicalMainWriteProtection,
+  detectCanonicalMainWriteProtection: vi.fn(() => ({ blocked: false })),
 }));
-
-vi.mock('../../utils/session-context.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/session-context.js')>();
-  return {
-    ...actual,
-    alignPwd: vi.fn(actual.alignPwd),
-  };
-});
 
 import { switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as distill from '../../utils/distill.js';
 import * as fs from 'fs';
-import { alignPwd, bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
+import { bindSessionProject, clearSessionProjectBinding } from '../../utils/session-context.js';
 
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
@@ -104,7 +93,6 @@ const distillMock = distill as typeof distill & {
   extractTemplateVersion: ReturnType<typeof vi.fn>;
 };
 const fsMock = fs as typeof fs & { existsSync: ReturnType<typeof vi.fn> };
-const alignPwdMock = alignPwd as ReturnType<typeof vi.fn>;
 
 function mockStatusReads(projectYaml: unknown, state: unknown | Error = {}): void {
   fsPromisesMock.readFile.mockImplementation(async (path: string) => {
@@ -145,20 +133,6 @@ describe('switchProject', () => {
       state: {},
       state_path: null,
     });
-    canonicalMainGuardMock.detectCanonicalMainWriteProtection.mockResolvedValue({ blocked: false });
-    standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
-      missing_required_files: [],
-      generated_files: [],
-      copied_templates: [],
-    });
-    standardKitMock.adoptStandardKit.mockResolvedValue({
-      upgraded_generated_files: [],
-      created_files: [],
-    });
-    alignPwdMock.mockImplementation(async (projectPath: string) => {
-      const actual = await vi.importActual<typeof import('../../utils/session-context.js')>('../../utils/session-context.js');
-      return actual.alignPwd(projectPath);
-    });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
       status: 'PASS',
@@ -172,6 +146,31 @@ describe('switchProject', () => {
         misplaced_dirty: 0,
       },
       inspection_errors: [],
+    });
+    standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
+      command: 'agenticos_standard_kit_upgrade_check',
+      status: 'CHECKED',
+      project_path: '/test/path',
+      project_name: 'My Project',
+      project_id: 'my-project',
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      missing_required_files: [],
+      generated_files: [],
+      copied_templates: [],
+    });
+    standardKitMock.adoptStandardKit.mockResolvedValue({
+      command: 'agenticos_standard_kit_adopt',
+      status: 'ADOPTED',
+      project_path: '/test/path',
+      project_name: 'My Project',
+      project_id: 'my-project',
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      created_files: [],
+      upgraded_generated_files: [],
+      skipped_existing_templates: [],
+      skipped_current_generated_files: [],
     });
     fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
       meta: { description: '' },
@@ -213,93 +212,6 @@ describe('switchProject', () => {
     expect(result).toContain('My Project');
     expect(result).toContain('/test/path');
     expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
-  });
-
-  it('renders executable PWD alignment guidance when switch can verify the target directory', async () => {
-    const accessibleProjectPath = process.cwd();
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'my-project',
-          name: 'My Project',
-          path: accessibleProjectPath,
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    fsMock.existsSync.mockImplementation((path: string) => path === accessibleProjectPath);
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
-      meta: { description: '' },
-      source_control: { topology: 'local_directory_only' },
-    }));
-
-    const result = await switchProject({ project: 'my-project' });
-
-    expect(result).toContain('⚠️ 重要: Claude Code 无法自动切换工作目录');
-    expect(result).toContain(`\`\`\`bash\ncd ${accessibleProjectPath}\n\`\`\``);
-    expect(result).toContain('然后执行 pwd 确认切换成功');
-  });
-
-  it('renders manual PWD guidance when verified directory access fails after existence check', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'my-project',
-          name: 'My Project',
-          path: '/test/path"',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    fsMock.existsSync.mockImplementation((path: string) => path === '/test/path"');
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
-      meta: { description: '' },
-      source_control: { topology: 'local_directory_only' },
-    }));
-
-    const result = await switchProject({ project: 'my-project' });
-
-    expect(result).toContain('⚠️ [WARN] PWD alignment failed. Directory not accessible');
-    expect(result).toContain('⚠️ 请在终端手动执行:');
-    expect(result).toContain('```bash\ncd /test/path"\n```');
-  });
-
-  it('renders generic PWD warning when no alignment result is available', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'my-project',
-          name: 'My Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    alignPwdMock.mockResolvedValue(undefined);
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
-      meta: { description: '' },
-      source_control: { topology: 'local_directory_only' },
-    }));
-
-    const result = await switchProject({ project: 'my-project' });
-
-    expect(result).toContain('Project binding changed, but agenticos_switch did not change your shell cwd');
-    expect(result).toContain('Avoid relative-path edits until your shell cwd is aligned');
   });
 
   it('finds project by name', async () => {
@@ -532,12 +444,13 @@ describe('switchProject', () => {
   });
 
   it('does not write to canonical main - reports stale entry surfaces instead', async () => {
-    canonicalMainGuardMock.detectCanonicalMainWriteProtection.mockResolvedValue({
+    const canonicalMainGuardMock = await import('../../utils/canonical-main-guard.js');
+    canonicalMainGuardMock.detectCanonicalMainWriteProtection = vi.fn(() => Promise.resolve({
       blocked: true,
       reason: 'canonical main checkout is not a supported runtime workspace',
       current_branch: 'main',
       workspace_type: 'main' as const,
-    });
+    }));
 
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -597,115 +510,6 @@ describe('switchProject', () => {
       expect.any(String),
       'utf-8',
     );
-  });
-
-  it('reports missing entry surfaces as stale v0 on canonical main without reading them', async () => {
-    canonicalMainGuardMock.detectCanonicalMainWriteProtection.mockResolvedValue({
-      blocked: true,
-      reason: 'canonical main checkout is not a supported runtime workspace',
-      current_branch: 'main',
-      workspace_type: 'main' as const,
-    });
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'my-project',
-          name: 'My Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    fsMock.existsSync.mockReturnValue(false);
-    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
-      if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({
-          meta: { description: '' },
-          source_control: { topology: 'local_directory_only' },
-        });
-      }
-      if (path.endsWith('/.context/state.yaml')) {
-        return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
-      }
-      if (path.endsWith('/.context/quick-start.md')) {
-        return '# Quick Start\n\nProject summary';
-      }
-      return '';
-    });
-
-    const result = await switchProject({ project: 'my-project' });
-
-    expect(result).toContain('⚠️ CLAUDE.md stale (v0 < v2)');
-    expect(result).toContain('⚠️ AGENTS.md stale (v0 < v2)');
-  });
-
-  it('auto-adopts standard kit issues in non-canonical switch targets', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'my-project',
-          name: 'My Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
-      missing_required_files: ['knowledge/'],
-      generated_files: [{ path: 'CLAUDE.md', status: 'stale' }],
-      copied_templates: [{ path: 'standards/.context/quick-start.md', status: 'missing' }],
-    });
-    standardKitMock.adoptStandardKit.mockResolvedValue({
-      upgraded_generated_files: ['CLAUDE.md'],
-      created_files: ['knowledge/README.md'],
-    });
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
-      meta: { description: '' },
-      source_control: { topology: 'local_directory_only' },
-    }));
-
-    const result = await switchProject({ project: 'my-project' });
-
-    expect(standardKitMock.checkStandardKitUpgrade).toHaveBeenCalledWith({ project_path: '/test/path' });
-    expect(standardKitMock.adoptStandardKit).toHaveBeenCalledWith({ project_path: '/test/path' });
-    expect(result).toContain('📦 Standard kit auto-adopted (upgraded: CLAUDE.md; created: knowledge/README.md)');
-  });
-
-  it('reports standard kit auto-adopt failures without failing switch', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'my-project',
-          name: 'My Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    standardKitMock.checkStandardKitUpgrade.mockRejectedValue(new Error('manifest missing'));
-    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
-      meta: { description: '' },
-      source_control: { topology: 'local_directory_only' },
-    }));
-
-    const result = await switchProject({ project: 'my-project' });
-
-    expect(result).toContain('⚠️ Standard kit auto-adopt failed: manifest missing');
   });
 
   it('shows a friendly guardrail placeholder in switch output when no evidence exists', async () => {
@@ -1525,6 +1329,231 @@ describe('switchProject', () => {
     expect(result).toContain('⚠️ Session bound, but registry metadata was not updated: registry busy');
   });
 
+  it('shows Claude Code client alignment hints without claiming shell PWD changed', async () => {
+    const previousClaudeCode = process.env.CLAUDE_CODE;
+    process.env.CLAUDE_CODE = '1';
+    try {
+      registryMock.loadRegistry.mockResolvedValue({
+        version: '1.0.0',
+        last_updated: '2025-01-01T00:00:00.000Z',
+        active_project: null,
+        projects: [
+          {
+            id: 'my-project',
+            name: 'My Project',
+            path: '/test/path',
+            status: 'active' as const,
+            created: '2025-01-01',
+            last_accessed: '2025-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+      fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          return JSON.stringify({
+            meta: { description: '' },
+            source_control: { topology: 'local_directory_only' },
+          });
+        }
+        if (path.endsWith('/.context/quick-start.md')) {
+          return '# Quick Start\n\nProject summary';
+        }
+        return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
+      });
+
+      const result = await switchProject({ project: 'my-project' });
+
+      expect(result).toContain('📍 Client alignment hint:');
+      expect(result).toContain('cd /test/path');
+      expect(result).toContain('Treat this as a hint; verify the client shell PWD');
+    } finally {
+      if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;
+      else process.env.CLAUDE_CODE = previousClaudeCode;
+    }
+  });
+
+  it('uses explicit workdir fallback when non-Codex alignment has no instruction', async () => {
+    const previousClaudeCode = process.env.CLAUDE_CODE;
+    process.env.CLAUDE_CODE = '1';
+    try {
+      registryMock.loadRegistry.mockResolvedValue({
+        version: '1.0.0',
+        last_updated: '2025-01-01T00:00:00.000Z',
+        active_project: null,
+        projects: [
+          {
+            id: 'my-project',
+            name: 'My Project',
+            path: '/test/path',
+            status: 'active' as const,
+            created: '2025-01-01',
+            last_accessed: '2025-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+      fsMock.existsSync.mockReturnValue(false);
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          return JSON.stringify({
+            meta: { description: '' },
+            source_control: { topology: 'local_directory_only' },
+          });
+        }
+        if (path.endsWith('/.context/quick-start.md')) {
+          return '# Quick Start\n\nProject summary';
+        }
+        return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
+      });
+
+      const result = await switchProject({ project: 'my-project' });
+
+      expect(result).toContain('[WARN] PWD alignment skipped: target directory does not exist');
+      expect(result).toContain('Use this project path as explicit workdir for every filesystem operation.');
+      expect(result).toContain('Avoid relative-path edits until your client shell PWD is verified.');
+    } finally {
+      if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;
+      else process.env.CLAUDE_CODE = previousClaudeCode;
+    }
+  });
+
+  it('summarizes standard-kit auto adoption when switch detects missing or stale files', async () => {
+    const canonicalMainGuardMock = await import('../../utils/canonical-main-guard.js');
+    canonicalMainGuardMock.detectCanonicalMainWriteProtection = vi.fn(() => Promise.resolve({ blocked: false }));
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    standardKitMock.checkStandardKitUpgrade.mockResolvedValue({
+      command: 'agenticos_standard_kit_upgrade_check',
+      status: 'CHECKED',
+      project_path: '/test/path',
+      project_name: 'My Project',
+      project_id: 'my-project',
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      missing_required_files: ['tasks/templates/submission-evidence.md'],
+      generated_files: [{ path: 'AGENTS.md', status: 'stale', current_version: 1, expected_version: 2 }],
+      copied_templates: [{ path: '.context/state.yaml', status: 'missing', canonical_source: 'template' }],
+    });
+    standardKitMock.adoptStandardKit.mockResolvedValue({
+      command: 'agenticos_standard_kit_adopt',
+      status: 'ADOPTED',
+      project_path: '/test/path',
+      project_name: 'My Project',
+      project_id: 'my-project',
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      created_files: ['tasks/templates/submission-evidence.md'],
+      upgraded_generated_files: ['AGENTS.md'],
+      skipped_existing_templates: [],
+      skipped_current_generated_files: [],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/quick-start.md')) {
+        return '# Quick Start\n\nProject summary';
+      }
+      return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('📦 Standard kit auto-adopted (upgraded: AGENTS.md; created: tasks/templates/submission-evidence.md)');
+  });
+
+  it('surfaces standard-kit auto-adopt failures without failing switch', async () => {
+    const canonicalMainGuardMock = await import('../../utils/canonical-main-guard.js');
+    canonicalMainGuardMock.detectCanonicalMainWriteProtection = vi.fn(() => Promise.resolve({ blocked: false }));
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    standardKitMock.checkStandardKitUpgrade.mockRejectedValue(new Error('kit manifest missing'));
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/quick-start.md')) {
+        return '# Quick Start\n\nProject summary';
+      }
+      return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('✅ Switched to project "My Project"');
+    expect(result).toContain('⚠️ Standard kit auto-adopt failed: kit manifest missing');
+  });
+
+  it('continues switching when transcript routing summary cannot be built', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { description: '' },
+          source_control: {
+            topology: 'local_directory_only',
+            context_publication_policy: 'public_distilled',
+          },
+        });
+      }
+      if (path.endsWith('/.context/quick-start.md')) {
+        return '# Quick Start\n\nProject summary';
+      }
+      return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
+    });
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('✅ Switched to project "My Project"');
+    expect(result).not.toContain('Raw transcripts');
+  });
+
   it('falls back to committed switch state when runtime guardrail loading fails', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -1718,39 +1747,6 @@ describe('switchProject', () => {
 
     expect(result).toContain('🔒 Raw transcripts: `.private/conversations/`');
     expect(result).toContain('Git recovery is distilled-only');
-  });
-
-  it('continues switch output when transcript routing cannot be resolved', async () => {
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: null,
-      projects: [
-        {
-          id: 'bad-policy',
-          name: 'Bad Policy',
-          path: '/workspace/projects/bad-policy',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    fsPromisesMock.readFile
-      .mockResolvedValueOnce(JSON.stringify({
-        meta: { description: 'Policy test' },
-        source_control: { topology: 'local_directory_only', context_publication_policy: 'invalid' },
-      }))
-      .mockResolvedValueOnce(JSON.stringify({
-        current_task: { title: 'Policy fallback', status: 'active' },
-        working_memory: { pending: [], decisions: [] },
-      }))
-      .mockResolvedValueOnce('# Quick Start\n\nPolicy quick start');
-
-    const result = await switchProject({ project: 'bad-policy' });
-
-    expect(result).toContain('✅ Switched to project "Bad Policy"');
-    expect(result).not.toContain('Raw transcripts');
   });
 
   it('refuses to switch into archived reference content', async () => {
@@ -2056,119 +2052,6 @@ describe('getStatus', () => {
 
     expect(fsPromisesMock.readFile).toHaveBeenCalledWith('/workspace/projects/agenticos/standards/.context/state.yaml', 'utf-8');
     expect(result).toContain('Canonical status');
-  });
-
-  it('surfaces failed bootstrap agent verification in status output', async () => {
-    bindSessionProject({
-      projectId: 'test-project',
-      projectName: 'Test Project',
-      projectPath: '/test/path',
-    });
-
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'test-project',
-      projects: [
-        {
-          id: 'test-project',
-          name: 'Test Project',
-          path: '/test/path',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
-      if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({
-          meta: { id: 'test-project', name: 'Test Project' },
-          source_control: { topology: 'local_directory_only' },
-        });
-      }
-      if (path.endsWith('/.context/state.yaml')) {
-        return JSON.stringify({
-          current_task: { title: 'Bootstrap status', status: 'active' },
-          working_memory: { pending: [], decisions: [] },
-        });
-      }
-      if (path.endsWith('/.agent-workspace/bootstrap-state.yaml')) {
-        return JSON.stringify({ failed_agents: ['codex', 'claude'] });
-      }
-      return JSON.stringify({});
-    });
-    loadLatestGuardrailStateMock.mockResolvedValue({
-      source: 'committed',
-      state: {
-        current_task: { title: 'Bootstrap status', status: 'active' },
-        working_memory: { pending: [], decisions: [] },
-      },
-      state_path: '/mock/state.yaml',
-    });
-
-    const result = await getStatus();
-
-    expect(result).toContain('⚠️ Bootstrap Issues:');
-    expect(result).toContain('   - codex: verification failed');
-    expect(result).toContain('   - claude: verification failed');
-    expect(result).toContain('agenticos-bootstrap --verify');
-  });
-
-  it('continues status output when transcript routing and bootstrap-state reads fail', async () => {
-    bindSessionProject({
-      projectId: 'bad-policy',
-      projectName: 'Bad Policy',
-      projectPath: '/workspace/projects/bad-policy',
-    });
-
-    registryMock.loadRegistry.mockResolvedValue({
-      version: '1.0.0',
-      last_updated: '2025-01-01T00:00:00.000Z',
-      active_project: 'bad-policy',
-      projects: [
-        {
-          id: 'bad-policy',
-          name: 'Bad Policy',
-          path: '/workspace/projects/bad-policy',
-          status: 'active' as const,
-          created: '2025-01-01',
-          last_accessed: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
-      if (path.endsWith('/.project.yaml')) {
-        return JSON.stringify({
-          meta: { id: 'bad-policy', name: 'Bad Policy' },
-          source_control: { topology: 'local_directory_only', context_publication_policy: 'invalid' },
-        });
-      }
-      if (path.endsWith('/.context/state.yaml')) {
-        return JSON.stringify({
-          current_task: { title: 'Status fallback', status: 'active' },
-          working_memory: { pending: [], decisions: [] },
-        });
-      }
-      if (path.endsWith('/.agent-workspace/bootstrap-state.yaml')) {
-        throw new Error('missing bootstrap state');
-      }
-      return JSON.stringify({});
-    });
-    loadLatestGuardrailStateMock.mockResolvedValue({
-      source: 'committed',
-      state: {
-        current_task: { title: 'Status fallback', status: 'active' },
-        working_memory: { pending: [], decisions: [] },
-      },
-      state_path: '/mock/state.yaml',
-    });
-
-    const result = await getStatus();
-
-    expect(result).toContain('Status fallback');
-    expect(result).not.toContain('Raw transcripts');
-    expect(result).not.toContain('Bootstrap Issues');
   });
 
   it('handles project with no state.yaml', async () => {
@@ -3263,6 +3146,151 @@ describe('getStatus', () => {
 
     expect(result).toContain('archived reference content');
     expect(result).toContain('agenticos-standards');
+  });
+
+  it('surfaces bootstrap verification failures in status output', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({ working_memory: { pending: [], decisions: [] } });
+      }
+      if (path.endsWith('/.agent-workspace/bootstrap-state.yaml')) {
+        return JSON.stringify({ failed_agents: ['planner', 'reviewer'] });
+      }
+      return JSON.stringify({});
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'committed',
+      state: { working_memory: { pending: [], decisions: [] } },
+      state_path: '/test/path/.context/state.yaml',
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('⚠️ Bootstrap Issues:');
+    expect(result).toContain('   - planner: verification failed');
+    expect(result).toContain('   - reviewer: verification failed');
+    expect(result).toContain('Run: agenticos-bootstrap --verify');
+  });
+
+  it('continues status when transcript routing summary cannot be built', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'local_directory_only',
+          context_publication_policy: 'public_distilled',
+        },
+      },
+      {
+        current_task: { title: 'Status still works', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+      },
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Status still works');
+    expect(result).not.toContain('Raw transcripts');
+  });
+
+  it('continues status when bootstrap-state.yaml is missing', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          current_task: { title: 'No bootstrap state', status: 'active' },
+          working_memory: { pending: [], decisions: [] },
+        });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'committed',
+      state: {
+        current_task: { title: 'No bootstrap state', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+      },
+      state_path: '/test/path/.context/state.yaml',
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('No bootstrap state');
+    expect(result).not.toContain('Bootstrap Issues');
   });
 
   it('refuses status for an active project that has not completed topology initialization', async () => {

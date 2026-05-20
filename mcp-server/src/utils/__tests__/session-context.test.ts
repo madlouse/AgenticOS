@@ -15,11 +15,17 @@ vi.mock('../registry.js', () => ({
 describe('session-context', () => {
   const originalClaudeCode = process.env.CLAUDE_CODE;
   const originalCodex = process.env.CODEX;
+  const originalCodexCi = process.env.CODEX_CI;
+  const originalCodexThreadId = process.env.CODEX_THREAD_ID;
+  const originalCodexManagedByNpm = process.env.CODEX_MANAGED_BY_NPM;
 
   beforeEach(() => {
     clearSessionProjectBinding();
     delete process.env.CLAUDE_CODE;
     delete process.env.CODEX;
+    delete process.env.CODEX_CI;
+    delete process.env.CODEX_THREAD_ID;
+    delete process.env.CODEX_MANAGED_BY_NPM;
     agenticosHomeMock.value = '/test/home';
     execFileMock.mockReset();
     execFileMock.mockImplementation((command: string, args: string[], callback: (error: Error | null, stdout?: string) => void) => {
@@ -43,6 +49,21 @@ describe('session-context', () => {
       delete process.env.CODEX;
     } else {
       process.env.CODEX = originalCodex;
+    }
+    if (originalCodexCi === undefined) {
+      delete process.env.CODEX_CI;
+    } else {
+      process.env.CODEX_CI = originalCodexCi;
+    }
+    if (originalCodexThreadId === undefined) {
+      delete process.env.CODEX_THREAD_ID;
+    } else {
+      process.env.CODEX_THREAD_ID = originalCodexThreadId;
+    }
+    if (originalCodexManagedByNpm === undefined) {
+      delete process.env.CODEX_MANAGED_BY_NPM;
+    } else {
+      process.env.CODEX_MANAGED_BY_NPM = originalCodexManagedByNpm;
     }
   });
 
@@ -192,6 +213,7 @@ describe('session-context', () => {
 
       expect(result.success).toBe(true);
       expect(result.instruction).toBe('cd /tmp');
+      expect(result.instructionKind).toBe('current-session');
     });
 
     it('returns Codex startup instruction when CODEX is set', async () => {
@@ -201,9 +223,10 @@ describe('session-context', () => {
 
       expect(result.success).toBe(true);
       expect(result.instruction).toBe('codex -C /tmp');
+      expect(result.instructionKind).toBe('new-session');
     });
 
-    it('returns failure with manual instruction when directory verification fails', async () => {
+    it('does not shell-verify accessible directories', async () => {
       execFileMock.mockImplementation((command: string, _args: string[], callback: (error: Error | null, stdout?: string) => void) => {
         if (command === 'sh') {
           callback(new Error('permission denied'));
@@ -215,9 +238,9 @@ describe('session-context', () => {
 
       const result = await alignPwd('/tmp');
 
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
       expect(result.instruction).toBe('cd /tmp');
-      expect(result.warning).toContain('Directory not accessible');
+      expect(result.warning).toContain('not under AGENTICOS_HOME');
     });
   });
 

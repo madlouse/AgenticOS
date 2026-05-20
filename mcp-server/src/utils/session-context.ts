@@ -12,8 +12,11 @@ export interface SessionProjectBinding {
 
 export interface PwdAlignmentResult {
   success: boolean;
+  agentType: 'claude-code' | 'codex' | 'other';
   instruction: string | null;
+  instructionKind: 'current-session' | 'new-session' | 'manual-cd' | null;
   warning: string | null;
+  observedMcpProcessPwd: string;
 }
 
 let currentSessionProject: SessionProjectBinding | null = null;
@@ -39,10 +42,12 @@ export function clearSessionProjectBinding(): void {
 }
 
 export function validatePathSecurity(targetPath: string): { valid: boolean; error?: string } {
+  // Must be absolute
   if (!isAbsolute(targetPath)) {
     return { valid: false, error: 'Path must be absolute' };
   }
 
+  // Must not contain .. traversal - use normalize() to detect actual ..
   const normalized = normalize(targetPath);
   if (normalized.includes('..')) {
     return { valid: false, error: 'Path traversal (..) is not allowed' };
@@ -54,15 +59,18 @@ export function validatePathSecurity(targetPath: string): { valid: boolean; erro
 export function validatePathInAgenticosHome(targetPath: string): { valid: boolean; error?: string; warning?: string } {
   const home = getAgenticOSHome();
 
+  // Must be absolute
   if (!isAbsolute(targetPath)) {
     return { valid: false, error: 'Path must be absolute' };
   }
 
+  // Must not contain .. traversal
   const normalized = normalize(targetPath);
   if (normalized.includes('..')) {
     return { valid: false, error: 'Path traversal (..) is not allowed' };
   }
 
+  // Advisory check: path should be under AGENTICOS_HOME
   if (!targetPath.startsWith(home)) {
     return { valid: true, warning: `Path is not under AGENTICOS_HOME (${home})` };
   }
@@ -72,7 +80,12 @@ export function validatePathInAgenticosHome(targetPath: string): { valid: boolea
 
 export function detectAgentType(): 'claude-code' | 'codex' | 'other' {
   if (process.env.CLAUDE_CODE !== undefined) return 'claude-code';
-  if (process.env.CODEX !== undefined) return 'codex';
+  if (
+    process.env.CODEX !== undefined ||
+    process.env.CODEX_CI !== undefined ||
+    process.env.CODEX_THREAD_ID !== undefined ||
+    process.env.CODEX_MANAGED_BY_NPM !== undefined
+  ) return 'codex';
   return 'other';
 }
 
@@ -84,71 +97,58 @@ export async function checkIsGitRepo(dirPath: string): Promise<boolean> {
   });
 }
 
-async function verifyDirectoryAccessible(dirPath: string): Promise<boolean> {
-  // Verify the directory exists and is accessible by running pwd in a subshell
-  return new Promise((resolve) => {
-    execFile('sh', ['-c', `cd "${dirPath}" && pwd`], (error, stdout) => {
-      if (error) {
-        resolve(false);
-      } else {
-        const verifiedPwd = stdout.trim();
-        resolve(verifiedPwd === dirPath);
-      }
-    });
-  });
-}
-
 export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult> {
+  const agentType = detectAgentType();
+  const observedMcpProcessPwd = process.cwd();
+
+  // Security check
   const security = validatePathSecurity(projectPath);
   if (!security.valid) {
     return {
       success: false,
+      agentType,
       instruction: null,
+      instructionKind: null,
       warning: `[WARN] PWD alignment skipped: ${security.error}`,
+      observedMcpProcessPwd,
     };
   }
 
+  // Advisory AGENTICOS_HOME check
   const homeSecurity = validatePathInAgenticosHome(projectPath);
 
+  // Check if directory exists and is accessible
   if (!existsSync(projectPath)) {
     return {
       success: false,
+      agentType,
       instruction: null,
+      instructionKind: null,
       warning: '[WARN] PWD alignment skipped: target directory does not exist',
+      observedMcpProcessPwd,
     };
   }
 
-  const agentType = detectAgentType();
-
-  // Generate the cd instruction for the agent to execute
-  // Note: The actual PWD switch is handled by:
-  // - Claude Code: PostToolUse hook in ~/.claude/settings.json (recommended)
-  // - Codex: codex -C <path> flag (handled at startup)
-  // - Other agents: manual cd command
   let instruction: string | null = null;
+  let instructionKind: PwdAlignmentResult['instructionKind'] = null;
+
   if (agentType === 'claude-code') {
     instruction = `cd ${projectPath}`;
+    instructionKind = 'current-session';
   } else if (agentType === 'codex') {
     instruction = `codex -C ${projectPath}`;
+    instructionKind = 'new-session';
   } else {
     instruction = `cd ${projectPath}`;
+    instructionKind = 'manual-cd';
   }
 
-  // Verify directory is accessible (subshell cd succeeds)
-  const accessible = await verifyDirectoryAccessible(projectPath);
-
-  if (accessible) {
-    return {
-      success: true,
-      instruction,
-      warning: homeSecurity.warning || null,
-    };
-  }
-
-  // Directory not accessible
   return {
-    success: false,
+    success: true,
+    agentType,
     instruction,
-    warning: `[WARN] PWD alignment failed. Directory not accessible: ${projectPath}. Please run: ${instruction}`,
+    instructionKind,
+    warning: homeSecurity.warning || null,
+    observedMcpProcessPwd,
   };
 }

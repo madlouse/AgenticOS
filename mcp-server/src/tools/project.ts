@@ -16,7 +16,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
-import { bindSessionProject, getSessionProjectBinding, alignPwd } from '../utils/session-context.js';
+import { bindSessionProject, getSessionProjectBinding, alignPwd, type PwdAlignmentResult } from '../utils/session-context.js';
 import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
@@ -325,35 +325,38 @@ function buildSwitchContextSummaryLines(input: SwitchContextSummaryInput): strin
   return lines;
 }
 
-function buildFilesystemAlignmentLines(projectPath: string, pwdResult?: { success: boolean; instruction: string | null; warning: string | null }): string[] {
-  const lines = [`🧰 Filesystem workdir: ${projectPath}`];
+function buildFilesystemAlignmentLines(
+  projectPath: string,
+  pwdResult: PwdAlignmentResult,
+): string[] {
+  const lines = [
+    `🧰 Project path: ${projectPath}`,
+    `🧰 Filesystem workdir for tool calls: ${projectPath}`,
+  ];
 
-  if (pwdResult?.success && pwdResult.instruction) {
-    lines.push('');
-    lines.push('⚠️ 重要: Claude Code 无法自动切换工作目录');
-    lines.push('   请在下方终端手动执行命令:');
-    lines.push('');
-    lines.push('```bash');
-    lines.push(pwdResult.instruction);
-    lines.push('```');
-    lines.push('');
-    lines.push('然后执行 pwd 确认切换成功');
-    if (pwdResult.warning) {
-      lines.push(`⚠️ ${pwdResult.warning}`);
-    }
-  } else if (pwdResult?.warning) {
+  const relation = pwdResult.observedMcpProcessPwd === projectPath ? 'matches project path' : 'differs from project path';
+  lines.push(`🧭 Observed MCP process PWD: ${pwdResult.observedMcpProcessPwd} (${relation})`);
+
+  lines.push('⚠️ Client shell PWD: unavailable to MCP; verify with `pwd` in the client shell.');
+
+  if (pwdResult.warning) {
     lines.push(`⚠️ ${pwdResult.warning}`);
+  }
+
+  if (pwdResult.agentType === 'codex') {
+    lines.push('⚠️ Codex current-session cwd cannot be changed by MCP output.');
+    lines.push('   Use this project path as explicit workdir for every filesystem operation.');
     if (pwdResult.instruction) {
-      lines.push('');
-      lines.push('⚠️ 请在终端手动执行:');
-      lines.push('```bash');
-      lines.push(pwdResult.instruction);
-      lines.push('```');
+      lines.push('   To start a new Codex session in this project, run:');
+      lines.push(`   ${pwdResult.instruction}`);
     }
+  } else if (pwdResult.instruction) {
+    lines.push('📍 Client alignment hint:');
+    lines.push(`   ${pwdResult.instruction}`);
+    lines.push('   Treat this as a hint; verify the client shell PWD before using relative paths.');
   } else {
-    lines.push('⚠️ Project binding changed, but agenticos_switch did not change your shell cwd.');
-    lines.push('   Use this project path as workdir for every filesystem operation.');
-    lines.push('   Avoid relative-path edits until your shell cwd is aligned to this project.');
+    lines.push('   Use this project path as explicit workdir for every filesystem operation.');
+    lines.push('   Avoid relative-path edits until your client shell PWD is verified.');
   }
 
   return lines;
@@ -387,7 +390,7 @@ export async function switchProject(args: any): Promise<string> {
 
   found.last_accessed = new Date().toISOString();
 
-  // Bind session to project (in-memory only)
+  // Bind session to project in memory. Filesystem cwd alignment remains a client concern.
   bindSessionProject({
     projectId: found.id,
     projectName: found.name,
