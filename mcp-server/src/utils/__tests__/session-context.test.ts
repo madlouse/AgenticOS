@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { alignPwd, bindSessionProject, checkIsGitRepo, clearSessionProjectBinding, getSessionProjectBinding, validatePathSecurity, validatePathInAgenticosHome } from '../session-context.js';
+import { mkdirSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { alignPwd, bindSessionProject, checkIsGitRepo, clearSessionProjectBinding, getSessionProjectBinding, shellQuote, validatePathSecurity, validatePathInAgenticosHome } from '../session-context.js';
 
 const execFileMock = vi.hoisted(() => vi.fn());
 const agenticosHomeMock = vi.hoisted(() => ({ value: '/test/home' }));
@@ -175,6 +178,14 @@ describe('session-context', () => {
   });
 
   describe('alignPwd', () => {
+    it('shell-quotes paths for copyable instructions', () => {
+      expect(shellQuote('')).toBe("''");
+      expect(shellQuote('/tmp/simple')).toBe("'/tmp/simple'");
+      expect(shellQuote('/tmp/work space')).toBe("'/tmp/work space'");
+      expect(shellQuote("/tmp/project's path")).toBe("'/tmp/project'\\''s path'");
+      expect(shellQuote('/tmp/a; echo hacked $(pwd)')).toBe("'/tmp/a; echo hacked $(pwd)'");
+    });
+
     it('returns failure for relative path', async () => {
       const result = await alignPwd('relative/path');
       expect(result.success).toBe(false);
@@ -192,7 +203,7 @@ describe('session-context', () => {
     it('returns instruction with warning for accessible directory outside AGENTICOS_HOME', async () => {
       const result = await alignPwd('/tmp');
       expect(result.success).toBe(true);
-      expect(result.instruction).toContain('cd /tmp');
+      expect(result.instruction).toContain("cd '/tmp'");
       expect(result.warning).toContain('not under AGENTICOS_HOME');
     });
 
@@ -202,7 +213,7 @@ describe('session-context', () => {
       const result = await alignPwd('/tmp');
 
       expect(result.success).toBe(true);
-      expect(result.instruction).toBe('cd /tmp');
+      expect(result.instruction).toBe("cd '/tmp'");
       expect(result.warning).toBeNull();
     });
 
@@ -212,7 +223,7 @@ describe('session-context', () => {
       const result = await alignPwd('/tmp');
 
       expect(result.success).toBe(true);
-      expect(result.instruction).toBe('cd /tmp');
+      expect(result.instruction).toBe("cd '/tmp'");
       expect(result.instructionKind).toBe('current-session');
     });
 
@@ -222,8 +233,32 @@ describe('session-context', () => {
       const result = await alignPwd('/tmp');
 
       expect(result.success).toBe(true);
-      expect(result.instruction).toBe('codex -C /tmp');
+      expect(result.instruction).toBe("codex -C '/tmp'");
       expect(result.instructionKind).toBe('new-session');
+    });
+
+    it('escapes shell metacharacters in Claude Code instructions', async () => {
+      process.env.CLAUDE_CODE = '1';
+      const projectPath = join(tmpdir(), "agenticos work space/project's; echo hacked $(pwd)");
+      mkdirSync(projectPath, { recursive: true });
+
+      const result = await alignPwd(projectPath);
+
+      expect(result.success).toBe(true);
+      expect(result.instruction).toBe(`cd ${shellQuote(projectPath)}`);
+      rmSync(projectPath, { recursive: true, force: true });
+    });
+
+    it('escapes shell metacharacters in Codex startup instructions', async () => {
+      process.env.CODEX = '1';
+      const projectPath = join(tmpdir(), "agenticos codex space/project's; echo hacked $(pwd)");
+      mkdirSync(projectPath, { recursive: true });
+
+      const result = await alignPwd(projectPath);
+
+      expect(result.success).toBe(true);
+      expect(result.instruction).toBe(`codex -C ${shellQuote(projectPath)}`);
+      rmSync(projectPath, { recursive: true, force: true });
     });
 
     it('does not shell-verify accessible directories', async () => {
@@ -239,7 +274,7 @@ describe('session-context', () => {
       const result = await alignPwd('/tmp');
 
       expect(result.success).toBe(true);
-      expect(result.instruction).toBe('cd /tmp');
+      expect(result.instruction).toBe("cd '/tmp'");
       expect(result.warning).toContain('not under AGENTICOS_HOME');
     });
   });

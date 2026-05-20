@@ -89,6 +89,11 @@ export function detectAgentType(): 'claude-code' | 'codex' | 'other' {
   return 'other';
 }
 
+export function shellQuote(value: string): string {
+  if (value.length === 0) return "''";
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 export async function checkIsGitRepo(dirPath: string): Promise<boolean> {
   return new Promise((resolve) => {
     execFile('git', ['-C', dirPath, 'rev-parse', '--git-dir'], (error) => {
@@ -131,15 +136,16 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
 
   let instruction: string | null = null;
   let instructionKind: PwdAlignmentResult['instructionKind'] = null;
+  const quotedProjectPath = shellQuote(projectPath);
 
   if (agentType === 'claude-code') {
-    instruction = `cd ${projectPath}`;
+    instruction = `cd ${quotedProjectPath}`;
     instructionKind = 'current-session';
   } else if (agentType === 'codex') {
-    instruction = `codex -C ${projectPath}`;
+    instruction = `codex -C ${quotedProjectPath}`;
     instructionKind = 'new-session';
   } else {
-    instruction = `cd ${projectPath}`;
+    instruction = `cd ${quotedProjectPath}`;
     instructionKind = 'manual-cd';
   }
 
