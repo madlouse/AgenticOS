@@ -366,13 +366,10 @@ function buildFilesystemAlignmentLines(
       lines.push('   To start a new Codex session in this project, run:');
       lines.push(`   ${pwdResult.instruction}`);
     }
-  } else if (pwdResult.instruction) {
+  } else {
     lines.push('📍 Client alignment hint:');
     lines.push(`   ${pwdResult.instruction}`);
     lines.push('   Treat this as a hint; verify the client shell PWD before using relative paths.');
-  } else {
-    lines.push('   Use this project path as explicit workdir for every filesystem operation.');
-    lines.push('   Avoid relative-path edits until your client shell PWD is verified.');
   }
 
   return lines;

@@ -154,6 +154,12 @@ describe('session-context', () => {
       expect(result.error).toContain('absolute');
     });
 
+    it('rejects paths with control characters', () => {
+      const result = validatePathInAgenticosHome('/test/home/project\nINJECT');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('control characters');
+    });
+
     it('accepts path after normalization', () => {
       const result = validatePathInAgenticosHome('/test/home/../other');
       expect(result.valid).toBe(true);
