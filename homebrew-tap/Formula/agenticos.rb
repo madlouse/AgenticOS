@@ -51,8 +51,11 @@ class Agenticos < Formula
          macOS GUI/session helper
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --persist-shell-env --persist-launchctl-env --apply
 
-         Claude Code PWD alignment hook
+         Claude Code PWD guidance hook
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply
+
+           The hook reads Claude Code PostToolUse stdin and feeds the switched
+           project path back into Claude. It cannot mutate a parent shell PWD.
 
          Claude Code
            claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
