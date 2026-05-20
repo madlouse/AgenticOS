@@ -98,6 +98,12 @@ For automated Homebrew bumps, the repository needs:
 |--------|---------|
 | `HOMEBREW_TAP_PAT` | PAT with `repo` scope for `mislav/bump-homebrew-formula-action` to create PRs |
 
+If `HOMEBREW_TAP_PAT` is absent or empty, the release can still create the
+GitHub Release artifact, but the Homebrew tap update will fail and the source
+formula sync step will be skipped. In that case, manually update both formula
+locations to the release artifact URL and SHA256 before considering the release
+complete.
+
 ## Post-release
 
 - [ ] MCP registration verified in Claude Code and other agents
