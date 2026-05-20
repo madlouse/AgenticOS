@@ -360,9 +360,9 @@ export function buildDryRunLines(
 function getRecoveryCommand(agentId: SupportedAgentId): string {
   const commands: Record<SupportedAgentId, string> = {
     'claude-code': 'claude mcp add --transport stdio --scope user agenticos -- agenticos-mcp',
-    'codex': 'agenticos-bootstrap --agents codex',
-    'cursor': 'agenticos-bootstrap --agents cursor',
-    'gemini-cli': 'agenticos-bootstrap --agents gemini-cli',
+    'codex': 'agenticos-bootstrap --agent codex',
+    'cursor': 'agenticos-bootstrap --agent cursor',
+    'gemini-cli': 'agenticos-bootstrap --agent gemini-cli',
   };
   return commands[agentId];
 }

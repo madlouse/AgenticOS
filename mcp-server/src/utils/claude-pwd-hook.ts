@@ -1,6 +1,6 @@
 export const CLAUDE_SETTINGS_PATH = '.claude/settings.json';
 export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER = 'mcp__agenticos__agenticos_switch';
-export const CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND = 'cd "$(echo \'$ARGUMENTS\' | jq -r \'.tool_response.path // empty\' 2>/dev/null)" 2>/dev/null || true';
+export const CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND = 'agenticos-claude-pwd-hook';
 
 export type ClaudePwdHookStatus = 'configured' | 'missing' | 'unset' | 'unavailable';
 
@@ -12,6 +12,13 @@ export interface ClaudePwdHookInspection {
 export interface ClaudePwdHookMergeResult {
   changed: boolean;
   content: string;
+}
+
+export interface ClaudePostToolUseHookResponse {
+  hookSpecificOutput: {
+    hookEventName: 'PostToolUse';
+    additionalContext: string;
+  };
 }
 
 const CLAUDE_PWD_ALIGNMENT_HOOK_ENTRY = {
@@ -34,6 +41,57 @@ function parseSettings(content: string): unknown {
   return JSON.parse(content);
 }
 
+function extractTextContent(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!isRecord(entry)) return null;
+      return typeof entry.text === 'string' ? entry.text : null;
+    })
+    .filter((entry): entry is string => entry !== null);
+}
+
+export function extractProjectPathFromClaudeHookPayload(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  const toolResponse = payload.tool_response;
+  if (!isRecord(toolResponse)) return null;
+
+  if (typeof toolResponse.path === 'string' && toolResponse.path.trim()) {
+    return toolResponse.path.trim();
+  }
+
+  const contentText = extractTextContent(toolResponse.content).join('\n');
+  const match = contentText.match(/^Path:\s*(.+)$/m);
+  return match?.[1]?.trim() || null;
+}
+
+export function renderClaudePwdHookResponse(projectPath: string): ClaudePostToolUseHookResponse {
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PostToolUse',
+      additionalContext: [
+        `AgenticOS switched project path: ${projectPath}`,
+        'Use this path as the explicit workdir for subsequent filesystem operations.',
+        `If the client shell PWD differs, run: cd ${JSON.stringify(projectPath)}`,
+      ].join('\n'),
+    },
+  };
+}
+
+export function runClaudePwdHook(input: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input || '{}');
+  } catch {
+    return null;
+  }
+
+  const projectPath = extractProjectPathFromClaudeHookPayload(parsed);
+  if (!projectPath) return null;
+
+  return `${JSON.stringify(renderClaudePwdHookResponse(projectPath))}\n`;
+}
+
 export function hasClaudePwdAlignmentHook(settings: unknown): boolean {
   if (!isRecord(settings)) return false;
   const hooks = settings.hooks;
@@ -53,7 +111,7 @@ export function hasClaudePwdAlignmentHook(settings: unknown): boolean {
       if (!isRecord(hook)) return false;
       return hook.type === 'command'
         && typeof hook.command === 'string'
-        && hook.command.includes('tool_response.path');
+        && hook.command.trim() === CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND;
     });
   });
 }

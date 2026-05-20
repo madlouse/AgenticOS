@@ -138,7 +138,7 @@ describe('config audit', () => {
         PostToolUse: [
           {
             matcher: 'mcp__agenticos__agenticos_switch',
-            hooks: [{ type: 'command', command: 'cd "$(echo $ARGUMENTS | jq -r .tool_response.path)"' }],
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
           },
         ],
       },
@@ -159,7 +159,7 @@ describe('config audit', () => {
         PostToolUse: [
           {
             matcher: 'mcp__agenticos__agenticos_switch',
-            hooks: [{ type: 'command', command: 'cd "$(jq -r .tool_response.path)"' }],
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
           },
         ],
       },

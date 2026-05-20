@@ -351,7 +351,7 @@ describe('bootstrap cli', () => {
     const settings = JSON.parse(harness.files.get('/Users/tester/.claude/settings.json') || '{}');
     expect(settings.hooks.PostToolUse).toHaveLength(1);
     expect(settings.hooks.PostToolUse[0].matcher).toBe('mcp__agenticos__agenticos_switch');
-    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain('tool_response.path');
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toBe('agenticos-claude-pwd-hook');
     expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
   });
 
@@ -376,7 +376,7 @@ describe('bootstrap cli', () => {
         PostToolUse: [
           {
             matcher: 'mcp__agenticos__agenticos_switch',
-            hooks: [{ type: 'command', command: 'cd "$(jq -r .tool_response.path)"', shell: 'bash' }],
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook', shell: 'bash' }],
           },
         ],
       },
@@ -685,7 +685,7 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(1);
     expect(harness.stdout.some((line) => line.includes('FAIL codex: env: AGENTICOS_HOME=/tmp/other-workspace'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('Recovery: agenticos-bootstrap --agents codex'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Recovery: agenticos-bootstrap --agent codex'))).toBe(true);
   });
 
   it('shows recovery command for claude-code when verification fails', () => {

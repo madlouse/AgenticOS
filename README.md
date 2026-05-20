@@ -82,9 +82,11 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-h
 
 On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
 inherit `AGENTICOS_HOME` across sessions. `--auto-configure-hooks` adds the
-Claude Code PostToolUse hook that lets `agenticos_switch` emit a path and have
-Claude Code align the client shell PWD automatically when supported.
-Then restart your AI tool and run:
+Claude Code PostToolUse hook that reads the `agenticos_switch` result from hook
+stdin and feeds the selected project path back into Claude as explicit cwd
+guidance. The hook cannot mutate a parent shell process; keep using the
+reported project path as the explicit workdir and run `cd <path>` when your
+client shell PWD differs. Then restart your AI tool and run:
 
 ```bash
 agenticos-config --validate
