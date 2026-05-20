@@ -91,6 +91,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
       - name: Download release artifact
         run: |
           curl -sL -o agenticos-mcp.tgz \
@@ -113,14 +119,23 @@ jobs:
           VERSION="${TAG#v}"
           SHA=$(shasum -a 256 agenticos-mcp.tgz | cut -d' ' -f1)
           # Update URL to match the actual release asset name (no version in filename)
-          sed -i.bak \
-            -e "s|releases/download/v[0-9.]*/agenticos-mcp-[^/]*\.tgz|releases/download/v${VERSION}/agenticos-mcp.tgz|" \
+          sed -E -i.bak \
+            -e "s|releases/download/v[^/]*/agenticos-mcp(-[^/\"]*)?\.tgz|releases/download/v${VERSION}/agenticos-mcp.tgz|" \
             -e "s|version \"[0-9.]*\"|version \"${VERSION}\"|" \
             -e "s| sha256 \"[a-f0-9]*\"| sha256 \"${SHA}\"|" \
             homebrew-tap/Formula/agenticos.rb
           rm homebrew-tap/Formula/agenticos.rb.bak
+
+          if git diff --quiet -- homebrew-tap/Formula/agenticos.rb; then
+            echo "Source formula already synced to v${VERSION}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add homebrew-tap/Formula/agenticos.rb
           git commit -m "chore: sync formula to v${VERSION} [skip ci]"
+          git push origin HEAD:main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
