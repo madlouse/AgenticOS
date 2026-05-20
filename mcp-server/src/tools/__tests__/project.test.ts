@@ -2013,6 +2013,59 @@ describe('getStatus', () => {
     expect(result).toContain('decision 1');
   });
 
+  it('surfaces bootstrap failures from the runtime workspace state file', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/home/testuser/AgenticOS/projects/test-project',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/home/testuser/AgenticOS/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path === '/home/testuser/AgenticOS/.agent-workspace/bootstrap-state.yaml') {
+        return JSON.stringify({ failed_agents: ['codex'] });
+      }
+      return JSON.stringify({
+        current_task: { title: 'Runtime status', status: 'in_progress' },
+        working_memory: { pending: [], decisions: [] },
+      });
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'committed',
+      state: {
+        current_task: { title: 'Runtime status', status: 'in_progress' },
+        working_memory: { pending: [], decisions: [] },
+      },
+      state_path: '/mock/state.yaml',
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('⚠️ Bootstrap Issues:');
+    expect(result).toContain('codex: verification failed');
+    expect(result).toContain('agenticos-bootstrap --verify');
+  });
+
   it('uses configured canonical state paths for self-hosting status output', async () => {
     bindSessionProject({
       projectId: 'agenticos',
