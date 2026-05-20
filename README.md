@@ -143,6 +143,7 @@ first managed project:
    `agenticos_init` with a name and topology, e.g.
    `agenticos_init(name: "my-project", topology: "local_directory_only")`
 2. **Switch to it** — ask the tool to run `agenticos_switch(project: "my-project")`
+   Switching binds AgenticOS context; it does not guarantee the client shell cwd changed.
 3. **Do real work** — complete a task across two or more sessions
 4. **Verify persistence** — on the second session, ask the tool to run
    `agenticos_status` and confirm it shows your previous context

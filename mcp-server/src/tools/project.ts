@@ -347,7 +347,7 @@ function buildFilesystemAlignmentLines(
 ): string[] {
   const lines = [
     `🧰 Project path: ${projectPath}`,
-    `🧰 Filesystem workdir for tool calls: ${projectPath}`,
+    `🧰 Recommended explicit workdir for tool calls: ${projectPath}`,
   ];
 
   const relation = pwdResult.observedMcpProcessPwd === projectPath ? 'matches project path' : 'differs from project path';
@@ -366,16 +366,17 @@ function buildFilesystemAlignmentLines(
       lines.push('   To start a new Codex session in this project, run:');
       lines.push(`   ${pwdResult.instruction}`);
     }
-  } else if (pwdResult.instruction) {
+  } else {
     lines.push('📍 Client alignment hint:');
     lines.push(`   ${pwdResult.instruction}`);
     lines.push('   Treat this as a hint; verify the client shell PWD before using relative paths.');
-  } else {
-    lines.push('   Use this project path as explicit workdir for every filesystem operation.');
-    lines.push('   Avoid relative-path edits until your client shell PWD is verified.');
   }
 
   return lines;
+}
+
+function stripPwdWarningPrefix(warning: string | null): string {
+  return warning?.replace(/^\[WARN\] PWD alignment skipped:\s*/, '') || 'project path is not usable';
 }
 
 export async function switchProject(args: any): Promise<string> {
@@ -388,6 +389,19 @@ export async function switchProject(args: any): Promise<string> {
 
   if (!found) {
     return `❌ Project "${project}" not found.\n\nAvailable projects:\n${registry.projects.map((p) => `- ${p.name} (${p.id})`).join('\n')}`;
+  }
+
+  // Validate the project path before loading context or binding the MCP session.
+  // A stale registry entry should not produce a successful switch.
+  const pwdResult = await alignPwd(found.path);
+  if (!pwdResult.success) {
+    return [
+      `❌ Project "${found.name}" cannot be switched because its registered path is not usable.`,
+      '',
+      `Path: ${JSON.stringify(found.path)}`,
+      `Reason: ${stripPwdWarningPrefix(pwdResult.warning)}`,
+      'Recovery: repair or re-register the project path, then run agenticos_switch again.',
+    ].join('\n');
   }
 
   let projectYaml: any = {};
@@ -412,9 +426,6 @@ export async function switchProject(args: any): Promise<string> {
     projectName: found.name,
     projectPath: found.path,
   });
-
-  // Get PWD alignment instruction
-  const pwdResult = await alignPwd(found.path);
 
   // Check if entry surface writes are allowed in this checkout
   const writeProtection = await detectCanonicalMainWriteProtection(found.path);

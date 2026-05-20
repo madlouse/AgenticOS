@@ -6,6 +6,7 @@ import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
 import { buildProjectTopologyInitializationMessage, hasDeclaredContextPublicationPolicy, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 import { ensureCaseKnowledgeDirectories } from '../utils/case-knowledge.js';
+import { validatePathSecurity } from '../utils/session-context.js';
 
 function isValidGithubRepo(value: string): boolean {
   return /^[^/\s]+\/[^/\s]+$/.test(value);
@@ -157,6 +158,10 @@ export async function initProject(args: any): Promise<string> {
   const id = name.toLowerCase().replace(/\s+/g, '-');
 
   const projectPath = customPath || join(getAgenticOSHome(), 'projects', id);
+  const pathSecurity = validatePathSecurity(projectPath);
+  if (!pathSecurity.valid) {
+    throw new Error(`Invalid project path: ${pathSecurity.error}`);
+  }
 
   let pathExists = false;
   try {

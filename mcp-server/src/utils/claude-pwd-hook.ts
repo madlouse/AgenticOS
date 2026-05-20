@@ -1,3 +1,5 @@
+import { shellQuote, validatePathSecurity } from './session-context.js';
+
 export const CLAUDE_SETTINGS_PATH = '.claude/settings.json';
 export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER = 'mcp__agenticos__agenticos_switch';
 export const CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND = 'agenticos-claude-pwd-hook';
@@ -72,7 +74,8 @@ export function renderClaudePwdHookResponse(projectPath: string): ClaudePostTool
       additionalContext: [
         `AgenticOS switched project path: ${projectPath}`,
         'Use this path as the explicit workdir for subsequent filesystem operations.',
-        `If the client shell PWD differs, run: cd ${JSON.stringify(projectPath)}`,
+        'This hook provides cwd guidance only; it cannot mutate a parent shell PWD.',
+        `If the client shell PWD differs, run: cd ${shellQuote(projectPath)}`,
       ].join('\n'),
     },
   };
@@ -88,6 +91,7 @@ export function runClaudePwdHook(input: string): string | null {
 
   const projectPath = extractProjectPathFromClaudeHookPayload(parsed);
   if (!projectPath) return null;
+  if (!validatePathSecurity(projectPath).valid) return null;
 
   return `${JSON.stringify(renderClaudePwdHookResponse(projectPath))}\n`;
 }
@@ -129,11 +133,11 @@ export function inspectClaudePwdAlignmentHook(settingsContent: string | null): C
     return hasClaudePwdAlignmentHook(parsed)
       ? {
         status: 'configured',
-        detail: 'Detected PostToolUse hook for agenticos_switch PWD alignment.',
+        detail: 'Detected PostToolUse hook for agenticos_switch cwd guidance.',
       }
       : {
         status: 'unset',
-        detail: 'Claude Code settings exist but no agenticos_switch PWD alignment hook was detected.',
+        detail: 'Claude Code settings exist but no agenticos_switch cwd guidance hook was detected.',
       };
   } catch {
     return {

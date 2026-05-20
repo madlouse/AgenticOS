@@ -209,7 +209,7 @@ function readClaudePwdAlignmentHookSource(deps: ConfigAuditDeps): ConfigSourceRe
   const inspection = inspectClaudePwdAlignmentHook(deps.readFile(filePath));
   return {
     id: 'claude_pwd_alignment_hook',
-    label: 'Claude Code PWD alignment hook',
+    label: 'Claude Code cwd guidance hook',
     scope: 'mcp',
     status: inspection.status,
     value: inspection.status === 'configured' ? CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER : null,

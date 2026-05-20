@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { isAbsolute, normalize } from 'path';
+import { isAbsolute, normalize, relative } from 'path';
 import { execFile } from 'child_process';
 import { getAgenticOSHome } from './registry.js';
 
@@ -41,7 +41,15 @@ export function clearSessionProjectBinding(): void {
   currentSessionProject = null;
 }
 
+export function containsControlCharacters(value: string): boolean {
+  return /[\u0000-\u001F\u007F]/.test(value);
+}
+
 export function validatePathSecurity(targetPath: string): { valid: boolean; error?: string } {
+  if (containsControlCharacters(targetPath)) {
+    return { valid: false, error: 'Path must not contain control characters' };
+  }
+
   // Must be absolute
   if (!isAbsolute(targetPath)) {
     return { valid: false, error: 'Path must be absolute' };
@@ -59,6 +67,10 @@ export function validatePathSecurity(targetPath: string): { valid: boolean; erro
 export function validatePathInAgenticosHome(targetPath: string): { valid: boolean; error?: string; warning?: string } {
   const home = getAgenticOSHome();
 
+  if (containsControlCharacters(targetPath)) {
+    return { valid: false, error: 'Path must not contain control characters' };
+  }
+
   // Must be absolute
   if (!isAbsolute(targetPath)) {
     return { valid: false, error: 'Path must be absolute' };
@@ -71,7 +83,9 @@ export function validatePathInAgenticosHome(targetPath: string): { valid: boolea
   }
 
   // Advisory check: path should be under AGENTICOS_HOME
-  if (!targetPath.startsWith(home)) {
+  const relativeToHome = relative(home, targetPath);
+  const isInsideHome = relativeToHome === '' || (!relativeToHome.startsWith('..') && !isAbsolute(relativeToHome));
+  if (!isInsideHome) {
     return { valid: true, warning: `Path is not under AGENTICOS_HOME (${home})` };
   }
 

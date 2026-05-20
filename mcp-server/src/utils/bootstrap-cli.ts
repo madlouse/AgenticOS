@@ -253,7 +253,7 @@ export function buildHelpLines(): string[] {
     '  `--first-run` is a convenience mode: it implies `--apply`, enables shell persistence, and on macOS also enables launchctl persistence.',
     '  `--persist-shell-env` also writes export AGENTICOS_HOME=... to the detected shell profile.',
     '  `--persist-launchctl-env` also runs `launchctl setenv` on macOS for GUI/session inheritance.',
-    '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to align shell PWD after agenticos_switch.',
+    '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to provide cwd guidance after agenticos_switch.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli',
@@ -348,7 +348,7 @@ export function buildDryRunLines(
   if (selected.includes('claude-code')) {
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
     if (options.autoConfigureHooks) {
-      lines.push(`- claude-pwd-hook: add agenticos_switch PostToolUse hook to ${settingsPath}`);
+      lines.push(`- claude-pwd-hook: add agenticos_switch PostToolUse cwd guidance hook to ${settingsPath}`);
     } else {
       lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add it`);
     }
@@ -406,6 +406,16 @@ function runVerification(
     const marker = result.ok ? 'OK' : 'FAIL';
     lines.push(`${marker} launchctl: ${result.detail}`);
     if (!result.ok) ok = false;
+  }
+
+  if (selected.includes('claude-code')) {
+    const result = verifyClaudePwdGuidanceHook(deps);
+    const marker = result.ok ? 'OK' : 'FAIL';
+    lines.push(`${marker} claude-pwd-hook: ${result.detail}`);
+    if (!result.ok) {
+      ok = false;
+      lines.push('   Recovery: agenticos-bootstrap --agent claude-code --auto-configure-hooks --apply');
+    }
   }
 
   return { ok, lines };
@@ -582,6 +592,14 @@ function verifyLaunchctlEnv(
     ok: true,
     detail: 'session env verified via `launchctl getenv AGENTICOS_HOME`',
   };
+}
+
+function verifyClaudePwdGuidanceHook(deps: BootstrapCliDeps): { ok: boolean; detail: string } {
+  const settingsPath = `${deps.homeDir}/${CLAUDE_SETTINGS_PATH}`;
+  const inspection = inspectClaudePwdAlignmentHook(deps.readFile(settingsPath));
+  return inspection.status === 'configured'
+    ? { ok: true, detail: inspection.detail }
+    : { ok: false, detail: `${inspection.detail} Expected cwd guidance hook in ${settingsPath}.` };
 }
 
 function persistBootstrapState(
