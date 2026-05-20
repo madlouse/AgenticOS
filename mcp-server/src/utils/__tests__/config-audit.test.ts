@@ -128,6 +128,28 @@ describe('config audit', () => {
 
     expect(result.sources.find((source) => source.id === 'codex_config')?.status).toBe('unset');
     expect(result.sources.find((source) => source.id === 'claude_settings')?.status).toBe('unset');
+    expect(result.sources.find((source) => source.id === 'claude_pwd_alignment_hook')?.status).toBe('unset');
+  });
+
+  it('detects Claude Code PWD alignment hook without making it canonical workspace input', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: 'cd "$(echo $ARGUMENTS | jq -r .tool_response.path)"' }],
+          },
+        ],
+      },
+    }));
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const hookSource = result.sources.find((source) => source.id === 'claude_pwd_alignment_hook');
+
+    expect(result.canonical_workspace).toBeNull();
+    expect(hookSource?.status).toBe('configured');
+    expect(hookSource?.value).toBe('mcp__agenticos__agenticos_switch');
   });
 
   it('accepts generic Codex AGENTICOS_HOME entries outside a focused agent block', () => {

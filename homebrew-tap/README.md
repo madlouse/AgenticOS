@@ -68,6 +68,7 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
 Then confirm the server appears in the tool's MCP diagnostics and verify `agenticos_list` works.
 If you prefer not to edit your shell profile, omit `--first-run` and use the explicit MCP commands above instead.
 On macOS, `--first-run` also enables `launchctl` persistence so GUI/session processes inherit `AGENTICOS_HOME`.
+For Claude Code PWD alignment after `agenticos_switch`, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply` or include `--auto-configure-hooks` with `--first-run`.
 Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify` with the same flags to audit the current machine state without mutating it.
 
 `AGENTICOS_HOME` may also be a long-term self-hosting workspace home. The

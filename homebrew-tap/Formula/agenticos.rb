@@ -46,10 +46,13 @@ class Agenticos < Formula
       2. Bootstrap one officially supported agent:
 
          Recommended helper
-           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 
          macOS GUI/session helper
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --persist-shell-env --persist-launchctl-env --apply
+
+         Claude Code PWD alignment hook
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply
 
          Claude Code
            claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp

@@ -126,6 +126,74 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.some((line) => line.includes('shell-profile'))).toBe(true);
   });
 
+  it('prints Claude PWD hook dry-run guidance without mutating settings', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.files.has('/Users/tester/.claude/settings.json')).toBe(false);
+    expect(harness.stdout.some((line) => line.includes('claude-pwd-hook'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('add agenticos_switch PostToolUse hook'))).toBe(true);
+  });
+
+  it('adds Claude PWD alignment hook during apply when requested', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    const settings = JSON.parse(harness.files.get('/Users/tester/.claude/settings.json') || '{}');
+    expect(settings.hooks.PostToolUse).toHaveLength(1);
+    expect(settings.hooks.PostToolUse[0].matcher).toBe('mcp__agenticos__agenticos_switch');
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain('tool_response.path');
+    expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
+  });
+
+  it('does not duplicate an existing Claude PWD alignment hook', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: 'cd "$(jq -r .tool_response.path)"', shell: 'bash' }],
+          },
+        ],
+      },
+    }));
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    const settings = JSON.parse(harness.files.get('/Users/tester/.claude/settings.json') || '{}');
+    expect(settings.hooks.PostToolUse).toHaveLength(1);
+    expect(harness.stdout.some((line) => line.includes('Detected PostToolUse hook'))).toBe(true);
+  });
+
+  it('fails apply when Claude settings cannot be merged', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', '[]');
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL claude-pwd-hook'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Claude Code settings must be a JSON object'))).toBe(true);
+  });
+
   it('fails closed when no explicit or preconfirmed workspace exists', () => {
     const harness = createDeps();
     harness.deps.env.AGENTICOS_SOURCE_ROOT = '/Users/tester/dev/AgenticOS';

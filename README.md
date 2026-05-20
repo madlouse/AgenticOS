@@ -77,12 +77,14 @@ After Homebrew installation, the fastest path to a working setup is:
 
 ```bash
 export AGENTICOS_HOME=/absolute/path/to/your/workspace   # any valid workspace home
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 ```
 
 On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
-inherit `AGENTICOS_HOME` across sessions. Then restart your AI tool and
-run:
+inherit `AGENTICOS_HOME` across sessions. `--auto-configure-hooks` adds the
+Claude Code PostToolUse hook that lets `agenticos_switch` emit a path and have
+Claude Code align the client shell PWD automatically when supported.
+Then restart your AI tool and run:
 
 ```bash
 agenticos-config --validate
