@@ -152,6 +152,45 @@ describe('config audit', () => {
     expect(hookSource?.value).toBe('mcp__agenticos__agenticos_switch');
   });
 
+  it('reports configured Claude Code PWD alignment hooks', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: 'cd "$(jq -r .tool_response.path)"' }],
+          },
+        ],
+      },
+    }));
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const hook = result.sources.find((source) => source.id === 'claude_pwd_alignment_hook');
+
+    expect(hook?.status).toBe('configured');
+    expect(hook?.value).toBe('mcp__agenticos__agenticos_switch');
+    expect(hook?.detail).toContain('Detected PostToolUse hook');
+  });
+
+  it('reports missing Claude Code PWD alignment hook when hooks do not match', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          null,
+          { matcher: 'other_tool' },
+        ],
+      },
+    }));
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const hook = result.sources.find((source) => source.id === 'claude_pwd_alignment_hook');
+
+    expect(hook?.status).toBe('unset');
+    expect(hook?.detail).toContain('no agenticos_switch PWD alignment hook');
+  });
+
   it('accepts generic Codex AGENTICOS_HOME entries outside a focused agent block', () => {
     const harness = createDeps();
     harness.files.set('/Users/tester/.codex/config.toml', 'AGENTICOS_HOME = "/generic/home"\n');

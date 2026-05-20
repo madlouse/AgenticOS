@@ -16,7 +16,7 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
-import { bindSessionProject, getSessionProjectBinding, bindSessionProjectAsync, alignPwd, type PwdAlignmentResult } from '../utils/session-context.js';
+import { bindSessionProject, getSessionProjectBinding, alignPwd, type PwdAlignmentResult } from '../utils/session-context.js';
 import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
@@ -390,12 +390,12 @@ export async function switchProject(args: any): Promise<string> {
 
   found.last_accessed = new Date().toISOString();
 
-  // Bind with atomic session persistence
-  await bindSessionProjectAsync({
+  // Bind session to project in memory. Filesystem cwd alignment remains a client concern.
+  bindSessionProject({
     projectId: found.id,
     projectName: found.name,
     projectPath: found.path,
-  }, { persist: true });
+  });
 
   // Get PWD alignment instruction
   const pwdResult = await alignPwd(found.path);
