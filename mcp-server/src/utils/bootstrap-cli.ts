@@ -1,6 +1,11 @@
 import yaml from 'yaml';
 import { readFileSync } from 'fs';
 import { detectDefaultShellProfile, detectDefaultWorkspace, detectSupportedAgents, detectWorkspaceCandidates, formatCommand, mergeCursorMcpConfig, parseAgentSelection, renderBootstrapCommand, renderCursorConfigSnippet, renderRepairRemoveCommand, upsertAgenticOSEnvExport, type DetectedAgent, type SupportedAgentId } from './bootstrap-helper.js';
+import {
+  CLAUDE_SETTINGS_PATH,
+  inspectClaudePwdAlignmentHook,
+  mergeClaudePwdAlignmentHook,
+} from './claude-pwd-hook.js';
 
 export interface CliOptions {
   apply: boolean;
@@ -13,6 +18,7 @@ export interface CliOptions {
   persistShellEnv: boolean;
   persistLaunchctlEnv: boolean;
   shellProfile?: string;
+  autoConfigureHooks: boolean;
 }
 
 export interface ApplyResult {
@@ -23,6 +29,12 @@ export interface ApplyResult {
 
 export interface CommandResult {
   ok: boolean;
+  detail: string;
+}
+
+export interface HookConfigResult {
+  ok: boolean;
+  fatal: boolean;
   detail: string;
 }
 
@@ -50,6 +62,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
     help: false,
     persistShellEnv: false,
     persistLaunchctlEnv: false,
+    autoConfigureHooks: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -76,6 +89,9 @@ export function parseCliArgs(argv: string[]): CliOptions {
         break;
       case '--persist-launchctl-env':
         options.persistLaunchctlEnv = true;
+        break;
+      case '--auto-configure-hooks':
+        options.autoConfigureHooks = true;
         break;
       case '--workspace': {
         const value = argv[index + 1];
@@ -174,6 +190,9 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
     const launchctlResult = options.persistLaunchctlEnv
       ? persistLaunchctlEnv(workspaceSelection.workspace, deps)
       : null;
+    const hookConfigResult = selectedAgents.includes('claude-code')
+      ? configureClaudePwdAlignmentHook(options, deps)
+      : null;
     const bootstrapStateResult = persistBootstrapState(
       workspaceSelection.workspace,
       selectedAgents,
@@ -181,6 +200,7 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       results,
       shellProfileResult,
       launchctlResult,
+      hookConfigResult,
       deps,
     );
 
@@ -197,6 +217,10 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       const marker = launchctlResult.ok ? 'OK' : 'FAIL';
       deps.stdout(`${marker} launchctl: ${launchctlResult.detail}`);
     }
+    if (hookConfigResult) {
+      const marker = hookConfigResult.ok ? 'OK' : hookConfigResult.fatal ? 'FAIL' : 'WARN';
+      deps.stdout(`${marker} claude-pwd-hook: ${hookConfigResult.detail}`);
+    }
     {
       const marker = bootstrapStateResult.ok ? 'OK' : 'FAIL';
       deps.stdout(`${marker} bootstrap-state: ${bootstrapStateResult.detail}`);
@@ -205,6 +229,7 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
     return results.some((result) => !result.ok)
       || (shellProfileResult && !shellProfileResult.ok)
       || (launchctlResult && !launchctlResult.ok)
+      || (hookConfigResult && hookConfigResult.fatal)
       || !bootstrapStateResult.ok
       ? 1
       : 0;
@@ -219,7 +244,7 @@ export function buildHelpLines(): string[] {
     'agenticos-bootstrap — bootstrap AgenticOS MCP registrations',
     '',
     'Usage:',
-    '  agenticos-bootstrap [--workspace <path>] [--agent <id>] [--all] [--first-run] [--persist-shell-env] [--persist-launchctl-env] [--shell-profile <path>] [--verify] [--apply]',
+    '  agenticos-bootstrap [--workspace <path>] [--agent <id>] [--all] [--first-run] [--persist-shell-env] [--persist-launchctl-env] [--auto-configure-hooks] [--shell-profile <path>] [--verify] [--apply]',
     '',
     'Behavior:',
     '  Without `--apply`, prints a dry-run bootstrap plan.',
@@ -228,6 +253,7 @@ export function buildHelpLines(): string[] {
     '  `--first-run` is a convenience mode: it implies `--apply`, enables shell persistence, and on macOS also enables launchctl persistence.',
     '  `--persist-shell-env` also writes export AGENTICOS_HOME=... to the detected shell profile.',
     '  `--persist-launchctl-env` also runs `launchctl setenv` on macOS for GUI/session inheritance.',
+    '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to align shell PWD after agenticos_switch.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli',
@@ -319,6 +345,14 @@ export function buildDryRunLines(
   if (options.persistLaunchctlEnv) {
     lines.push('- launchctl: run `launchctl setenv AGENTICOS_HOME ...` (macOS only)');
   }
+  if (selected.includes('claude-code')) {
+    const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
+    if (options.autoConfigureHooks) {
+      lines.push(`- claude-pwd-hook: add agenticos_switch PostToolUse hook to ${settingsPath}`);
+    } else {
+      lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add it`);
+    }
+  }
   lines.push('', 'Re-run with `--apply` to perform these actions.');
   return lines;
 }
@@ -330,7 +364,7 @@ function getRecoveryCommand(agentId: SupportedAgentId): string {
     'cursor': 'agenticos-bootstrap --agents cursor',
     'gemini-cli': 'agenticos-bootstrap --agents gemini-cli',
   };
-  return commands[agentId] || '';
+  return commands[agentId];
 }
 
 function runVerification(
@@ -483,6 +517,48 @@ function persistLaunchctlEnv(
   };
 }
 
+function configureClaudePwdAlignmentHook(
+  options: CliOptions,
+  deps: BootstrapCliDeps,
+): HookConfigResult {
+  const settingsPath = `${deps.homeDir}/${CLAUDE_SETTINGS_PATH}`;
+  const existing = deps.readFile(settingsPath);
+  const inspection = inspectClaudePwdAlignmentHook(existing);
+
+  if (inspection.status === 'configured') {
+    return {
+      ok: true,
+      fatal: false,
+      detail: inspection.detail,
+    };
+  }
+
+  if (!options.autoConfigureHooks) {
+    return {
+      ok: false,
+      fatal: false,
+      detail: `${inspection.detail} Rerun with --auto-configure-hooks --apply to add it to ${settingsPath}.`,
+    };
+  }
+
+  try {
+    deps.mkdirp(`${deps.homeDir}/.claude`);
+    const merged = mergeClaudePwdAlignmentHook(existing);
+    deps.writeFile(settingsPath, merged.content);
+    return {
+      ok: true,
+      fatal: false,
+      detail: `updated ${settingsPath}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      fatal: true,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function verifyLaunchctlEnv(
   workspace: string,
   deps: BootstrapCliDeps,
@@ -515,6 +591,7 @@ function persistBootstrapState(
   agentResults: ApplyResult[],
   shellProfileResult: { ok: boolean; detail: string } | null,
   launchctlResult: { ok: boolean; detail: string } | null,
+  hookConfigResult: HookConfigResult | null,
   deps: BootstrapCliDeps,
 ): { ok: boolean; detail: string } {
   try {
@@ -525,6 +602,7 @@ function persistBootstrapState(
     const status = agentResults.every((result) => result.ok)
       && (!shellProfileResult || shellProfileResult.ok)
       && (!launchctlResult || launchctlResult.ok)
+      && (!hookConfigResult || !hookConfigResult.fatal)
       ? 'success'
       : 'partial-failure';
 
@@ -542,6 +620,14 @@ function persistBootstrapState(
         failed_agents: failedAgents,
         persist_shell_env: options.persistShellEnv,
         persist_launchctl_env: options.persistLaunchctlEnv,
+        auto_configure_hooks: options.autoConfigureHooks,
+        claude_pwd_hook: hookConfigResult
+          ? {
+            ok: hookConfigResult.ok,
+            fatal: hookConfigResult.fatal,
+            detail: hookConfigResult.detail,
+          }
+          : null,
         shell_profile_path: options.persistShellEnv
           ? (options.shellProfile || detectDefaultShellProfile(deps.env.SHELL, deps.homeDir))
           : null,

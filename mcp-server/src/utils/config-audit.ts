@@ -1,5 +1,9 @@
 import { join } from 'path';
 import { detectDefaultShellProfile } from './bootstrap-helper.js';
+import {
+  CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER,
+  inspectClaudePwdAlignmentHook,
+} from './claude-pwd-hook.js';
 
 export type ConfigAuditAction = 'show' | 'validate';
 export type ConfigAuditScope = 'all' | 'runtime' | 'mcp' | 'homebrew';
@@ -31,6 +35,7 @@ export interface ConfigSourceRecord {
   location: string;
   fix_target: string;
   detail: string;
+  contributes_to_workspace?: boolean;
 }
 
 export interface ConfigAuditResult {
@@ -72,7 +77,9 @@ export function runConfigAudit(
   const sources = scope === 'all'
     ? allSources
     : allSources.filter((source) => source.scope === scope);
-  const configuredSources = sources.filter((source) => source.status === 'configured' && source.value);
+  const configuredSources = sources.filter((source) => source.status === 'configured'
+    && source.value
+    && source.contributes_to_workspace !== false);
   const canonicalWorkspace = configuredSources.find((source) => source.id === 'process_env')?.value
     || configuredSources[0]?.value
     || null;
@@ -189,12 +196,30 @@ function collectConfigSources(deps: ConfigAuditDeps): ConfigSourceRecord[] {
     readShellProfileSource(deps),
     readLaunchctlSource(deps),
     readClaudeSettingsSource(deps),
-    readClaudeHooksSource(deps),
+    readClaudePwdAlignmentHookSource(deps),
     readClaudeLegacySource(deps),
     readCodexConfigSource(deps),
     readCursorConfigSource(deps),
     ...readHomebrewSources(deps),
   ];
+}
+
+function readClaudePwdAlignmentHookSource(deps: ConfigAuditDeps): ConfigSourceRecord {
+  const filePath = join(deps.homeDir, '.claude', 'settings.json');
+  const inspection = inspectClaudePwdAlignmentHook(deps.readFile(filePath));
+  return {
+    id: 'claude_pwd_alignment_hook',
+    label: 'Claude Code PWD alignment hook',
+    scope: 'mcp',
+    status: inspection.status,
+    value: inspection.status === 'configured' ? CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER : null,
+    location: filePath,
+    fix_target: 'agenticos-bootstrap --agent claude-code --auto-configure-hooks --apply',
+    detail: inspection.status === 'configured'
+      ? inspection.detail
+      : `${inspection.detail} Rerun bootstrap with --auto-configure-hooks to add it.`,
+    contributes_to_workspace: false,
+  };
 }
 
 function readProcessEnvSource(deps: ConfigAuditDeps): ConfigSourceRecord {
@@ -292,75 +317,6 @@ function readClaudeSettingsSource(deps: ConfigAuditDeps): ConfigSourceRecord {
     'Claude Code settings env',
     join(deps.homeDir, '.claude', 'settings.json'),
   );
-}
-
-function readClaudeHooksSource(deps: ConfigAuditDeps): ConfigSourceRecord {
-  const filePath = join(deps.homeDir, '.claude', 'settings.json');
-  const content = deps.readFile(filePath);
-
-  if (content === null) {
-    return {
-      id: 'claude_hooks',
-      label: 'Claude Code PWD alignment hook',
-      scope: 'mcp',
-      status: 'missing',
-      value: null,
-      location: filePath,
-      fix_target: 'Add PostToolUse hook for agenticos_switch',
-      detail: 'settings.json not found.',
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(content) as Record<string, unknown>;
-    const hooks = parsed.hooks as Record<string, unknown> | undefined;
-    const postToolUse = hooks?.PostToolUse as unknown[] | undefined;
-
-    if (!postToolUse || !Array.isArray(postToolUse)) {
-      return {
-        id: 'claude_hooks',
-        label: 'Claude Code PWD alignment hook',
-        scope: 'mcp',
-        status: 'missing',
-        value: null,
-        location: filePath,
-        fix_target: 'Add PostToolUse hook for agenticos_switch',
-        detail: 'No PostToolUse hooks configured. Claude Code will not auto-switch PWD on project switch.',
-      };
-    }
-
-    // Check for agenticos_switch hook
-    const hasAgenticosHook = postToolUse.some((hook) => {
-      if (typeof hook !== 'object' || hook === null) return false;
-      const hookObj = hook as Record<string, unknown>;
-      const matcher = hookObj.matcher as string | undefined;
-      return matcher === 'mcp__agenticos__agenticos_switch' || matcher === 'agenticos_switch';
-    });
-
-    return {
-      id: 'claude_hooks',
-      label: 'Claude Code PWD alignment hook',
-      scope: 'mcp',
-      status: hasAgenticosHook ? 'configured' : 'missing',
-      value: hasAgenticosHook ? 'configured' : null,
-      location: filePath,
-      fix_target: 'Add PostToolUse hook for agenticos_switch',
-      detail: hasAgenticosHook
-        ? 'PostToolUse hook for agenticos_switch is configured. PWD auto-alignment is enabled.'
-        : 'PostToolUse hooks exist but no agenticos_switch hook found. PWD auto-alignment is not configured.',
-    };
-  } catch {
-    return {
-      id: 'claude_hooks',
-      label: 'Claude Code PWD alignment hook',
-      scope: 'mcp',
-      status: 'unavailable',
-      value: null,
-      location: filePath,
-      fix_target: 'Add PostToolUse hook for agenticos_switch',
-      detail: 'settings.json could not be parsed.',
-    };
-  }
 }
 
 function readClaudeLegacySource(deps: ConfigAuditDeps): ConfigSourceRecord {
