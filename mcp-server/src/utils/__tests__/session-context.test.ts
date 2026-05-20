@@ -179,6 +179,7 @@ describe('session-context', () => {
 
   describe('alignPwd', () => {
     it('shell-quotes paths for copyable instructions', () => {
+      expect(shellQuote('')).toBe("''");
       expect(shellQuote('/tmp/simple')).toBe("'/tmp/simple'");
       expect(shellQuote('/tmp/work space')).toBe("'/tmp/work space'");
       expect(shellQuote("/tmp/project's path")).toBe("'/tmp/project'\\''s path'");
