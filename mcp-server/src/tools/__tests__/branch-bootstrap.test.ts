@@ -118,6 +118,156 @@ describe('runBranchBootstrap', () => {
     }));
   });
 
+  it('sanitizes issue ids before deriving branch and worktree names', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse origin/main')) {
+        return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/mcp-server\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
+      }
+      if (cmd.includes('config --get remote.origin.url')) {
+        return { stdout: 'https://github.com/madlouse/AgenticOS.git\n', stderr: '' };
+      }
+      if (cmd.includes('show-ref --verify --quiet refs/heads/fix/441-durable-topic')) {
+        throw new Error('branch missing');
+      }
+      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-441-durable-topic" -b fix/441-durable-topic base123')) {
+        return { stdout: 'Preparing worktree\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '#441',
+      branch_type: 'fix',
+      slug: 'durable topic',
+      repo_path: '/repo/mcp-server',
+      remote_base_branch: 'origin/main',
+    })) as {
+      status: string;
+      branch_name: string;
+      sanitized_issue_id: string;
+      worktree_path: string;
+      notes: string[];
+    };
+
+    expect(result.status).toBe('CREATED');
+    expect(result.sanitized_issue_id).toBe('441');
+    expect(result.branch_name).toBe('fix/441-durable-topic');
+    expect(result.worktree_path).toBe('/workspace/worktrees/agenticos/repo-441-durable-topic');
+    expect(result.branch_name).not.toMatch(/[#\s\x00-\x1f]/);
+    expect(result.worktree_path).not.toMatch(/[#\s\x00-\x1f]/);
+    expect(result.notes.join(' ')).toContain('sanitized issue_id "#441" to "441"');
+  });
+
+  it('blocks issue ids that normalize to an empty segment', async () => {
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '###',
+      branch_type: 'fix',
+      slug: 'durable topic',
+      repo_path: '/repo/mcp-server',
+      remote_base_branch: 'origin/main',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons).toContain('issue_id must contain at least one alphanumeric character');
+    expect(execAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('removes path separators, spaces, and control characters from issue id segments', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse origin/main')) {
+        return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/mcp-server\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
+      }
+      if (cmd.includes('config --get remote.origin.url')) {
+        return { stdout: 'https://github.com/madlouse/AgenticOS.git\n', stderr: '' };
+      }
+      if (cmd.includes('show-ref --verify --quiet refs/heads/fix/gh-441-topic')) {
+        throw new Error('branch missing');
+      }
+      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-gh-441-topic" -b fix/gh-441-topic base123')) {
+        return { stdout: 'Preparing worktree\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: ' GH/441\n',
+      branch_type: 'fix',
+      slug: 'topic',
+      repo_path: '/repo/mcp-server',
+    })) as { status: string; branch_name: string; sanitized_issue_id: string; worktree_path: string };
+
+    expect(result.status).toBe('CREATED');
+    expect(result.sanitized_issue_id).toBe('gh-441');
+    expect(result.branch_name).toBe('fix/gh-441-topic');
+    expect(result.worktree_path).toBe('/workspace/worktrees/agenticos/repo-gh-441-topic');
+  });
+
+  it('blocks branch types that normalize to an empty segment', async () => {
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '445',
+      branch_type: '///',
+      slug: 'safe branch names',
+      repo_path: '/repo/mcp-server',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons).toContain('branch_type must contain at least one alphanumeric character');
+    expect(execAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes branch types before deriving branch names', async () => {
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse origin/main')) {
+        return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo/mcp-server\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
+      }
+      if (cmd.includes('config --get remote.origin.url')) {
+        return { stdout: 'https://github.com/madlouse/AgenticOS.git\n', stderr: '' };
+      }
+      if (cmd.includes('show-ref --verify --quiet refs/heads/fix-bug/441-topic')) {
+        throw new Error('branch missing');
+      }
+      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-441-topic" -b fix-bug/441-topic base123')) {
+        return { stdout: 'Preparing worktree\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '441',
+      branch_type: 'Fix Bug',
+      slug: 'topic',
+      repo_path: '/repo/mcp-server',
+    })) as {
+      status: string;
+      branch_name: string;
+      sanitized_branch_type: string;
+      notes: string[];
+    };
+
+    expect(result.status).toBe('CREATED');
+    expect(result.sanitized_branch_type).toBe('fix-bug');
+    expect(result.branch_name).toBe('fix-bug/441-topic');
+    expect(result.notes.join(' ')).toContain('sanitized branch_type "Fix Bug" to "fix-bug"');
+  });
+
   it('accepts a deprecated override when it normalizes to the derived root', async () => {
     execAsyncMock.mockImplementation(async (cmd: string) => {
       if (cmd.includes('rev-parse origin/main')) {

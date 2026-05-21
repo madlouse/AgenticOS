@@ -25,6 +25,8 @@ interface BranchBootstrapResult {
   branch_name: string;
   base_commit: string;
   worktree_path: string;
+  sanitized_issue_id: string;
+  sanitized_branch_type: string;
   notes: string[];
   block_reasons: string[];
   persistence?: GuardrailPersistenceResult;
@@ -58,6 +60,8 @@ function makeBaseResult(): BranchBootstrapResult {
     branch_name: '',
     base_commit: '',
     worktree_path: '',
+    sanitized_issue_id: '',
+    sanitized_branch_type: '',
     notes: [],
     block_reasons: [],
   };
@@ -111,9 +115,21 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     return JSON.stringify(result, null, 2);
   }
 
+  const sanitizedIssueId = sanitizeSegment(issue_id);
+  const sanitizedBranchType = sanitizeSegment(branch_type);
   const sanitizedSlug = sanitizeSegment(slug);
+  result.sanitized_issue_id = sanitizedIssueId;
+  result.sanitized_branch_type = sanitizedBranchType;
+  if (!sanitizedIssueId) {
+    result.block_reasons.push('issue_id must contain at least one alphanumeric character');
+  }
+  if (!sanitizedBranchType) {
+    result.block_reasons.push('branch_type must contain at least one alphanumeric character');
+  }
   if (!sanitizedSlug) {
     result.block_reasons.push('slug must contain at least one alphanumeric character');
+  }
+  if (result.block_reasons.length > 0) {
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_branch_bootstrap',
       repo_path,
@@ -136,6 +152,12 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
       },
     });
     return JSON.stringify(result, null, 2);
+  }
+  if (sanitizedIssueId !== issue_id) {
+    result.notes.push(`sanitized issue_id "${issue_id}" to "${sanitizedIssueId}"`);
+  }
+  if (sanitizedBranchType !== branch_type) {
+    result.notes.push(`sanitized branch_type "${branch_type}" to "${sanitizedBranchType}"`);
   }
 
   const projectResolution = await resolveGuardrailProjectTarget({
@@ -215,8 +237,8 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
     gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => '');
     const repoName = sanitizeSegment(basename(gitCommonRepoRoot)) || sanitizeSegment(basename(repo_path)) || 'repo';
 
-    result.branch_name = `${branch_type}/${issue_id}-${sanitizedSlug}`;
-    result.worktree_path = join(worktreeRoot, `${repoName}-${issue_id}-${sanitizedSlug}`);
+    result.branch_name = `${sanitizedBranchType}/${sanitizedIssueId}-${sanitizedSlug}`;
+    result.worktree_path = join(worktreeRoot, `${repoName}-${sanitizedIssueId}-${sanitizedSlug}`);
     result.base_commit = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
 
     const repoIdentity = validateGuardrailRepoIdentity({
