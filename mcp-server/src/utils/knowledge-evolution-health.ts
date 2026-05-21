@@ -7,6 +7,7 @@ import { resolveManagedProjectContextPaths } from './agent-context-paths.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from './distill.js';
 import { getRuntimeCaptureConversationDir } from './record-capture.js';
 import { loadRegistry } from './registry.js';
+import { summarizeDistillationLedger, type DistillationLedgerHealth } from './distillation-ledger.js';
 
 export interface KnowledgeEvolutionAdapterFreshness {
   path: string;
@@ -41,6 +42,7 @@ export interface KnowledgeEvolutionHealth {
     project_path: string | null;
     summary: string;
   };
+  distillation_ledger: DistillationLedgerHealth;
   warnings: string[];
   recovery_actions: string[];
 }
@@ -294,6 +296,11 @@ export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArg
   };
   const dirtyWorktree = buildDirtyWorktree(await resolveRepoSync(args));
   const registryStateDrift = await buildRegistryDrift(projectPath, projectId);
+  const distillationLedger = await summarizeDistillationLedger({
+    projectId,
+    now,
+    staleAfterDays,
+  });
   const warnings: string[] = [];
 
   addFreshnessWarnings({
@@ -313,10 +320,14 @@ export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArg
   }
   if (dirtyWorktree.status !== 'PASS') warnings.push(dirtyWorktree.summary);
   if (registryStateDrift.status === 'WARN') warnings.push(registryStateDrift.summary);
+  warnings.push(...distillationLedger.warnings);
 
   const recoveryActions = warnings.length > 0
     ? [
         'run agenticos_record or agenticos_task_* to refresh task/knowledge continuity',
+        ...(distillationLedger.status === 'WARN'
+          ? ['promote, convert, supersede, or explicitly ignore stale captured ledger entries']
+          : []),
         'run agenticos_refresh_entry_surfaces after important state changes',
         'review adapter templates and registry binding before relying on cross-session memory',
       ]
@@ -334,6 +345,7 @@ export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArg
     adapter_template_freshness: adapterTemplateFreshness,
     dirty_worktree: dirtyWorktree,
     registry_state_drift: registryStateDrift,
+    distillation_ledger: distillationLedger,
     warnings,
     recovery_actions: recoveryActions,
   };
@@ -352,6 +364,7 @@ export function buildKnowledgeEvolutionStatusLines(assessment: KnowledgeEvolutio
     `   Task update: ${displayTimestamp(assessment.latest_task_update_at)}`,
     `   Dirty worktree: ${assessment.dirty_worktree.summary}`,
     `   Registry/state: ${assessment.registry_state_drift.summary}`,
+    `   Distillation ledger: ${assessment.distillation_ledger.summary}`,
   ];
   const staleAdapters = assessment.adapter_template_freshness.adapters.filter((adapter) => adapter.status !== 'current');
   lines.push(staleAdapters.length > 0
