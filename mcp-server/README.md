@@ -20,7 +20,8 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
-Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify` to audit the Homebrew/runtime bootstrap state and optional persistence layers without mutating them.
+It also installs the AgenticOS activation Skill for local-skill-capable agents, currently Codex and Claude Code, so switch/status/pwd prompts route to AgenticOS MCP before filesystem guessing.
+Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
 After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
@@ -103,21 +104,51 @@ my-project/
 Bootstrap is complete only when:
 
 1. the MCP server is registered for the target agent
-2. the agent has been restarted if required
-3. `agenticos_list` succeeds
+2. the activation Skill is installed for local-skill-capable agents when natural-language routing is required
+3. the agent has been restarted or reloaded if required
+4. `agenticos_list` succeeds
 
 Transport bootstrap and project-intent routing are different concerns.
 
 - **transport bootstrap** proves the tool is registered and callable
 - **routing** proves the agent is reading project instructions and choosing the tool when appropriate
 
+### Activation Skill Layer
+
+AgenticOS follows the same split seen in GBrain/Hermes-style integrations:
+Skills sit in the agent's pre-tool routing layer, while MCP remains the
+execution and state surface. The activation Skill is deliberately small. It
+teaches the agent to discover and call AgenticOS MCP for project switching,
+`pwd`, current-project, project-status, and worktree-status requests before
+using raw `cd`, filesystem search, or git branch inference.
+
+Bootstrap installs the Skill only on agents that currently have a local Skill
+surface:
+
+- Codex: `~/.codex/skills/agenticos/SKILL.md`
+- Claude Code: `~/.claude/skills/agenticos/SKILL.md`
+
+Install or update it with:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --apply
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --apply
+```
+
+`--first-run` implies `--install-skills`. Managed Skill files carry a content
+hash so bootstrap can update stale AgenticOS-managed copies while refusing to
+overwrite user-modified files. Pass `--force-skills` only when you intentionally
+want to replace a local edit.
+
 ### Claude Code
 
 - canonical bootstrap: `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
 - canonical config location: `~/.claude/settings.json`
+- activation Skill: `~/.claude/skills/agenticos/SKILL.md`
 - verify:
   - `claude mcp list`
   - `/mcp`
+  - `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --verify`
   - explicit `agenticos_list`
 - debug split:
   - if `agenticos` is missing from `claude mcp list`, fix MCP registration first
@@ -127,8 +158,10 @@ Transport bootstrap and project-intent routing are different concerns.
 
 - canonical bootstrap: `codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
 - canonical config location: `~/.codex/config.toml`
+- activation Skill: `~/.codex/skills/agenticos/SKILL.md`
 - verify:
   - `codex mcp list`
+  - `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --verify`
   - explicit `agenticos_list`
 - debug split:
   - if `agenticos` is missing from `codex mcp list`, registration did not land in the active config
@@ -210,6 +243,12 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 ```
 
 Restart your AI tool and verify with `agenticos_list`.
+If you rely on natural-language project switching, verify the activation Skill
+as well:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
+```
 
 ### Repairing a stale Homebrew tap
 
@@ -550,6 +589,21 @@ Get complete context for the current session project.
    ```
 3. Restart the AI tool completely (not just the current session)
 4. Try `agenticos_list` again
+
+### Tools appear but natural-language switch does not use AgenticOS
+
+This is a routing problem, not necessarily a transport problem. Install or
+verify the activation Skill for Codex or Claude Code:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --verify
+```
+
+If verification fails, rerun the same command with `--apply`, restart or reload
+the agent's skills, then retry the user-facing prompt. The Skill should make
+requests like "switch to 360Teams", "pwd", and "切换到 360Teams 项目" discover
+and call `agenticos_switch` or `agenticos_status` before shell directory search.
 
 ### `AGENTICOS_HOME` is not inherited by GUI tools
 

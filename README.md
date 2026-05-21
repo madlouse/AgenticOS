@@ -22,6 +22,11 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 # 3. Verify — restart your AI tool, then ask it to run agenticos_list
 ```
 
+`--first-run` also installs the AgenticOS activation Skill for Codex and
+Claude Code when those clients are selected, so natural-language requests like
+"switch to 360Teams" or "切换到 360Teams 项目" are routed through AgenticOS MCP
+instead of raw filesystem guessing.
+
 For full documentation, agent-specific setup, and advanced configuration,
 see [mcp-server/README.md](mcp-server/README.md).
 
@@ -61,8 +66,9 @@ The official bootstrap surface currently covers:
 Bootstrap is complete only when:
 
 1. the MCP server is registered for the target agent
-2. the agent has been restarted if required
-3. `agenticos_list` succeeds
+2. the activation Skill is installed for Codex or Claude Code when natural-language routing is required
+3. the agent has been restarted or reloaded if required
+4. `agenticos_list` succeeds
 
 ## Homebrew Bootstrap Contract
 
@@ -81,23 +87,27 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-h
 ```
 
 On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
-inherit `AGENTICOS_HOME` across sessions. `--auto-configure-hooks` adds the
-Claude Code PostToolUse hook that reads the `agenticos_switch` result from hook
-stdin and feeds the selected project path back into Claude as explicit cwd
-guidance. The hook cannot mutate a parent shell process; keep using the
-reported project path as the explicit workdir and run `cd <path>` when your
-client shell PWD differs. Then restart your AI tool and run:
+inherit `AGENTICOS_HOME` across sessions. It installs the AgenticOS activation
+Skill for local-skill-capable agents, currently Codex and Claude Code.
+`--auto-configure-hooks` adds the Claude Code PostToolUse hook that reads the
+`agenticos_switch` result from hook stdin and feeds the selected project path
+back into Claude as explicit cwd guidance. The hook cannot mutate a parent
+shell process; keep using the reported project path as the explicit workdir
+and run `cd <path>` when your client shell PWD differs. Then restart your AI
+tool and run:
 
 ```bash
 agenticos-config --validate
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
 ```
 
 Then confirm the server appears in the tool's MCP diagnostics and
 `agenticos_list` succeeds.
 
-Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify` to
-audit the current state without mutating anything.
+Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify`
+to audit the current transport and activation-skill state without mutating
+anything. If you have intentionally edited the generated Skill, bootstrap will
+not overwrite it unless you pass `--force-skills`.
 
 ### Alternative: Per-agent manual setup
 
@@ -154,6 +164,11 @@ AgenticOS MCP `agenticos_switch` before shell directory search. In Codex-like
 clients where MCP tools may be deferred, use `tool_search` to discover
 AgenticOS MCP tools first. Fall back to shell directory search only when
 AgenticOS MCP is unavailable or cannot resolve the requested project.
+
+The AgenticOS activation Skill exists for this routing layer only. It should
+make the agent remember to discover and call AgenticOS MCP; it must not replace
+MCP as the source of truth for project identity, session binding, or workdir
+guidance.
 
 For a full walkthrough with `agenticos-bootstrap --first-run`, see
 [mcp-server/README.md](mcp-server/README.md).
