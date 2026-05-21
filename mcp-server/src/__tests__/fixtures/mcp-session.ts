@@ -30,8 +30,10 @@ import { join as joinPosix } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// MONOREPO_ROOT = worktree root (parent of mcp-server/)
-const MONOREPO_ROOT = join(__dirname, '..', '..', '..');
+// MONOREPO_ROOT = worktree root (parent of mcp-server/).
+// This fixture lives under src/__tests__/fixtures in source form and
+// build/__tests__/fixtures in compiled form, so it needs four parent hops.
+const MONOREPO_ROOT = join(__dirname, '..', '..', '..', '..');
 const BUILD_INDEX = join(MONOREPO_ROOT, 'mcp-server', 'build', 'index.js');
 const PKG_JSON = join(MONOREPO_ROOT, 'mcp-server', 'package.json');
 
@@ -164,6 +166,11 @@ export interface McpSession {
   sendToolsList(): Promise<Array<{ name: string; description?: string }>>;
 
   /**
+   * Sends a `tools/call` request and returns the raw MCP tool result.
+   */
+  sendToolCall(name: string, args?: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }> }>;
+
+  /**
    * Sends a `shutdown` request and waits for the null result.
    */
   sendShutdown(): Promise<unknown>;
@@ -174,6 +181,10 @@ export interface McpSession {
   kill(): void;
 }
 
+export interface McpSessionOptions {
+  env?: NodeJS.ProcessEnv;
+}
+
 /**
  * Spawns the MCP server as a child process and returns an McpSession handle.
  *
@@ -181,9 +192,10 @@ export interface McpSession {
  * (matching the Homebrew install path pattern). The temporary directory is
  * cleaned up when kill() is called.
  *
- * @param args  Extra CLI arguments to pass to the server.
+ * @param args     Extra CLI arguments to pass to the server.
+ * @param options  Optional process environment overrides.
  */
-export function spawnMcpServer(args: string[] = []): McpSession {
+export function spawnMcpServer(args: string[] = [], options: McpSessionOptions = {}): McpSession {
   const workDir = mkdtempSync(joinPosix(tmpdir(), 'agenticos-mcp-fixture-'));
   const symlinkPath = joinPosix(workDir, 'agenticos-mcp');
 
@@ -197,7 +209,7 @@ export function spawnMcpServer(args: string[] = []): McpSession {
   const binary = symlinkCreated ? symlinkPath : _MCP_BINARY;
   const proc = spawn(binary, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, AGENTICOS_HOME: MONOREPO_ROOT },
+    env: { ...process.env, AGENTICOS_HOME: MONOREPO_ROOT, ...(options.env ?? {}) },
   }) as McpProcess;
 
   return {
@@ -229,6 +241,18 @@ export function spawnMcpServer(args: string[] = []): McpSession {
       if (resp.error) throw new Error(`tools/list error: ${resp.error.message}`);
       const result = resp.result as { tools: Array<{ name: string; description?: string }> };
       return result.tools ?? [];
+    },
+
+    async sendToolCall(name: string, args: Record<string, unknown> = {}) {
+      const resp = await sendMessage(proc, {
+        method: 'tools/call',
+        params: {
+          name,
+          arguments: args,
+        },
+      });
+      if (resp.error) throw new Error(`tools/call ${name} error: ${resp.error.message}`);
+      return resp.result as { content: Array<{ type: string; text: string }> };
     },
 
     async sendShutdown() {
