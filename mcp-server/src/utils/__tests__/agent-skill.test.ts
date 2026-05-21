@@ -79,6 +79,35 @@ describe('agent skill bootstrap', () => {
     expect(result.status).toBe('current');
   });
 
+  it('reports stale managed content from a different template version', () => {
+    const harness = createDeps();
+    const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';
+    installAgentSkill('codex', '/Users/tester', harness.deps);
+    const staleWithoutHash = (harness.files.get(path) || '')
+      .replace(/^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/, '')
+      .replace('agenticos-skill-template: v1', 'agenticos-skill-template: v99');
+    const staleHash = createHash('sha256').update(staleWithoutHash, 'utf-8').digest('hex');
+    harness.files.set(path, `<!-- agenticos-skill-managed-sha256: ${staleHash} -->\n${staleWithoutHash}`);
+
+    const inspection = inspectAgentSkill('codex', '/Users/tester', harness.deps.readFile);
+
+    expect(inspection.status).toBe('stale-managed');
+    expect(inspection.detail).toContain('is v99; expected v1');
+  });
+
+  it('does not rewrite a current managed Skill', () => {
+    const harness = createDeps();
+    installAgentSkill('codex', '/Users/tester', harness.deps);
+    harness.dirs.length = 0;
+
+    const result = installAgentSkill('codex', '/Users/tester', harness.deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.wrote).toBe(false);
+    expect(result.status).toBe('current');
+    expect(harness.dirs).toEqual([]);
+  });
+
   it('refuses to overwrite user-modified Skill content unless forced', () => {
     const harness = createDeps();
     const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';

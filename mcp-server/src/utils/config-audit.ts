@@ -217,9 +217,7 @@ function readAgentSkillSource(
     ? 'configured'
     : inspection.status === 'missing'
       ? 'missing'
-      : inspection.status === 'unsupported'
-        ? 'unavailable'
-        : 'present';
+      : 'present';
   const fixTarget = `agenticos-bootstrap --agent ${agentId} --install-skills --apply`;
   return {
     id: `${agentId}_activation_skill`,
@@ -227,9 +225,9 @@ function readAgentSkillSource(
     scope: 'mcp',
     status,
     value: inspection.status === 'current'
-      ? `agenticos-skill:v${inspection.installedVersion || inspection.expectedVersion}`
+      ? `agenticos-skill:v${inspection.installedVersion}`
       : null,
-    location: inspection.target.path || `${agentId} local skills directory`,
+    location: inspection.target.path!,
     fix_target: inspection.status === 'modified-user'
       ? `${fixTarget} --force-skills`
       : fixTarget,
