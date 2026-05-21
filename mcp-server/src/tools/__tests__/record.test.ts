@@ -5,6 +5,9 @@ const yamlMock = vi.hoisted(() => ({
   parse: vi.fn(),
   stringify: vi.fn((obj: unknown) => JSON.stringify(obj)),
 }));
+const distillationLedgerMock = vi.hoisted(() => ({
+  recordCapturedDistillationEntry: vi.fn(),
+}));
 
 // Mock modules
 vi.mock('fs/promises', () => ({
@@ -41,6 +44,10 @@ vi.mock('../../utils/distill.js', () => ({
 
 vi.mock('../../utils/canonical-main-guard.js', () => ({
   detectCanonicalMainWriteProtection: vi.fn(),
+}));
+
+vi.mock('../../utils/distillation-ledger.js', () => ({
+  recordCapturedDistillationEntry: distillationLedgerMock.recordCapturedDistillationEntry,
 }));
 
 import { recordSession } from '../record.js';
@@ -147,6 +154,11 @@ describe('recordSession', () => {
     });
     registryMock.patchProjectMetadata.mockResolvedValue(undefined);
     canonicalMainGuardMock.mockResolvedValue({ blocked: false });
+    distillationLedgerMock.recordCapturedDistillationEntry.mockResolvedValue({
+      path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
+      entry: { id: 'capture-2026-05-21-1200-test', status: 'captured' },
+      created: true,
+    });
     mockProjectFiles();
   });
 
@@ -504,7 +516,15 @@ describe('recordSession', () => {
     expect(result).toContain('conversations/');
     expect(result).toContain('state.yaml');
     expect(result).toContain('CLAUDE.md');
+    expect(result).toContain('Distillation ledger: /home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml#capture-2026-05-21-1200-test');
     expect(result).toContain('✅ Session recorded');
+    expect(distillationLedgerMock.recordCapturedDistillationEntry).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'test-project',
+      summary: 'test session',
+      capture: expect.objectContaining({
+        filePath: expect.stringContaining('/conversations/'),
+      }),
+    }));
   });
 
   it('routes raw transcripts to a private sidecar path for public_distilled projects', async () => {
@@ -532,6 +552,12 @@ describe('recordSession', () => {
     expect(convCall).toBeDefined();
     expect(result).toContain('Raw conversation: .private/conversations/');
     expect(result).toContain('Git recovery is distilled-only');
+    expect(distillationLedgerMock.recordCapturedDistillationEntry).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'test-project',
+      capture: expect.objectContaining({
+        filePath: expect.stringContaining('/.private/conversations/'),
+      }),
+    }));
   });
 
   it('blocks when public_distilled raw transcript routing is misconfigured', async () => {

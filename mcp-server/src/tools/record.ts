@@ -15,6 +15,7 @@ import {
   getRuntimeCaptureConversationDir,
   type RecordCapturePayload,
 } from '../utils/record-capture.js';
+import { recordCapturedDistillationEntry } from '../utils/distillation-ledger.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 
 function parseArray(val: unknown): string[] {
@@ -83,6 +84,8 @@ async function applyTrackedContinuityPatch(args: {
 function renderCaptureOnlyResponse(args: {
   projectName: string;
   capturePath: string;
+  ledgerPath: string;
+  ledgerEntryId: string;
   planReason?: string;
   nextActions: string[];
 }): string {
@@ -91,6 +94,7 @@ function renderCaptureOnlyResponse(args: {
   return `✅ Session captured for "${args.projectName}"\n\n` +
     'Status: RECORDED_CAPTURE_ONLY\n' +
     `📝 Capture: ${args.capturePath}\n` +
+    `🧾 Distillation ledger: ${args.ledgerPath}#${args.ledgerEntryId}\n` +
     '📊 Distill: skipped because tracked project writes are protected in this checkout\n' +
     (args.planReason ? `Reason: ${args.planReason}\n` : '') +
     nextActions;
@@ -157,11 +161,19 @@ export async function recordSession(args: any): Promise<string> {
     now,
     ...payload,
   });
+  const ledgerCapture = await recordCapturedDistillationEntry({
+    projectId: project.id,
+    capture,
+    summary,
+    now,
+  });
 
   if (persistencePlan.mode === 'capture_only') {
     return renderCaptureOnlyResponse({
       projectName: project.name,
       capturePath: capture.filePath,
+      ledgerPath: ledgerCapture.path,
+      ledgerEntryId: ledgerCapture.entry.id,
       planReason: persistencePlan.writeProtectionReason,
       nextActions: persistencePlan.nextActions,
     });
@@ -183,6 +195,7 @@ export async function recordSession(args: any): Promise<string> {
   const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
   return `✅ Session recorded for "${project.name}"\n\n` +
     `📝 Raw conversation: ${conversationRoutingPlan.raw_conversations_display_dir}${today}.md\n` +
+    `🧾 Distillation ledger: ${ledgerCapture.path}#${ledgerCapture.entry.id}\n` +
     `📊 State: ${contextPolicyPlan.trackedContextDisplayPaths.state} (updated)\n` +
     `📋 CLAUDE.md: Current State synced\n` +
     (routingNotes.length > 0 ? `\n${routingNotes.join('\n')}\n` : '');

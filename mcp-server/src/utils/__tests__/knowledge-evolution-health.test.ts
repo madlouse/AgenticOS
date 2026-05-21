@@ -6,6 +6,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { CURRENT_TEMPLATE_VERSION } from '../distill.js';
 import { assessKnowledgeEvolutionHealth, buildKnowledgeEvolutionStatusLines } from '../knowledge-evolution-health.js';
+import { saveDistillationLedger } from '../distillation-ledger.js';
 
 const originalHome = process.env.AGENTICOS_HOME;
 const now = new Date('2026-05-21T00:00:00.000Z');
@@ -119,6 +120,7 @@ describe('knowledge evolution health', () => {
     expect(result.latest_task_update_at).toBe(recent.toISOString());
     expect(result.dirty_worktree.status).toBe('PASS');
     expect(result.registry_state_drift.status).toBe('PASS');
+    expect(result.distillation_ledger.status).toBe('MISSING');
     expect(result.adapter_template_freshness.adapters.every((adapter) => adapter.status === 'current')).toBe(true);
     expect(result.warnings).toEqual([]);
     expect(buildKnowledgeEvolutionStatusLines(result)[0]).toContain('Knowledge evolution: PASS');
@@ -150,6 +152,42 @@ describe('knowledge evolution health', () => {
       'knowledge update is stale',
       'task update is stale',
     ]));
+  });
+
+  it('warns when captured ledger entries are stale and unprocessed', async () => {
+    const projectRoot = await setupProject();
+    await saveDistillationLedger('health-project', {
+      version: '1.0.0',
+      project_id: 'health-project',
+      updated_at: now.toISOString(),
+      entries: [{
+        id: 'old-capture',
+        project_id: 'health-project',
+        status: 'captured',
+        created_at: stale.toISOString(),
+        updated_at: stale.toISOString(),
+        captured_at: stale.toISOString(),
+      }],
+    }, now);
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+
+    expect(result.status).toBe('WARN');
+    expect(result.distillation_ledger.status).toBe('WARN');
+    expect(result.distillation_ledger.stale_unprocessed_capture_count).toBe(1);
+    expect(result.warnings).toContain('distillation ledger has 1 stale captured entry pending promotion');
+    expect(result.recovery_actions).toContain('promote, convert, supersede, or explicitly ignore stale captured ledger entries');
+    expect(buildKnowledgeEvolutionStatusLines(result)).toContain('   Distillation ledger: distillation ledger has 1 stale captured entry pending promotion');
   });
 
   it('warns for a missing sidecar capture without blocking', async () => {
