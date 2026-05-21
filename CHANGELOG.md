@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.25] — 2026-05-21
+
+### Added
+- bootstrap: managed AgenticOS activation Skills can now be installed for Codex and Claude Code with `agenticos-bootstrap --install-skills`; `--first-run` installs them by default for supported agents.
+- bootstrap: `--force-skills` explicitly overwrites user-modified AgenticOS Skill files, while normal installs update only missing or AgenticOS-managed stale copies.
+- config audit: AgenticOS activation Skill state is now reported alongside MCP registration and cwd guidance hook state.
+
+### Changed
+- docs: Homebrew, bootstrap matrix, and README guidance now document the GBrain/Hermes-style split where Skills provide pre-tool routing and MCP remains the source of truth for project switching, status, and workdir guidance.
+
 ## [0.4.24] — 2026-05-20
 
 ### Fixed
