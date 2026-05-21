@@ -84,8 +84,8 @@ async function applyTrackedContinuityPatch(args: {
 function renderCaptureOnlyResponse(args: {
   projectName: string;
   capturePath: string;
-  ledgerPath?: string;
-  ledgerEntryId?: string;
+  ledgerPath: string;
+  ledgerEntryId: string;
   planReason?: string;
   nextActions: string[];
 }): string {
@@ -94,7 +94,7 @@ function renderCaptureOnlyResponse(args: {
   return `✅ Session captured for "${args.projectName}"\n\n` +
     'Status: RECORDED_CAPTURE_ONLY\n' +
     `📝 Capture: ${args.capturePath}\n` +
-    (args.ledgerPath && args.ledgerEntryId ? `🧾 Distillation ledger: ${args.ledgerPath}#${args.ledgerEntryId}\n` : '') +
+    `🧾 Distillation ledger: ${args.ledgerPath}#${args.ledgerEntryId}\n` +
     '📊 Distill: skipped because tracked project writes are protected in this checkout\n' +
     (args.planReason ? `Reason: ${args.planReason}\n` : '') +
     nextActions;

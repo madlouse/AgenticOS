@@ -108,7 +108,7 @@ function asStringArray(value: unknown): string[] | undefined {
   return values.length > 0 ? values : undefined;
 }
 
-function normalizeEntry(projectId: string, value: unknown): DistillationLedgerEntry | null {
+function normalizeEntry(projectId: string, value: unknown, now: Date = new Date()): DistillationLedgerEntry | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
   const id = typeof raw.id === 'string' ? raw.id.trim() : '';
@@ -117,7 +117,7 @@ function normalizeEntry(projectId: string, value: unknown): DistillationLedgerEn
     : null;
   if (!id || !status) return null;
 
-  const createdAt = typeof raw.created_at === 'string' && raw.created_at.trim() ? raw.created_at : nowIso();
+  const createdAt = typeof raw.created_at === 'string' && raw.created_at.trim() ? raw.created_at : nowIso(now);
   const updatedAt = typeof raw.updated_at === 'string' && raw.updated_at.trim() ? raw.updated_at : createdAt;
   return {
     id,
@@ -156,7 +156,7 @@ function normalizeLedger(projectId: string, raw: unknown, now: Date = new Date()
   const parsed = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const entries = Array.isArray(parsed.entries)
     ? parsed.entries
-        .map((entry) => normalizeEntry(projectId, entry))
+        .map((entry) => normalizeEntry(projectId, entry, now))
         .filter((entry): entry is DistillationLedgerEntry => entry !== null)
     : [];
   return {
@@ -327,8 +327,7 @@ function latestEntryTime(entries: DistillationLedgerEntry[]): string | null {
   return times[0] ?? null;
 }
 
-function isStale(value: string | null, now: Date, staleAfterDays: number): boolean {
-  if (!value) return false;
+function isStale(value: string, now: Date, staleAfterDays: number): boolean {
   return now.getTime() - new Date(value).getTime() > staleAfterDays * 24 * 60 * 60 * 1000;
 }
 

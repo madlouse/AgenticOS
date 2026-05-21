@@ -68,6 +68,31 @@ describe('distillation ledger', () => {
     expect(String(stored.entries[0].capture_path)).not.toContain('/standards/.context/conversations/');
   });
 
+  it('returns the existing entry when the same capture is recorded again', async () => {
+    await setupHome();
+    const capture = {
+      filePath: '/runtime/captures/2026-05-21.md',
+      date: '2026-05-21',
+      time: '10:00',
+      entry: 'raw private capture',
+    };
+
+    const first = await recordCapturedDistillationEntry({
+      projectId: 'agenticos',
+      summary: 'Captured private session',
+      capture,
+    });
+    const second = await recordCapturedDistillationEntry({
+      projectId: 'agenticos',
+      summary: 'Captured private session',
+      capture,
+    });
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.entry.id).toBe(first.entry.id);
+  });
+
   it('loads a missing ledger as an empty private runtime ledger', async () => {
     await setupHome();
     const loaded = await loadDistillationLedger('missing-project', new Date('2026-05-21T00:00:00.000Z'));
@@ -136,6 +161,61 @@ describe('distillation ledger', () => {
       status: 'converted_to_task',
       task_id: 'follow-up-task',
     });
+
+    const supersededCapture = await recordCapturedDistillationEntry({
+      projectId: 'agenticos',
+      now: new Date('2026-05-05T00:00:00.000Z'),
+      summary: 'Superseded capture',
+      capture: {
+        filePath: '/runtime/captures/2026-05-05.md',
+        date: '2026-05-05',
+        time: '00:00',
+        entry: 'capture',
+      },
+    });
+    const superseded = await markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: supersededCapture.entry.id,
+      status: 'superseded',
+      superseded_by: captured.entry.id,
+      now: new Date('2026-05-06T00:00:00.000Z'),
+    });
+    expect(superseded.entry).toMatchObject({
+      status: 'superseded',
+      superseded_by: captured.entry.id,
+    });
+
+    const ignoredCapture = await recordCapturedDistillationEntry({
+      projectId: 'agenticos',
+      now: new Date('2026-05-07T00:00:00.000Z'),
+      summary: 'Ignored capture',
+      capture: {
+        filePath: '/runtime/captures/2026-05-07.md',
+        date: '2026-05-07',
+        time: '00:00',
+        entry: 'capture',
+      },
+    });
+    const ignored = await markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: ignoredCapture.entry.id,
+      status: 'ignored_with_reason',
+      reason: 'duplicate of a promoted capture',
+      now: new Date('2026-05-08T00:00:00.000Z'),
+    });
+    expect(ignored.entry).toMatchObject({
+      status: 'ignored_with_reason',
+      reason: 'duplicate of a promoted capture',
+    });
+
+    const refreshed = await markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: ignoredCapture.entry.id,
+      status: 'ignored_with_reason',
+      reason: 'duplicate of a promoted capture',
+      now: new Date('2026-05-09T00:00:00.000Z'),
+    });
+    expect(refreshed.entry.updated_at).toBe('2026-05-09T00:00:00.000Z');
   });
 
   it('validates required transition metadata and missing entries', async () => {
@@ -161,6 +241,16 @@ describe('distillation ledger', () => {
     await expect(markDistillationLedgerEntry({
       projectId: 'agenticos',
       entryId: captured.entry.id,
+      status: 'distilled_to_knowledge',
+    })).rejects.toThrow('knowledge_paths is required');
+    await expect(markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: captured.entry.id,
+      status: 'converted_to_task',
+    })).rejects.toThrow('task_id is required');
+    await expect(markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: captured.entry.id,
       status: 'ignored_with_reason',
     })).rejects.toThrow('reason is required');
     await expect(markDistillationLedgerEntry({
@@ -168,6 +258,30 @@ describe('distillation ledger', () => {
       entryId: captured.entry.id,
       status: 'superseded',
     })).rejects.toThrow('superseded_by is required');
+
+    const marked = await markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: captured.entry.id,
+      status: 'captured',
+      now: new Date('2026-05-02T00:00:00.000Z'),
+    });
+    expect(marked.entry.status).toBe('captured');
+    expect(marked.entry.processed_at).toBeUndefined();
+
+    const distilled = await markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: captured.entry.id,
+      status: 'distilled_to_knowledge',
+      knowledge_paths: ['knowledge/session-summary.md'],
+      now: new Date('2026-05-03T00:00:00.000Z'),
+    });
+    expect(distilled.entry.status).toBe('distilled_to_knowledge');
+    await expect(markDistillationLedgerEntry({
+      projectId: 'agenticos',
+      entryId: captured.entry.id,
+      status: 'converted_to_task',
+      task_id: 'other-task',
+    })).rejects.toThrow(`ledger entry "${captured.entry.id}" is already distilled_to_knowledge`);
   });
 
   it('summarizes stale unprocessed captured entries', async () => {
@@ -211,6 +325,130 @@ describe('distillation ledger', () => {
     expect(health.warnings).toEqual(['distillation ledger has 1 stale captured entry pending promotion']);
   });
 
+  it('summarizes plural stale captures and missing project ids', async () => {
+    await setupHome();
+    const missingProject = await summarizeDistillationLedger({ projectId: null });
+    expect(missingProject).toMatchObject({
+      status: 'MISSING',
+      path: '',
+      summary: 'Distillation ledger is unavailable because project_id is missing.',
+    });
+
+    const ledger: DistillationLedger = {
+      version: '1.0.0',
+      project_id: 'agenticos',
+      updated_at: '2026-05-21T00:00:00.000Z',
+      entries: [
+        {
+          id: 'old-one',
+          project_id: 'agenticos',
+          status: 'captured',
+          created_at: '2026-04-01T00:00:00.000Z',
+          updated_at: '2026-04-01T00:00:00.000Z',
+          captured_at: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: 'old-two',
+          project_id: 'agenticos',
+          status: 'captured',
+          created_at: '2026-04-02T00:00:00.000Z',
+          updated_at: '2026-04-02T00:00:00.000Z',
+          captured_at: '2026-04-02T00:00:00.000Z',
+        },
+      ],
+    };
+    await saveDistillationLedger('agenticos', ledger, new Date('2026-05-21T00:00:00.000Z'));
+
+    const health = await summarizeDistillationLedger({
+      projectId: 'agenticos',
+      now: new Date('2026-05-21T00:00:00.000Z'),
+      staleAfterDays: 14,
+    });
+
+    expect(health.status).toBe('WARN');
+    expect(health.stale_unprocessed_capture_count).toBe(2);
+    expect(health.warnings).toEqual(['distillation ledger has 2 stale captured entries pending promotion']);
+  });
+
+  it('summarizes fresh and empty ledgers without warnings', async () => {
+    await setupHome();
+    await saveDistillationLedger('agenticos', {
+      version: '1.0.0',
+      project_id: 'agenticos',
+      updated_at: '2026-05-21T00:00:00.000Z',
+      entries: [],
+    }, new Date('2026-05-21T00:00:00.000Z'));
+
+    const empty = await summarizeDistillationLedger({
+      projectId: 'agenticos',
+      now: new Date('2026-05-21T00:00:00.000Z'),
+    });
+    expect(empty).toMatchObject({
+      status: 'PASS',
+      unprocessed_capture_count: 0,
+      oldest_unprocessed_capture_at: null,
+      latest_entry_at: null,
+      summary: 'Distillation ledger has 0 unprocessed captured entries.',
+      warnings: [],
+    });
+
+    await saveDistillationLedger('agenticos', {
+      version: '1.0.0',
+      project_id: 'agenticos',
+      updated_at: '2026-05-21T00:00:00.000Z',
+      entries: [
+        {
+          id: 'fresh',
+          project_id: 'agenticos',
+          status: 'captured',
+          created_at: '2026-05-20T00:00:00.000Z',
+          updated_at: 'not-a-date',
+        },
+      ],
+    }, new Date('2026-05-21T00:00:00.000Z'));
+
+    const fresh = await summarizeDistillationLedger({
+      projectId: 'agenticos',
+      now: new Date('2026-05-21T00:00:00.000Z'),
+      staleAfterDays: 14,
+    });
+    expect(fresh).toMatchObject({
+      status: 'PASS',
+      unprocessed_capture_count: 1,
+      stale_unprocessed_capture_count: 0,
+      oldest_unprocessed_capture_at: '2026-05-20T00:00:00.000Z',
+      latest_entry_at: null,
+      summary: 'Distillation ledger has 1 unprocessed captured entry.',
+      warnings: [],
+    });
+
+    await saveDistillationLedger('agenticos', {
+      version: '1.0.0',
+      project_id: 'agenticos',
+      updated_at: '2026-05-21T00:00:00.000Z',
+      entries: [
+        {
+          id: 'invalid-time',
+          project_id: 'agenticos',
+          status: 'captured',
+          created_at: 'not-a-date',
+          updated_at: 'not-a-date',
+        },
+      ],
+    }, new Date('2026-05-21T00:00:00.000Z'));
+
+    const invalidTime = await summarizeDistillationLedger({
+      projectId: 'agenticos',
+      now: new Date('2026-05-21T00:00:00.000Z'),
+    });
+    expect(invalidTime).toMatchObject({
+      status: 'PASS',
+      unprocessed_capture_count: 1,
+      oldest_unprocessed_capture_at: null,
+      latest_entry_at: null,
+    });
+  });
+
   it('normalizes malformed ledger content without leaking invalid entries', async () => {
     await setupHome();
     const path = getDistillationLedgerPath('agenticos');
@@ -218,8 +456,36 @@ describe('distillation ledger', () => {
     await writeFile(path, yaml.stringify({
       version: '0.1.0',
       project_id: '',
+      updated_at: '',
       entries: [
+        null,
+        'not-an-entry',
+        { status: 'captured' },
+        { id: 'invalid-status', status: 'unknown' },
         { id: '', status: 'captured' },
+        {
+          id: 'empty-values',
+          status: 'captured',
+          created_at: '',
+          updated_at: '',
+          captured_at: '',
+          processed_at: '',
+          capture_path: '',
+          capture_date: '',
+          capture_time: '',
+          summary: '',
+          knowledge_paths: ['', 1, '  '],
+          task_id: '',
+          superseded_by: '',
+          reason: '',
+          refs: [
+            null,
+            { type: '', uri: '' },
+            { type: 'doc', uri: 'gbrain://knowledge/summary', visibility: 'public' },
+            { type: 'task', uri: 'agenticos://task/follow-up', visibility: 'restricted' },
+            { uri: 'runtime://capture/fallback', visibility: 'secret' },
+          ],
+        },
         { id: 'valid', status: 'captured', created_at: 'bad-date', updated_at: '2026-05-20T00:00:00.000Z' },
       ],
     }), 'utf-8');
@@ -228,6 +494,35 @@ describe('distillation ledger', () => {
 
     expect(loaded.exists).toBe(true);
     expect(loaded.ledger.project_id).toBe('agenticos');
-    expect(loaded.ledger.entries.map((entry) => entry.id)).toEqual(['valid']);
+    expect(loaded.ledger.updated_at).toBe('2026-05-21T00:00:00.000Z');
+    expect(loaded.ledger.entries.map((entry) => entry.id)).toEqual(['empty-values', 'valid']);
+    expect(loaded.ledger.entries[0]).toMatchObject({
+      project_id: 'agenticos',
+      created_at: '2026-05-21T00:00:00.000Z',
+      updated_at: '2026-05-21T00:00:00.000Z',
+    });
+    expect(loaded.ledger.entries[0].knowledge_paths).toBeUndefined();
+    expect(loaded.ledger.entries[0].refs).toEqual([
+      { type: 'doc', uri: 'gbrain://knowledge/summary', visibility: 'public' },
+      { type: 'task', uri: 'agenticos://task/follow-up', visibility: 'restricted' },
+      { type: 'reference', uri: 'runtime://capture/fallback', visibility: 'private' },
+    ]);
+  });
+
+  it('normalizes scalar ledger content as an empty project ledger', async () => {
+    await setupHome();
+    const path = getDistillationLedgerPath('agenticos');
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, 'not-a-ledger', 'utf-8');
+
+    const loaded = await loadDistillationLedger('agenticos', new Date('2026-05-21T00:00:00.000Z'));
+
+    expect(loaded.exists).toBe(true);
+    expect(loaded.ledger).toMatchObject({
+      version: '1.0.0',
+      project_id: 'agenticos',
+      updated_at: '2026-05-21T00:00:00.000Z',
+      entries: [],
+    });
   });
 });
