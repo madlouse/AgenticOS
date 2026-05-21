@@ -171,6 +171,43 @@ describe('knowledge evolution health', () => {
     expect(result.summary).toContain('warning');
   });
 
+  it('uses nested tracked file mtimes and session refresh fallback', async () => {
+    const projectRoot = await setupProject({
+      captureAt: recent,
+      refreshAt: null,
+      knowledgeAt: null,
+      taskAt: null,
+      agentsVersion: null,
+    });
+    await writeFile(join(projectRoot, 'standards', '.context', 'state.yaml'), yaml.stringify({
+      session: { last_entry_surface_refresh: recent.toISOString() },
+    }), 'utf-8');
+    await mkdir(join(projectRoot, 'knowledge', 'nested'), { recursive: true });
+    await touch(join(projectRoot, 'knowledge', 'nested', 'summary.markdown'), recent);
+    await writeFile(join(projectRoot, 'knowledge', 'notes.txt'), 'ignored\n', 'utf-8');
+    await writeFile(join(projectRoot, 'knowledge', 'README'), 'ignored\n', 'utf-8');
+    await mkdir(join(projectRoot, 'tasks', 'nested'), { recursive: true });
+    await touch(join(projectRoot, 'tasks', 'nested', 'task.json'), recent);
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+
+    expect(result.latest_entry_state_refresh_at).toBe(recent.toISOString());
+    expect(result.latest_knowledge_update_at).toBe(recent.toISOString());
+    expect(result.latest_task_update_at).toBe(recent.toISOString());
+    expect(result.adapter_template_freshness.adapters.find((adapter) => adapter.path.endsWith('AGENTS.md'))?.status).toBe('missing');
+    expect(result.warnings).toContain(`${join(projectRoot, 'AGENTS.md')} adapter template is missing`);
+  });
+
   it('warns for dirty worktree summaries', async () => {
     const projectRoot = await setupProject();
     const result = await assessKnowledgeEvolutionHealth({
@@ -211,6 +248,147 @@ describe('knowledge evolution health', () => {
 
     expect(result.adapter_template_freshness.adapters.find((adapter) => adapter.path.endsWith('CLAUDE.md'))?.status).toBe('stale');
     expect(result.warnings.some((warning) => warning.includes('CLAUDE.md'))).toBe(true);
+  });
+
+  it('warns when project yaml or state cannot be read and repo sync is unknown', async () => {
+    home = await mkdtemp(join(tmpdir(), 'agenticos-knowledge-health-'));
+    process.env.AGENTICOS_HOME = home;
+    const projectRoot = join(home, 'projects', 'unreadable-project');
+    await mkdir(projectRoot, { recursive: true });
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      repoPath: projectRoot,
+      now,
+    });
+
+    expect(result.status).toBe('WARN');
+    expect(result.dirty_worktree.status).toBe('UNKNOWN');
+    expect(result.registry_state_drift.summary).toContain('meta.id');
+    expect(result.adapter_template_freshness.adapters.every((adapter) => adapter.status === 'missing')).toBe(true);
+  });
+
+  it('warns when the configured state file cannot be read', async () => {
+    home = await mkdtemp(join(tmpdir(), 'agenticos-knowledge-health-'));
+    process.env.AGENTICOS_HOME = home;
+    const projectRoot = join(home, 'projects', 'missing-state-project');
+    await mkdir(projectRoot, { recursive: true });
+    await writeFile(join(projectRoot, '.project.yaml'), yaml.stringify({
+      meta: { id: 'missing-state-project', name: 'Missing State Project' },
+      agent_context: {
+        current_state: 'standards/.context/state.yaml',
+        knowledge: 'knowledge/',
+        tasks: 'tasks/',
+      },
+    }), 'utf-8');
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+
+    expect(result.latest_entry_state_refresh_at).toBeNull();
+    expect(result.warnings).toContain('entry-state refresh is missing');
+  });
+
+  it('handles null project/state yaml, invalid timestamps, absent repo sync input, and blank project ids', async () => {
+    home = await mkdtemp(join(tmpdir(), 'agenticos-knowledge-health-'));
+    process.env.AGENTICOS_HOME = home;
+    const projectRoot = join(home, 'projects', 'null-surfaces-project');
+    await mkdir(join(projectRoot, 'standards', '.context'), { recursive: true });
+    await writeFile(join(projectRoot, '.project.yaml'), 'null\n', 'utf-8');
+    await writeFile(join(projectRoot, 'standards', '.context', 'state.yaml'), 'null\n', 'utf-8');
+
+    const nullYamlResult = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      now,
+    });
+    expect(nullYamlResult.dirty_worktree.status).toBe('UNKNOWN');
+    expect(nullYamlResult.registry_state_drift.summary).toContain('meta.id');
+
+    const invalidTimestampResult = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      projectYaml: { meta: { id: '   ' } },
+      state: { entry_surface_refresh: { refreshed_at: 'not-a-date' } },
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+    expect(invalidTimestampResult.latest_entry_state_refresh_at).toBeNull();
+    expect(invalidTimestampResult.registry_state_drift.summary).toContain('meta.id');
+
+    await writeFile(join(projectRoot, '.project.yaml'), yaml.stringify({
+      meta: { id: 'null-surfaces-project', name: 'Null Surfaces Project' },
+      agent_context: { current_state: 'standards/.context/state.yaml' },
+    }), 'utf-8');
+    const nullStateResult = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+    expect(nullStateResult.latest_entry_state_refresh_at).toBeNull();
+  });
+
+  it('warns when registry drift cannot be determined', async () => {
+    const projectRoot = await setupProject();
+    process.env.AGENTICOS_HOME = '';
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      projectYaml: { meta: {}, agent_context: { current_state: 'standards/.context/state.yaml' } },
+      state: {},
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+
+    expect(result.registry_state_drift.status).toBe('WARN');
+    expect(result.registry_state_drift.summary).toBe('Registry/state drift could not be determined.');
+  });
+
+  it('reports null project_path when registry drift cannot be determined without a project path', async () => {
+    home = await mkdtemp(join(tmpdir(), 'agenticos-knowledge-health-'));
+    process.env.AGENTICOS_HOME = '';
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: null,
+      projectYaml: { meta: {} },
+      state: {},
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+
+    expect(result.registry_state_drift.project_path).toBeNull();
+    expect(result.registry_state_drift.summary).toBe('Registry/state drift could not be determined.');
   });
 
   it('warns for registry/state drift', async () => {

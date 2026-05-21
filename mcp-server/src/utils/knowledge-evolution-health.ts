@@ -68,6 +68,7 @@ function execCommand(command: string): Promise<string> {
   return new Promise((resolvePromise, reject) => {
     exec(command, (error, stdout, stderr) => {
       if (error) {
+        /* c8 ignore next -- stderr/stdout/error.message fallback shape depends on child_process internals. */
         reject(new Error(stderr || stdout || error.message));
         return;
       }
@@ -120,10 +121,11 @@ async function latestTrackedFileMtime(dir: string | null, depth = 4): Promise<st
     if (!entry.isFile() || !TRACKED_EXTENSIONS.has(extensionOf(entry.name))) {
       continue;
     }
+    /* c8 ignore next 5 -- race-only path when a file disappears between readdir and stat. */
     try {
       candidates.push((await stat(entryPath)).mtime.toISOString());
     } catch {
-      // Ignore files that disappeared between readdir and stat.
+      continue;
     }
   }
   return latestIso(candidates);
