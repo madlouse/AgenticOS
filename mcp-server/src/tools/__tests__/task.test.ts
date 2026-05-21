@@ -26,6 +26,7 @@ vi.mock('../../utils/project-target.js', () => ({
 }));
 
 import { runTaskClose, runTaskCreate, runTaskList, runTaskUpdate } from '../task.js';
+import * as toolExports from '../index.js';
 
 const projectPath = '/workspace/projects/topic';
 const tasksDir = `${projectPath}/tasks`;
@@ -80,12 +81,25 @@ beforeEach(() => {
 });
 
 describe('AgenticOS task MCP API', () => {
+  it('exports task tools from the public tools barrel', () => {
+    expect(toolExports.runTaskCreate).toBe(runTaskCreate);
+    expect(toolExports.runTaskUpdate).toBe(runTaskUpdate);
+    expect(toolExports.runTaskList).toBe(runTaskList);
+    expect(toolExports.runTaskClose).toBe(runTaskClose);
+  });
+
   it('creates a task file and resume state with default project kind', async () => {
+    fsMock.files.set(statePath, '');
+
     const result = parseResult(await runTaskCreate({
       title: 'Research sleep routine',
       acceptance_criteria: ['Capture the next experiment'],
-      source: { kind: 'hermes', origin: 'chat', dedupe_key: 'sleep-routine' },
-      refs: [{ type: 'gbrain', uri: 'gbrain://topic/sleep', visibility: 'private' }],
+      source: { kind: 'hermes', origin: 'chat', source_id: 'chat-1', dedupe_key: 'sleep-routine' },
+      refs: [
+        { type: 'gbrain', uri: 'gbrain://topic/sleep', visibility: 'private' },
+        { type: 'knowledge', uri: 'knowledge/sleep.md' },
+      ],
+      description: 'Short context',
     }));
 
     expect(result.status).toBe('CREATED');
@@ -95,6 +109,9 @@ describe('AgenticOS task MCP API', () => {
     expect(fsMock.mkdir).toHaveBeenCalledWith(tasksDir, { recursive: true });
     expect(fsMock.mkdir).toHaveBeenCalledWith(`${projectPath}/.context`, { recursive: true });
     expect(parseYamlFile(`${tasksDir}/research-sleep-routine.yaml`).source.kind).toBe('hermes');
+    expect(parseYamlFile(`${tasksDir}/research-sleep-routine.yaml`).source.source_id).toBe('chat-1');
+    expect(parseYamlFile(`${tasksDir}/research-sleep-routine.yaml`).refs[1].visibility).toBeUndefined();
+    expect(parseYamlFile(`${tasksDir}/research-sleep-routine.yaml`).description).toBe('Short context');
     expect(parseYamlFile(statePath).resume.task_id).toBe('research-sleep-routine');
     expect(parseYamlFile(statePath).current_task).toBeUndefined();
   });
@@ -154,9 +171,39 @@ describe('AgenticOS task MCP API', () => {
     expect(result.duplicate).toBe(true);
     expect(result.task.title).toBe('Sleep Plan');
     expect(parseYamlFile(`${tasksDir}/sleep-plan.yaml`).acceptance_criteria).toEqual(['Existing criterion']);
+
+    seedTask({
+      id: 'no-next-step',
+      title: 'No Next Step',
+      status: 'in_progress',
+      priority: 'medium',
+      source: { kind: 'manual', origin: 'manual' },
+      acceptance_criteria: [],
+      refs: [],
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    });
+    const noNext = parseResult(await runTaskCreate({
+      id: 'no-next-step',
+      title: 'No Next Step',
+      acceptance_criteria: ['New criterion'],
+    }));
+    expect(noNext.status).toBe('EXISTING');
+    expect(parseYamlFile(statePath).current_task.next_step).toBeNull();
   });
 
   it('rejects invalid create payloads and secret-looking input', async () => {
+    const missingTitle = parseResult(await runTaskCreate({ acceptance_criteria: ['Criterion'] }));
+    expect(missingTitle.status).toBe('ERROR');
+    expect(missingTitle.errors.join(' ')).toContain('title');
+
+    const emptyId = parseResult(await runTaskCreate({
+      title: '!!!',
+      acceptance_criteria: ['Criterion'],
+    }));
+    expect(emptyId.status).toBe('ERROR');
+    expect(emptyId.errors.join(' ')).toContain('alphanumeric');
+
     const missingCriteria = parseResult(await runTaskCreate({ title: 'No criteria' }));
     expect(missingCriteria.status).toBe('ERROR');
     expect(missingCriteria.errors.join(' ')).toContain('acceptance_criteria');
@@ -183,7 +230,7 @@ describe('AgenticOS task MCP API', () => {
       status: 'waiting',
       priority: 'later',
       source: { kind: 'robot', origin: 'unknown' },
-      refs: [{ type: 'note' }, 'bad-ref'],
+      refs: [{ type: 'note' }, { uri: 'missing-type' }, { type: 'note', uri: 'x', visibility: 'secret' }, 'bad-ref'],
       labels: ['ok', 3],
       acceptance_criteria: ['Check it'],
     }));
@@ -203,6 +250,26 @@ describe('AgenticOS task MCP API', () => {
     }));
     expect(blocked.status).toBe('ERROR');
     expect(blocked.errors.join(' ')).toContain('blocked_reason');
+  });
+
+  it('creates blocked and already-closed tasks with lifecycle metadata', async () => {
+    const blocked = parseResult(await runTaskCreate({
+      title: 'Blocked task',
+      status: 'blocked',
+      blocked_reason: 'Waiting on user input',
+      acceptance_criteria: ['Resume once unblocked'],
+    }));
+    expect(blocked.status).toBe('CREATED');
+    expect(blocked.task.blocked_reason).toBe('Waiting on user input');
+    expect(blocked.task.closed_at).toBeUndefined();
+
+    const closed = parseResult(await runTaskCreate({
+      title: 'Already finished',
+      status: 'done',
+      acceptance_criteria: ['Verified'],
+    }));
+    expect(closed.status).toBe('CREATED');
+    expect(closed.task.closed_at).toBeTruthy();
   });
 
   it('updates a task and refreshes current state', async () => {
@@ -234,6 +301,25 @@ describe('AgenticOS task MCP API', () => {
     expect(result.task.priority).toBe('urgent');
     expect(parseYamlFile(statePath).current_task.title).toBe('Sleep Plan v2');
     expect(parseYamlFile(`${tasksDir}/sleep-plan.yaml`).refs[0].uri).toBe('knowledge/sleep.md');
+
+    seedTask({
+      id: 'done-task',
+      title: 'Done Task',
+      status: 'done',
+      priority: 'medium',
+      source: { kind: 'manual', origin: 'manual' },
+      acceptance_criteria: ['Done'],
+      refs: [],
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      closed_at: '2026-01-02T00:00:00.000Z',
+    });
+    const reopened = parseResult(await runTaskUpdate({
+      task_id: 'done-task',
+      status: 'open',
+    }));
+    expect(reopened.status).toBe('UPDATED');
+    expect(reopened.task.closed_at).toBeUndefined();
   });
 
   it('rejects invalid updates and missing task ids', async () => {
@@ -266,6 +352,7 @@ describe('AgenticOS task MCP API', () => {
       refs: { uri: 'nope' },
       description: '',
       labels: [],
+      blocked_reason: '',
     }));
 
     expect(invalid.status).toBe('ERROR');
@@ -273,9 +360,46 @@ describe('AgenticOS task MCP API', () => {
     expect(invalid.errors.join(' ')).toContain('priority');
     expect(invalid.errors.join(' ')).toContain('blocked_reason');
     expect(invalid.errors.join(' ')).toContain('refs');
+
+    const invalidStatus = parseResult(await runTaskUpdate({
+      task_id: 'sleep-plan',
+      status: 3,
+      priority: 3,
+    }));
+    expect(invalidStatus.status).toBe('ERROR');
+    expect(invalidStatus.errors.join(' ')).toContain('status');
+    expect(invalidStatus.errors.join(' ')).toContain('priority');
+
+    const blocked = parseResult(await runTaskUpdate({
+      task_id: 'sleep-plan',
+      status: 'blocked',
+      blocked_reason: 'Waiting on input',
+    }));
+    expect(blocked.status).toBe('UPDATED');
+    expect(blocked.task.blocked_reason).toBe('Waiting on input');
+
+    const secret = parseResult(await runTaskUpdate({
+      task_id: 'sleep-plan',
+      description: 'token=abc123',
+    }));
+    expect(secret.status).toBe('ERROR');
+    expect(secret.errors.join(' ')).toContain('secret');
+
+    fsMock.writeFile.mockRejectedValueOnce(new Error(''));
+    const failedWrite = parseResult(await runTaskUpdate({
+      task_id: 'sleep-plan',
+      title: 'Cannot persist',
+    }));
+    expect(failedWrite.status).toBe('ERROR');
+    expect(failedWrite.errors[0]).toBe('failed to update task');
   });
 
   it('lists tasks and filters by status', async () => {
+    fsMock.readdir.mockRejectedValueOnce(new Error('missing'));
+    const empty = parseResult(await runTaskList({}));
+    expect(empty.status).toBe('OK');
+    expect(empty.count).toBe(0);
+
     seedTask({
       id: 'a-open',
       title: 'A',
@@ -300,6 +424,7 @@ describe('AgenticOS task MCP API', () => {
       closed_at: '2026-01-02T00:00:00.000Z',
     });
     fsMock.files.set(`${tasksDir}/ignored.txt`, 'ignore');
+    fsMock.files.set(`${tasksDir}/empty.yaml`, '');
 
     const all = parseResult(await runTaskList({}));
     expect(all.status).toBe('OK');
@@ -345,6 +470,15 @@ describe('AgenticOS task MCP API', () => {
   it('returns structured errors for project resolution and invalid project_kind', async () => {
     projectTargetMock.resolveManagedProjectTarget.mockRejectedValueOnce(new Error('No project provided'));
     expect(parseResult(await runTaskList({})).errors[0]).toContain('No project provided');
+
+    projectTargetMock.resolveManagedProjectTarget.mockRejectedValueOnce(new Error(''));
+    expect(parseResult(await runTaskList({})).errors[0]).toBe('failed to list tasks');
+
+    projectTargetMock.resolveManagedProjectTarget.mockRejectedValueOnce(new Error(''));
+    expect(parseResult(await runTaskCreate({
+      title: 'Task',
+      acceptance_criteria: ['Do it'],
+    })).errors[0]).toBe('failed to create task');
 
     projectTargetMock.resolveManagedProjectTarget.mockResolvedValueOnce({
       projectId: 'topic',
