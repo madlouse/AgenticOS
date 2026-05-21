@@ -73,7 +73,10 @@ describe('bootstrap cli', () => {
     expect(runBootstrapCli(['--help'], harness.deps)).toBe(0);
     expect(harness.stdout.join('\n')).toContain('agenticos-bootstrap');
     expect(buildHelpLines().join('\n')).toContain('--auto-configure-hooks');
+    expect(buildHelpLines().join('\n')).toContain('--install-skills');
     expect(parseCliArgs(['--all', '--auto-configure-hooks']).all).toBe(true);
+    expect(parseCliArgs(['--install-skills', '--force-skills']).installSkills).toBe(true);
+    expect(parseCliArgs(['--install-skills', '--force-skills']).forceSkills).toBe(true);
     expect(() => parseCliArgs(['--workspace'])).toThrow('--workspace requires a path.');
     expect(() => parseCliArgs(['--agent'])).toThrow('--agent requires a value.');
     expect(() => parseCliArgs(['--shell-profile'])).toThrow('--shell-profile requires a path.');
@@ -114,6 +117,8 @@ describe('bootstrap cli', () => {
         persistShellEnv: false,
         persistLaunchctlEnv: false,
         autoConfigureHooks: false,
+        installSkills: false,
+        forceSkills: false,
       },
       [
         { id: 'codex', label: 'Codex', installed: true, detection_hint: 'test' },
@@ -132,6 +137,8 @@ describe('bootstrap cli', () => {
         persistShellEnv: false,
         persistLaunchctlEnv: false,
         autoConfigureHooks: false,
+        installSkills: false,
+        forceSkills: false,
       },
       [
         { id: 'codex', label: 'Codex', installed: true, detection_hint: 'test' },
@@ -159,6 +166,8 @@ describe('bootstrap cli', () => {
         persistShellEnv: true,
         persistLaunchctlEnv: true,
         autoConfigureHooks: true,
+        installSkills: true,
+        forceSkills: false,
       },
       undefined,
       '/Users/tester',
@@ -166,6 +175,35 @@ describe('bootstrap cli', () => {
 
     expect(lines.join('\n')).toContain('- claude-code: no (test)');
     expect(lines.join('\n')).toContain('launchctl setenv AGENTICOS_HOME');
+  });
+
+  it('renders dry-run Skill skip and force overwrite actions', () => {
+    const lines = buildDryRunLines(
+      '/tmp/workspace',
+      'explicit --workspace',
+      [
+        { id: 'cursor', label: 'Cursor', installed: true, detection_hint: 'test' },
+      ],
+      ['cursor'],
+      {
+        apply: false,
+        verify: false,
+        firstRun: false,
+        all: false,
+        agents: ['cursor'],
+        help: false,
+        persistShellEnv: false,
+        persistLaunchctlEnv: false,
+        autoConfigureHooks: false,
+        installSkills: true,
+        forceSkills: true,
+      },
+      undefined,
+      '/Users/tester',
+    );
+
+    expect(lines.join('\n')).toContain('cursor-skill: skip');
+    expect(lines.join('\n')).toContain('overwrite user-modified managed Skill files');
   });
 
   it('reports non-Error thrown failures', () => {
@@ -353,6 +391,83 @@ describe('bootstrap cli', () => {
     expect(settings.hooks.PostToolUse[0].matcher).toBe('mcp__agenticos__agenticos_switch');
     expect(settings.hooks.PostToolUse[0].hooks[0].command).toBe('agenticos-claude-pwd-hook');
     expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
+  });
+
+  it('installs AgenticOS activation Skills during apply when requested', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    const skill = harness.files.get('/Users/tester/.codex/skills/agenticos/SKILL.md');
+    expect(skill).toContain('agenticos-skill-managed-sha256');
+    expect(skill).toContain('AgenticOS Activation');
+    expect(harness.stdout.some((line) => line.includes('OK codex-skill'))).toBe(true);
+    const bootstrapState = yaml.parse(harness.files.get('/tmp/workspace/.agent-workspace/bootstrap-state.yaml') || '');
+    expect(bootstrapState.install_skills).toBe(true);
+    expect(bootstrapState.agenticos_skills[0].status).toBe('current');
+  });
+
+  it('skips unsupported activation Skill installs without failing apply', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'cursor', '--install-skills', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('SKIP cursor-skill'))).toBe(true);
+  });
+
+  it('fails Skill install on user-modified files unless force is requested', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', '# custom skill\n');
+
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--apply'],
+      harness.deps,
+    )).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL codex-skill'))).toBe(true);
+    expect(harness.files.get('/Users/tester/.codex/skills/agenticos/SKILL.md')).toBe('# custom skill\n');
+
+    const forceHarness = createDeps();
+    forceHarness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', '# custom skill\n');
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--force-skills', '--apply'],
+      forceHarness.deps,
+    )).toBe(0);
+    expect(forceHarness.files.get('/Users/tester/.codex/skills/agenticos/SKILL.md')).toContain('AgenticOS Activation');
+  });
+
+  it('reports Skill install write errors during apply', () => {
+    const harness = createDeps();
+    harness.deps.writeFile = (path: string, content: string) => {
+      if (path.includes('/.codex/skills/agenticos/')) throw new Error('skill path locked');
+      harness.files.set(path, content);
+    };
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL codex-skill: skill path locked'))).toBe(true);
+
+    const stringHarness = createDeps();
+    stringHarness.deps.writeFile = (path: string, content: string) => {
+      if (path.includes('/.codex/skills/agenticos/')) throw 'skill path string lock';
+      stringHarness.files.set(path, content);
+    };
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--apply'],
+      stringHarness.deps,
+    )).toBe(1);
+    expect(stringHarness.stdout.some((line) => line.includes('FAIL codex-skill: skill path string lock'))).toBe(true);
   });
 
   it('warns but does not fail when Claude hook is missing and auto configure is not requested', () => {
@@ -616,6 +731,46 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.some((line) => line.includes('OK shell-profile'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK launchctl'))).toBe(true);
     expect(harness.files.has('/tmp/workspace/.agent-workspace/bootstrap-state.yaml')).toBe(false);
+  });
+
+  it('verifies activation Skill state when requested', () => {
+    const harness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--apply'],
+      harness.deps,
+    )).toBe(0);
+
+    harness.stdout.length = 0;
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK codex-skill'))).toBe(true);
+
+    const missingHarness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--verify'],
+      missingHarness.deps,
+    )).toBe(1);
+    expect(missingHarness.stdout.some((line) => line.includes('FAIL codex-skill'))).toBe(true);
+    expect(missingHarness.stdout.some((line) => line.includes('--install-skills --apply'))).toBe(true);
+
+    const unsupportedHarness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'cursor', '--install-skills', '--verify'],
+      unsupportedHarness.deps,
+    )).toBe(1);
+    expect(unsupportedHarness.stdout.some((line) => line.includes('SKIP cursor-skill'))).toBe(true);
+
+    const modifiedHarness = createDeps();
+    modifiedHarness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', '# local edit\n');
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--install-skills', '--verify'],
+      modifiedHarness.deps,
+    )).toBe(1);
+    expect(modifiedHarness.stdout.some((line) => line.includes('--force-skills --apply'))).toBe(true);
   });
 
   it('verifies shell profile through the default shell path', () => {

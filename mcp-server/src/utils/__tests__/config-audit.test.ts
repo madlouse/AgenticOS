@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderConfigAuditResult, runConfigAudit } from '../config-audit.js';
+import { renderAgenticosSkillContent } from '../agent-skill.js';
 
 function createDeps() {
   const files = new Map<string, string>();
@@ -53,6 +54,8 @@ describe('config audit', () => {
     expect(result.canonical_workspace).toBe('/runtime/home');
     expect(rendered).toContain('process.env AGENTICOS_HOME');
     expect(rendered).toContain('Claude Code settings env');
+    expect(rendered).toContain('Claude Code AgenticOS activation Skill');
+    expect(rendered).toContain('Codex AgenticOS activation Skill');
     expect(rendered).toContain('Cursor MCP config');
     expect(rendered).toContain('/opt/homebrew/var/agenticos');
   });
@@ -171,6 +174,33 @@ describe('config audit', () => {
     expect(hook?.status).toBe('configured');
     expect(hook?.value).toBe('mcp__agenticos__agenticos_switch');
     expect(hook?.detail).toContain('Detected PostToolUse hook');
+  });
+
+  it('reports activation Skill status without making it canonical workspace input', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', renderAgenticosSkillContent());
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const codexSkill = result.sources.find((source) => source.id === 'codex_activation_skill');
+    const claudeSkill = result.sources.find((source) => source.id === 'claude-code_activation_skill');
+
+    expect(result.canonical_workspace).toBeNull();
+    expect(codexSkill?.status).toBe('configured');
+    expect(codexSkill?.value).toBe('agenticos-skill:v1');
+    expect(codexSkill?.contributes_to_workspace).toBe(false);
+    expect(claudeSkill?.status).toBe('missing');
+    expect(claudeSkill?.fix_target).toContain('--install-skills');
+  });
+
+  it('reports user-modified activation Skills as present with force recovery', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', '# custom activation\n');
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const codexSkill = result.sources.find((source) => source.id === 'codex_activation_skill');
+
+    expect(codexSkill?.status).toBe('present');
+    expect(codexSkill?.fix_target).toContain('--force-skills');
   });
 
   it('reports missing Claude Code cwd guidance hook when hooks do not match', () => {

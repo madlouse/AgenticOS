@@ -23,10 +23,11 @@ class Agenticos < Formula
     ohai "Add the following to your shell profile (~/.zshrc or ~/.bashrc):"
     ohai "  export AGENTICOS_HOME=\"#{var}/agenticos\""
     ohai ""
-    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --first-run"
+    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --first-run --auto-configure-hooks"
+    ohai "First-run mode installs AgenticOS activation Skills for Codex/Claude Code when selected."
     ohai "On macOS, first-run mode also enables launchctl persistence for GUI/session inheritance."
     ohai "To audit the current Homebrew/runtime bootstrap state without changes, use: agenticos-config --validate"
-    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --all --verify"
+    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --all --install-skills --verify"
     ohai "Or bootstrap your agent manually (see caveats below) and restart the tool."
   end
 
@@ -48,6 +49,12 @@ class Agenticos < Formula
          Recommended helper
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 
+           First-run mode registers MCP, persists AGENTICOS_HOME where applicable,
+           and installs the AgenticOS activation Skill for Codex/Claude Code when
+           those agents are selected. The Skill helps natural-language requests
+           such as "switch to 360Teams" or "切换到 360Teams 项目" discover and
+           call AgenticOS MCP before filesystem guessing.
+
          macOS GUI/session helper
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --persist-shell-env --persist-launchctl-env --apply
 
@@ -56,6 +63,13 @@ class Agenticos < Formula
 
            The hook reads Claude Code PostToolUse stdin and feeds the switched
            project path back into Claude. It cannot mutate a parent shell PWD.
+
+         Activation Skill install/update
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --apply
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --apply
+
+           AgenticOS-managed Skill files are updated by content hash. User-modified
+           files are not overwritten unless you rerun with --force-skills.
 
          Claude Code
            claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
@@ -83,7 +97,7 @@ class Agenticos < Formula
 
       4. Verify the Homebrew/runtime bootstrap state:
            agenticos-config --validate
-           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --verify
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
 
          Then confirm the server is listed in the tool's MCP diagnostics and explicitly call
          agenticos_list.

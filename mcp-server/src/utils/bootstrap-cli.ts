@@ -6,6 +6,12 @@ import {
   inspectClaudePwdAlignmentHook,
   mergeClaudePwdAlignmentHook,
 } from './claude-pwd-hook.js';
+import {
+  installAgentSkill,
+  inspectAgentSkill,
+  isAgentSkillOkForVerify,
+  type AgentSkillInstallResult,
+} from './agent-skill.js';
 
 export interface CliOptions {
   apply: boolean;
@@ -19,6 +25,8 @@ export interface CliOptions {
   persistLaunchctlEnv: boolean;
   shellProfile?: string;
   autoConfigureHooks: boolean;
+  installSkills: boolean;
+  forceSkills: boolean;
 }
 
 export interface ApplyResult {
@@ -63,6 +71,8 @@ export function parseCliArgs(argv: string[]): CliOptions {
     persistShellEnv: false,
     persistLaunchctlEnv: false,
     autoConfigureHooks: false,
+    installSkills: false,
+    forceSkills: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -92,6 +102,12 @@ export function parseCliArgs(argv: string[]): CliOptions {
         break;
       case '--auto-configure-hooks':
         options.autoConfigureHooks = true;
+        break;
+      case '--install-skills':
+        options.installSkills = true;
+        break;
+      case '--force-skills':
+        options.forceSkills = true;
         break;
       case '--workspace': {
         const value = argv[index + 1];
@@ -193,6 +209,9 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
     const hookConfigResult = selectedAgents.includes('claude-code')
       ? configureClaudePwdAlignmentHook(options, deps)
       : null;
+    const skillInstallResults = options.installSkills
+      ? selectedAgents.map((agentId) => applyAgentSkill(agentId, options, deps))
+      : null;
     const bootstrapStateResult = persistBootstrapState(
       workspaceSelection.workspace,
       selectedAgents,
@@ -201,6 +220,7 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       shellProfileResult,
       launchctlResult,
       hookConfigResult,
+      skillInstallResults,
       deps,
     );
 
@@ -221,6 +241,14 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       const marker = hookConfigResult.ok ? 'OK' : hookConfigResult.fatal ? 'FAIL' : 'WARN';
       deps.stdout(`${marker} claude-pwd-hook: ${hookConfigResult.detail}`);
     }
+    if (skillInstallResults) {
+      for (const result of skillInstallResults) {
+        const marker = result.ok
+          ? result.status === 'unsupported' ? 'SKIP' : 'OK'
+          : 'FAIL';
+        deps.stdout(`${marker} ${result.agentId}-skill: ${result.detail}`);
+      }
+    }
     {
       const marker = bootstrapStateResult.ok ? 'OK' : 'FAIL';
       deps.stdout(`${marker} bootstrap-state: ${bootstrapStateResult.detail}`);
@@ -230,6 +258,7 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       || (shellProfileResult && !shellProfileResult.ok)
       || (launchctlResult && !launchctlResult.ok)
       || (hookConfigResult && hookConfigResult.fatal)
+      || (skillInstallResults && skillInstallResults.some((result) => !result.ok))
       || !bootstrapStateResult.ok
       ? 1
       : 0;
@@ -244,16 +273,18 @@ export function buildHelpLines(): string[] {
     'agenticos-bootstrap — bootstrap AgenticOS MCP registrations',
     '',
     'Usage:',
-    '  agenticos-bootstrap [--workspace <path>] [--agent <id>] [--all] [--first-run] [--persist-shell-env] [--persist-launchctl-env] [--auto-configure-hooks] [--shell-profile <path>] [--verify] [--apply]',
+    '  agenticos-bootstrap [--workspace <path>] [--agent <id>] [--all] [--first-run] [--persist-shell-env] [--persist-launchctl-env] [--auto-configure-hooks] [--install-skills] [--force-skills] [--shell-profile <path>] [--verify] [--apply]',
     '',
     'Behavior:',
     '  Without `--apply`, prints a dry-run bootstrap plan.',
     '  With `--apply`, creates the workspace if needed and writes supported agent config.',
     '  With `--verify`, checks the selected agent registrations and optional persistence layers without mutating them.',
-    '  `--first-run` is a convenience mode: it implies `--apply`, enables shell persistence, and on macOS also enables launchctl persistence.',
+    '  `--first-run` is a convenience mode: it implies `--apply`, `--install-skills`, enables shell persistence, and on macOS also enables launchctl persistence.',
     '  `--persist-shell-env` also writes export AGENTICOS_HOME=... to the detected shell profile.',
     '  `--persist-launchctl-env` also runs `launchctl setenv` on macOS for GUI/session inheritance.',
     '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to provide cwd guidance after agenticos_switch.',
+    '  `--install-skills` installs or updates the AgenticOS activation Skill for agents that support local skills.',
+    '  `--force-skills` allows `--install-skills` to overwrite a user-modified AgenticOS Skill.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli',
@@ -287,6 +318,7 @@ export function normalizeCliOptions(options: CliOptions, platform: string): CliO
   if (options.firstRun) {
     options.apply = true;
     options.persistShellEnv = true;
+    options.installSkills = true;
     if (platform === 'darwin') {
       options.persistLaunchctlEnv = true;
     }
@@ -344,6 +376,19 @@ export function buildDryRunLines(
   }
   if (options.persistLaunchctlEnv) {
     lines.push('- launchctl: run `launchctl setenv AGENTICOS_HOME ...` (macOS only)');
+  }
+  if (options.installSkills) {
+    for (const agentId of selected) {
+      const inspection = inspectAgentSkill(agentId, homeDir, () => null);
+      if (inspection.status === 'unsupported') {
+        lines.push(`- ${agentId}-skill: skip (${inspection.detail})`);
+      } else {
+        lines.push(`- ${agentId}-skill: install/update ${inspection.target.path}`);
+      }
+    }
+    if (options.forceSkills) {
+      lines.push('- agenticos-skill: overwrite user-modified managed Skill files if present');
+    }
   }
   if (selected.includes('claude-code')) {
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
@@ -418,6 +463,20 @@ function runVerification(
     }
   }
 
+  if (options.installSkills) {
+    for (const agentId of selected) {
+      const result = verifyAgentSkill(agentId, workspace, deps);
+      const marker = result.ok
+        ? result.unsupported ? 'SKIP' : 'OK'
+        : 'FAIL';
+      lines.push(`${marker} ${agentId}-skill: ${result.detail}`);
+      if (!result.ok) {
+        ok = false;
+        lines.push(`   Recovery: ${result.recovery}`);
+      }
+    }
+  }
+
   return { ok, lines };
 }
 
@@ -453,6 +512,27 @@ function applyCursor(workspace: string, deps: BootstrapCliDeps): ApplyResult {
     return { agentId: 'cursor', ok: merged.includes('"AGENTICOS_HOME"'), detail: `updated ${configPath}` };
   } catch (error) {
     return { agentId: 'cursor', ok: false, detail: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function applyAgentSkill(
+  agentId: SupportedAgentId,
+  options: CliOptions,
+  deps: BootstrapCliDeps,
+): AgentSkillInstallResult {
+  try {
+    return installAgentSkill(agentId, deps.homeDir, deps, {
+      force: options.forceSkills,
+    });
+  } catch (error) {
+    const inspection = inspectAgentSkill(agentId, deps.homeDir, deps.readFile);
+    return {
+      ...inspection,
+      ok: false,
+      wrote: false,
+      skipped: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -602,6 +682,24 @@ function verifyClaudePwdGuidanceHook(deps: BootstrapCliDeps): { ok: boolean; det
     : { ok: false, detail: `${inspection.detail} Expected cwd guidance hook in ${settingsPath}.` };
 }
 
+function verifyAgentSkill(
+  agentId: SupportedAgentId,
+  workspace: string,
+  deps: BootstrapCliDeps,
+): { ok: boolean; unsupported: boolean; detail: string; recovery: string } {
+  const inspection = inspectAgentSkill(agentId, deps.homeDir, deps.readFile);
+  const ok = isAgentSkillOkForVerify(inspection);
+  const recoveryArgs = ['--workspace', workspace, '--agent', agentId, '--install-skills'];
+  if (inspection.status === 'modified-user') recoveryArgs.push('--force-skills');
+  recoveryArgs.push('--apply');
+  return {
+    ok,
+    unsupported: inspection.status === 'unsupported',
+    detail: inspection.detail,
+    recovery: formatCommand({ command: 'agenticos-bootstrap', args: recoveryArgs }),
+  };
+}
+
 function persistBootstrapState(
   workspace: string,
   selectedAgents: SupportedAgentId[],
@@ -610,6 +708,7 @@ function persistBootstrapState(
   shellProfileResult: { ok: boolean; detail: string } | null,
   launchctlResult: { ok: boolean; detail: string } | null,
   hookConfigResult: HookConfigResult | null,
+  skillInstallResults: AgentSkillInstallResult[] | null,
   deps: BootstrapCliDeps,
 ): { ok: boolean; detail: string } {
   try {
@@ -621,6 +720,7 @@ function persistBootstrapState(
       && (!shellProfileResult || shellProfileResult.ok)
       && (!launchctlResult || launchctlResult.ok)
       && (!hookConfigResult || !hookConfigResult.fatal)
+      && (!skillInstallResults || skillInstallResults.every((result) => result.ok))
       ? 'success'
       : 'partial-failure';
 
@@ -639,6 +739,8 @@ function persistBootstrapState(
         persist_shell_env: options.persistShellEnv,
         persist_launchctl_env: options.persistLaunchctlEnv,
         auto_configure_hooks: options.autoConfigureHooks,
+        install_skills: options.installSkills,
+        force_skills: options.forceSkills,
         claude_pwd_hook: hookConfigResult
           ? {
             ok: hookConfigResult.ok,
@@ -646,6 +748,17 @@ function persistBootstrapState(
             detail: hookConfigResult.detail,
           }
           : null,
+        agenticos_skills: skillInstallResults
+          ? skillInstallResults.map((result) => ({
+            agent_id: result.agentId,
+            ok: result.ok,
+            status: result.status,
+            wrote: result.wrote,
+            skipped: result.skipped,
+            path: result.target.path,
+            detail: result.detail,
+          }))
+          : [],
         shell_profile_path: options.persistShellEnv
           ? (options.shellProfile || detectDefaultShellProfile(deps.env.SHELL, deps.homeDir))
           : null,

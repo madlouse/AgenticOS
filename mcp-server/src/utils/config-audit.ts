@@ -4,6 +4,8 @@ import {
   CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER,
   inspectClaudePwdAlignmentHook,
 } from './claude-pwd-hook.js';
+import { inspectAgentSkill } from './agent-skill.js';
+import type { SupportedAgentId } from './bootstrap-helper.js';
 
 export type ConfigAuditAction = 'show' | 'validate';
 export type ConfigAuditScope = 'all' | 'runtime' | 'mcp' | 'homebrew';
@@ -197,11 +199,43 @@ function collectConfigSources(deps: ConfigAuditDeps): ConfigSourceRecord[] {
     readLaunchctlSource(deps),
     readClaudeSettingsSource(deps),
     readClaudePwdAlignmentHookSource(deps),
+    readAgentSkillSource(deps, 'claude-code'),
     readClaudeLegacySource(deps),
     readCodexConfigSource(deps),
+    readAgentSkillSource(deps, 'codex'),
     readCursorConfigSource(deps),
     ...readHomebrewSources(deps),
   ];
+}
+
+function readAgentSkillSource(
+  deps: ConfigAuditDeps,
+  agentId: SupportedAgentId,
+): ConfigSourceRecord {
+  const inspection = inspectAgentSkill(agentId, deps.homeDir, deps.readFile);
+  const status = inspection.status === 'current'
+    ? 'configured'
+    : inspection.status === 'missing'
+      ? 'missing'
+      : 'present';
+  const fixTarget = `agenticos-bootstrap --agent ${agentId} --install-skills --apply`;
+  return {
+    id: `${agentId}_activation_skill`,
+    label: inspection.target.label,
+    scope: 'mcp',
+    status,
+    value: inspection.status === 'current'
+      ? `agenticos-skill:v${inspection.installedVersion}`
+      : null,
+    location: inspection.target.path!,
+    fix_target: inspection.status === 'modified-user'
+      ? `${fixTarget} --force-skills`
+      : fixTarget,
+    detail: status === 'configured'
+      ? inspection.detail
+      : `${inspection.detail} Rerun bootstrap with --install-skills to install or update it.`,
+    contributes_to_workspace: false,
+  };
 }
 
 function readClaudePwdAlignmentHookSource(deps: ConfigAuditDeps): ConfigSourceRecord {
