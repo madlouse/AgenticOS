@@ -27,6 +27,7 @@ import {
 } from '../utils/issue-bootstrap-continuity.js';
 import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../utils/worktree-topology.js';
 import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
+import { assessKnowledgeEvolutionHealth, buildKnowledgeEvolutionStatusLines } from '../utils/knowledge-evolution-health.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -728,6 +729,14 @@ export async function getStatus(args: any = {}): Promise<string> {
   }));
   try {
     lines.push(...await buildWorktreeTopologySummaryLines(resolved.projectPath, resolved.projectYaml));
+  } catch {}
+  try {
+    lines.push(...buildKnowledgeEvolutionStatusLines(await assessKnowledgeEvolutionHealth({
+      projectPath: resolved.projectPath,
+      repoPath: resolved.projectPath,
+      projectYaml: resolved.projectYaml,
+      state,
+    })));
   } catch {}
 
   lines.push('');

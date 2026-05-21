@@ -26,6 +26,7 @@ const standardKitMock = vi.hoisted(() => ({
 
 const registryMock = vi.hoisted(() => ({
   getAgenticOSHome: vi.fn(() => '/workspace'),
+  loadRegistry: vi.fn(),
 }));
 
 const repoBoundaryMock = vi.hoisted(() => ({
@@ -47,6 +48,7 @@ vi.mock('../standard-kit.js', async (importOriginal) => {
 
 vi.mock('../registry.js', () => ({
   getAgenticOSHome: registryMock.getAgenticOSHome,
+  loadRegistry: registryMock.loadRegistry,
 }));
 
 vi.mock('../repo-boundary.js', () => ({
@@ -84,6 +86,12 @@ describe('health command', () => {
     // Default exec mock — individual tests override this
     execMock.mockReset();
     spawnMock.mockReset();
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2026-03-25T00:00:00.000Z',
+      active_project: null,
+      projects: [],
+    });
 
     // Default exec mock: 'which agenticos-mcp' returns a path so spawn is called
     execMock.mockImplementation((command: string, cb: Function) => {
@@ -183,9 +191,10 @@ describe('health command', () => {
     const wrapped = JSON.parse(await runHealth({
       repo_path: '/repo',
       project_path: projectRoot,
-    })) as { command: string; status: string };
+    })) as { command: string; status: string; knowledge_evolution: { status: string } };
     expect(wrapped.command).toBe('agenticos_health');
-    expect(wrapped.status).toBe('PASS');
+    expect(wrapped.status).toBe('WARN');
+    expect(wrapped.knowledge_evolution.status).toBe('WARN');
   });
 
   it('reports branch misalignment separately from runtime drift and source edits', async () => {

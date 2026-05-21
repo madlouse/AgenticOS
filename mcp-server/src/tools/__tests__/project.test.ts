@@ -23,6 +23,7 @@ vi.mock('fs/promises', () => ({
   access: vi.fn(),
   rename: vi.fn(),
   rm: vi.fn(),
+  readdir: vi.fn(),
   stat: vi.fn(),
 }));
 
@@ -84,6 +85,8 @@ import { bindSessionProject, clearSessionProjectBinding, getSessionProjectBindin
 const fsPromisesMock = fsPromises as typeof fsPromises & {
   readFile: ReturnType<typeof vi.fn>;
   writeFile: ReturnType<typeof vi.fn>;
+  readdir: ReturnType<typeof vi.fn>;
+  stat: ReturnType<typeof vi.fn>;
 };
 const registryMock = registry as typeof registry & {
   loadRegistry: ReturnType<typeof vi.fn>;
@@ -130,6 +133,8 @@ describe('switchProject', () => {
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
+    fsPromisesMock.readdir.mockResolvedValue([]);
+    fsPromisesMock.stat.mockRejectedValue(new Error('not found'));
     loadLatestGuardrailStateMock.mockResolvedValue({
       source: null,
       state: {},
