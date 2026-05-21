@@ -3,7 +3,7 @@ import { join } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, patchRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
-import { buildProjectTopologyInitializationMessage, hasDeclaredContextPublicationPolicy, validateContextPublicationPolicy, type ContextPublicationPolicy, type ProjectTopology } from '../utils/project-contract.js';
+import { buildProjectTopologyInitializationMessage, hasDeclaredContextPublicationPolicy, validateContextPublicationPolicy, validateProjectKind, type ContextPublicationPolicy, type ProjectKind, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 import { ensureCaseKnowledgeDirectories } from '../utils/case-knowledge.js';
 import { validatePathSecurity } from '../utils/session-context.js';
@@ -67,6 +67,28 @@ function resolveTopologyArgs(args: any): { topology: ProjectTopology; rawContext
   };
 }
 
+function resolveProjectKindArg(
+  name: string,
+  rawProjectKind: unknown,
+  existingProjectYaml: any = {},
+): ProjectKind {
+  if (rawProjectKind !== undefined) {
+    const validation = validateProjectKind(name, {
+      agenticos: { project_kind: rawProjectKind },
+    });
+    if (!validation.ok) {
+      throw new Error(`${validation.message} Pass project_kind="topic" or project_kind="project".`);
+    }
+    return validation.project_kind;
+  }
+
+  const validation = validateProjectKind(name, existingProjectYaml);
+  if (!validation.ok) {
+    throw new Error(`${validation.message} Re-run agenticos_init with normalize_existing=true and project_kind="topic" or project_kind="project" to repair it.`);
+  }
+  return validation.project_kind;
+}
+
 async function loadExistingProjectYaml(projectPath: string): Promise<any> {
   try {
     return yaml.parse(await readFile(join(projectPath, '.project.yaml'), 'utf-8')) || {};
@@ -103,9 +125,10 @@ function buildProjectYaml(args: {
   existingProjectYaml?: any;
   topology: ProjectTopology;
   contextPublicationPolicy: ContextPublicationPolicy;
+  projectKind: ProjectKind;
   githubRepo?: string;
 }): any {
-  const { name, id, description, existingProjectYaml = {}, topology, contextPublicationPolicy, githubRepo } = args;
+  const { name, id, description, existingProjectYaml = {}, topology, contextPublicationPolicy, projectKind, githubRepo } = args;
   const today = new Date().toISOString().split('T')[0];
   const meta = existingProjectYaml?.meta || {};
   const merged: any = {
@@ -117,6 +140,10 @@ function buildProjectYaml(args: {
       description: description ?? meta.description ?? '',
       created: meta.created || today,
       version: meta.version || '1.0.0',
+    },
+    agenticos: {
+      ...(existingProjectYaml?.agenticos && typeof existingProjectYaml.agenticos === 'object' ? existingProjectYaml.agenticos : {}),
+      project_kind: projectKind,
     },
     source_control: {
       topology,
@@ -187,6 +214,10 @@ export async function initProject(args: any): Promise<string> {
     if (!publicationValidation.ok) {
       return `${publicationValidation.message} Re-run agenticos_init with normalize_existing=true and the intended topology/publication contract.`;
     }
+    const projectKindValidation = validateProjectKind(name, existingProjectYaml);
+    if (!projectKindValidation.ok) {
+      return `${projectKindValidation.message} Re-run agenticos_init with normalize_existing=true and project_kind="topic" or project_kind="project".`;
+    }
     return `Project '${name}' already exists at ${projectPath}. Use \`agenticos_switch\` to activate it.`;
   }
 
@@ -209,6 +240,7 @@ export async function initProject(args: any): Promise<string> {
     rawContextPublicationPolicy,
     existingProjectYaml,
   );
+  const projectKind = resolveProjectKindArg(name, args.project_kind, existingProjectYaml);
   const today = new Date().toISOString().split('T')[0];
   const projectYaml = buildProjectYaml({
     name,
@@ -217,6 +249,7 @@ export async function initProject(args: any): Promise<string> {
     existingProjectYaml,
     topology,
     contextPublicationPolicy,
+    projectKind,
     githubRepo,
   });
   await writeFile(join(projectPath, '.project.yaml'), yaml.stringify(projectYaml), 'utf-8');
@@ -289,6 +322,7 @@ ${description ?? existingProjectYaml?.meta?.description ?? ''}
     ? `Topology: github_versioned (${githubRepo}, github_flow)`
     : 'Topology: local_directory_only';
   const publicationLine = `Context Publication: ${contextPublicationPolicy}`;
+  const projectKindLine = `Project Kind: ${projectKind}`;
   const prefix = pathExists ? 'Normalized' : 'Created';
-  return `✅ ${prefix} project "${name}" at ${projectPath}\n\nProject ID: ${id}\nStatus: Active\n${topologyLine}\n${publicationLine}\n\nUse agenticos_switch to load this project context.`;
+  return `✅ ${prefix} project "${name}" at ${projectPath}\n\nProject ID: ${id}\nStatus: Active\n${projectKindLine}\n${topologyLine}\n${publicationLine}\n\nUse agenticos_switch to load this project context.`;
 }

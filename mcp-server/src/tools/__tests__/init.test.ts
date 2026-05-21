@@ -127,6 +127,17 @@ describe('initProject', () => {
     expect(result).toContain('Context Publication: local_private');
   });
 
+  it('fails when project_kind is unsupported', async () => {
+    await expect(
+      initProject({
+        name: 'Test Project',
+        description: 'A test project',
+        topology: 'local_directory_only',
+        project_kind: 'workflow',
+      }),
+    ).rejects.toThrow('agenticos.project_kind');
+  });
+
   it('rejects custom paths with control characters', async () => {
     await expect(
       initProject({
@@ -181,10 +192,27 @@ describe('initProject', () => {
     expect(parsed.meta.id).toBe('test-project');
     expect(parsed.meta.description).toBe('A test project');
     expect(parsed.meta.version).toBe('1.0.0');
+    expect(parsed.agenticos.project_kind).toBe('project');
     expect(parsed.source_control.topology).toBe('local_directory_only');
     expect(parsed.source_control.context_publication_policy).toBe('local_private');
     expect(parsed.agent_context.quick_start).toBe('.context/quick-start.md');
     expect(parsed.agent_context.current_state).toBe('.context/state.yaml');
+  });
+
+  it('writes topic project kind when requested', async () => {
+    await initProject({
+      name: 'Topic Project',
+      description: 'A durable topic',
+      topology: 'local_directory_only',
+      project_kind: 'topic',
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const projectYamlCall = writeCalls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.agenticos.project_kind).toBe('topic');
   });
 
   it('writes github versioned source control metadata and repo root binding', async () => {
@@ -427,6 +455,7 @@ describe('initProject', () => {
     expect(result).toContain('Test Project');
     expect(result).toContain('test-project');
     expect(result).toContain('Active');
+    expect(result).toContain('Project Kind: project');
     expect(result).toContain('agenticos_switch');
   });
 
@@ -600,6 +629,49 @@ describe('initProject', () => {
     expect(result).toContain('agenticos_switch');
   });
 
+  it('returns normalization guidance for a registered project with invalid project kind', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockImplementation(async (path: any) => {
+      const normalizedPath = String(path);
+      if (normalizedPath.endsWith('registry.yaml')) {
+        return JSON.stringify({
+          version: '1.0.0',
+          last_updated: '2025-01-01T00:00:00.000Z',
+          active_project: 'test-project',
+          projects: [
+            {
+              id: 'test-project',
+              name: 'Test Project',
+              path: '/home/testuser/AgenticOS/projects/test-project',
+              status: 'active',
+              created: '2025-01-01',
+              last_accessed: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        });
+      }
+
+      if (normalizedPath.endsWith('.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          agenticos: { project_kind: 'workflow' },
+          source_control: {
+            topology: 'local_directory_only',
+            context_publication_policy: 'local_private',
+          },
+        });
+      }
+
+      throw new Error(`Unexpected readFile path: ${normalizedPath}`);
+    });
+
+    const result = await initProject({ name: 'Test Project', topology: 'local_directory_only' });
+
+    expect(result).toContain('agenticos.project_kind');
+    expect(result).toContain('normalize_existing=true');
+  });
+
   it('returns re-register guidance when a project path exists but the registry entry is missing', async () => {
     fsMock.existsSync.mockReturnValue(false);
     fsPromisesMock.access.mockResolvedValue(undefined);
@@ -716,6 +788,7 @@ describe('initProject', () => {
     expect(projectYamlCall).toBeDefined();
     const parsed = JSON.parse(String(projectYamlCall![1]));
     expect(parsed.execution).toEqual({ sandbox: 'workspace-write' });
+    expect(parsed.agenticos.project_kind).toBe('project');
     expect(parsed.agent_context.quick_start).toBe('docs/quick-start.md');
     expect(parsed.agent_context.current_state).toBe('runtime/state.yaml');
     expect(parsed.agent_context.conversations).toBe('runtime/conversations/');
@@ -772,6 +845,98 @@ describe('initProject', () => {
     const projectYamlCall = fsPromisesMock.writeFile.mock.calls.find((c) => String(c[0]).endsWith('.project.yaml'));
     expect(projectYamlCall).toBeDefined();
     expect(JSON.parse(String(projectYamlCall![1])).execution).toBeUndefined();
+  });
+
+  it('normalizes an existing valid topic without requiring a new project_kind argument', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockImplementation(async (path: any) => {
+      const normalizedPath = String(path);
+      if (normalizedPath.endsWith('registry.yaml')) {
+        return JSON.stringify({
+          version: '1.0.0',
+          last_updated: '2025-01-01T00:00:00.000Z',
+          active_project: 'topic-project',
+          projects: [
+            {
+              id: 'topic-project',
+              name: 'Topic Project',
+              path: '/home/testuser/AgenticOS/projects/topic-project',
+              status: 'active',
+              created: '2025-01-01',
+              last_accessed: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        });
+      }
+
+      if (normalizedPath.endsWith('.project.yaml')) {
+        return JSON.stringify({
+          meta: { name: 'Topic Project', id: 'topic-project' },
+          agenticos: { project_kind: 'topic' },
+          source_control: {
+            topology: 'local_directory_only',
+            context_publication_policy: 'local_private',
+          },
+        });
+      }
+
+      throw new Error(`Unexpected readFile path: ${normalizedPath}`);
+    });
+
+    await initProject({
+      name: 'Topic Project',
+      topology: 'local_directory_only',
+      normalize_existing: true,
+    });
+
+    const projectYamlCall = fsPromisesMock.writeFile.mock.calls.find((c) => String(c[0]).endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+    expect(JSON.parse(String(projectYamlCall![1])).agenticos.project_kind).toBe('topic');
+  });
+
+  it('fails closed when normalizing an existing project with invalid project_kind and no replacement value', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockImplementation(async (path: any) => {
+      const normalizedPath = String(path);
+      if (normalizedPath.endsWith('registry.yaml')) {
+        return JSON.stringify({
+          version: '1.0.0',
+          last_updated: '2025-01-01T00:00:00.000Z',
+          active_project: 'test-project',
+          projects: [
+            {
+              id: 'test-project',
+              name: 'Test Project',
+              path: '/home/testuser/AgenticOS/projects/test-project',
+              status: 'active',
+              created: '2025-01-01',
+              last_accessed: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        });
+      }
+
+      if (normalizedPath.endsWith('.project.yaml')) {
+        return JSON.stringify({
+          meta: { name: 'Test Project', id: 'test-project' },
+          agenticos: { project_kind: 'workflow' },
+          source_control: {
+            topology: 'local_directory_only',
+            context_publication_policy: 'local_private',
+          },
+        });
+      }
+
+      throw new Error(`Unexpected readFile path: ${normalizedPath}`);
+    });
+
+    await expect(initProject({
+      name: 'Test Project',
+      topology: 'local_directory_only',
+      normalize_existing: true,
+    })).rejects.toThrow('project_kind="topic"');
   });
 
   it('normalizes an existing path even when legacy project yaml cannot be parsed', async () => {
