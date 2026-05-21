@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-05-21T06:58:00.000Z",
+  "capturedAt": "2026-05-21T10:57:58.448Z",
   "version": "0.4.25",
   "serverInfo": {
     "name": "agenticos-mcp",
@@ -14,6 +14,10 @@
     "agenticos_init",
     "agenticos_switch",
     "agenticos_list",
+    "agenticos_task_create",
+    "agenticos_task_update",
+    "agenticos_task_list",
+    "agenticos_task_close",
     "agenticos_record",
     "agenticos_record_case",
     "agenticos_list_cases",
@@ -39,5 +43,5 @@
     "agenticos_enforce_git_policy",
     "agenticos_worktree_cleanup"
   ],
-  "toolCount": 27
+  "toolCount": 31
 }

@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup } from './tools/index.js';
+import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -69,6 +69,76 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'agenticos_list',
       description: 'List all AgenticOS projects',
       inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'agenticos_task_create',
+      description: 'Create a durable AgenticOS topic/project task under tasks/<task_id>.yaml and synchronize state.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path.' },
+          id: { type: 'string', description: 'Optional filesystem-safe task id. Defaults to a sanitized title.' },
+          title: { type: 'string', description: 'Task title.' },
+          status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'canceled'], description: 'Initial task status. Defaults to open.' },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], description: 'Task priority. Defaults to medium.' },
+          source: { type: 'object', description: 'Task source object with kind, origin, optional source_id, and optional dedupe_key.' },
+          acceptance_criteria: { type: 'array', items: { type: 'string' }, description: 'Observable completion criteria.' },
+          refs: { type: 'array', items: { type: 'object' }, description: 'Optional related references.' },
+          description: { type: 'string', description: 'Optional short task context. Do not include raw transcripts or secrets.' },
+          labels: { type: 'array', items: { type: 'string' }, description: 'Optional routing labels.' },
+          blocked_reason: { type: 'string', description: 'Required when status is blocked.' },
+        },
+        required: ['title', 'acceptance_criteria'],
+      },
+    },
+    {
+      name: 'agenticos_task_update',
+      description: 'Update a durable AgenticOS task and synchronize current/resume state.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path.' },
+          task_id: { type: 'string', description: 'Task id to update.' },
+          title: { type: 'string' },
+          status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'canceled'] },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+          source: { type: 'object' },
+          acceptance_criteria: { type: 'array', items: { type: 'string' } },
+          refs: { type: 'array', items: { type: 'object' } },
+          description: { type: 'string' },
+          labels: { type: 'array', items: { type: 'string' } },
+          blocked_reason: { type: 'string' },
+        },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'agenticos_task_list',
+      description: 'List durable AgenticOS tasks from tasks/*.yaml.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path.' },
+          status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'canceled'], description: 'Optional status filter.' },
+        },
+      },
+    },
+    {
+      name: 'agenticos_task_close',
+      description: 'Close a durable AgenticOS task as done or canceled and clear matching current/resume state.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path.' },
+          task_id: { type: 'string', description: 'Task id to close.' },
+          status: { type: 'string', enum: ['done', 'canceled'], description: 'Close status. Defaults to done.' },
+        },
+        required: ['task_id'],
+      },
     },
     {
       name: 'agenticos_record',
@@ -494,6 +564,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await switchProject(args) }] };
     case 'agenticos_list':
       return { content: [{ type: 'text', text: await listProjects() }] };
+    case 'agenticos_task_create':
+      return { content: [{ type: 'text', text: await runTaskCreate(args ?? {}) }] };
+    case 'agenticos_task_update':
+      return { content: [{ type: 'text', text: await runTaskUpdate(args ?? {}) }] };
+    case 'agenticos_task_list':
+      return { content: [{ type: 'text', text: await runTaskList(args ?? {}) }] };
+    case 'agenticos_task_close':
+      return { content: [{ type: 'text', text: await runTaskClose(args ?? {}) }] };
     case 'agenticos_record':
       return { content: [{ type: 'text', text: await recordSession(args) }] };
     case 'agenticos_record_case':
