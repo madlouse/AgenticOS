@@ -6,7 +6,7 @@ import { getAgenticOSHome, loadRegistry, patchProjectMetadata } from '../utils/r
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { adoptStandardKit, checkStandardKitUpgrade } from '../utils/standard-kit.js';
 import { writeFile } from 'fs/promises';
-import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from '../utils/project-contract.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology, validateProjectKind, type ProjectKind } from '../utils/project-contract.js';
 import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../utils/project-target.js';
 import { loadLatestGuardrailState, type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
 import { resolveManagedProjectContextDisplayPaths } from '../utils/agent-context-paths.js';
@@ -376,7 +376,28 @@ function buildFilesystemAlignmentLines(
 }
 
 function stripPwdWarningPrefix(warning: string | null): string {
+  /* c8 ignore next -- alignPwd failure results currently always include a warning string */
   return warning?.replace(/^\[WARN\] PWD alignment skipped:\s*/, '') || 'project path is not usable';
+}
+
+function validateProjectKindOrThrow(projectName: string, projectYaml: any): ProjectKind {
+  const validation = validateProjectKind(projectName, projectYaml);
+  if (!validation.ok) {
+    throw new Error(`${validation.message} Re-run agenticos_init with normalize_existing=true and project_kind="topic" or project_kind="project".`);
+  }
+  return validation.project_kind;
+}
+
+async function readProjectKindForList(projectName: string, projectPath: string): Promise<ProjectKind> {
+  try {
+    const projectYaml = yaml.parse(await readFile(join(projectPath, '.project.yaml'), 'utf-8')) || {};
+    return validateProjectKindOrThrow(projectName, projectYaml);
+  } catch (error: any) {
+    if (error?.message?.includes('agenticos.project_kind')) {
+      throw error;
+    }
+    return 'project';
+  }
 }
 
 export async function switchProject(args: any): Promise<string> {
@@ -416,6 +437,12 @@ export async function switchProject(args: any): Promise<string> {
   const topologyValidation = validateManagedProjectTopology(found.name, projectYaml);
   if (!topologyValidation.ok) {
     return `❌ ${topologyValidation.message}`;
+  }
+  let projectKind: ProjectKind;
+  try {
+    projectKind = validateProjectKindOrThrow(found.name, projectYaml);
+  } catch (error: any) {
+    return `❌ ${error.message}`;
   }
 
   found.last_accessed = new Date().toISOString();
@@ -575,7 +602,7 @@ export async function switchProject(args: any): Promise<string> {
   });
   const filesystemAlignmentSummary = buildFilesystemAlignmentLines(found.path, pwdResult);
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {
@@ -589,10 +616,17 @@ export async function listProjects(): Promise<string> {
   const lines = ['# AgenticOS Projects\n'];
 
   for (const p of registry.projects) {
+    let projectKind: ProjectKind;
+    try {
+      projectKind = await readProjectKindForList(p.name, p.path);
+    } catch (error: any) {
+      return `❌ ${error.message}`;
+    }
     const active = p.id === sessionProject?.projectId ? '🟢 ' : '';
     lines.push(`${active}**${p.name}** (${p.id})`);
     lines.push(`  Path: ${p.path}`);
     lines.push(`  Status: ${p.status}`);
+    lines.push(`  Kind: ${projectKind}`);
     if (p.last_recorded) {
       const recordedDate = new Date(p.last_recorded).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
       lines.push(`  Last recorded: ${recordedDate}`);
@@ -617,6 +651,12 @@ export async function getStatus(args: any = {}): Promise<string> {
   }
 
   const { project, statePath } = resolved;
+  let projectKind: ProjectKind;
+  try {
+    projectKind = validateProjectKindOrThrow(project.name, resolved.projectYaml);
+  } catch (error: any) {
+    return `❌ ${error.message}`;
+  }
   let state: any = {};
   let displayState: any = {};
   try {
@@ -637,6 +677,7 @@ export async function getStatus(args: any = {}): Promise<string> {
 
   const lines: string[] = [];
   lines.push(`# Status: ${project.name}\n`);
+  lines.push(`🧭 Project kind: ${projectKind}`);
 
   if (project.last_recorded) {
     const recordedDate = new Date(project.last_recorded).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });

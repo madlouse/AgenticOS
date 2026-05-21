@@ -213,7 +213,67 @@ describe('switchProject', () => {
     expect(result).toContain('Switched to project');
     expect(result).toContain('My Project');
     expect(result).toContain('/test/path');
+    expect(result).toContain('Kind: project');
     expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
+  });
+
+  it('surfaces topic project kind on switch', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-topic',
+          name: 'My Topic',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      agenticos: { project_kind: 'topic' },
+      source_control: { topology: 'local_directory_only' },
+    }));
+
+    const result = await switchProject({ project: 'my-topic' });
+
+    expect(result).toContain('Switched to project');
+    expect(result).toContain('Kind: topic');
+  });
+
+  it('fails closed when switch reads an invalid project kind', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      meta: { description: '' },
+      agenticos: { project_kind: 'workflow' },
+      source_control: { topology: 'local_directory_only' },
+    }));
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('❌');
+    expect(result).toContain('agenticos.project_kind');
+    expect(registryMock.patchProjectMetadata).not.toHaveBeenCalled();
   });
 
   it('finds project by name', async () => {
@@ -1820,6 +1880,10 @@ describe('listProjects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearSessionProjectBinding();
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
+    fsPromisesMock.readFile.mockRejectedValue(new Error('ENOENT'));
   });
 
   afterEach(() => {
@@ -1872,6 +1936,15 @@ describe('listProjects', () => {
         },
       ],
     });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/path/a/.project.yaml') {
+        return JSON.stringify({ agenticos: { project_kind: 'topic' } });
+      }
+      if (path === '/path/b/.project.yaml') {
+        return JSON.stringify({});
+      }
+      throw new Error(`Unexpected readFile path: ${path}`);
+    });
 
     const result = await listProjects();
 
@@ -1882,8 +1955,36 @@ describe('listProjects', () => {
     expect(result).toContain('/path/b');
     expect(result).toContain('active');
     expect(result).toContain('archived');
+    expect(result).toContain('Kind: topic');
+    expect(result).toContain('Kind: project');
     // Active project should have indicator
     expect(result).toContain('project-a');
+  });
+
+  it('fails closed when list reads an invalid project kind', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({
+      agenticos: { project_kind: 'workflow' },
+    }));
+
+    const result = await listProjects();
+
+    expect(result).toContain('❌');
+    expect(result).toContain('agenticos.project_kind');
   });
 
   it('shows Never for last recorded when not set', async () => {
@@ -1907,6 +2008,29 @@ describe('listProjects', () => {
     const result = await listProjects();
 
     expect(result).toContain('Never');
+  });
+
+  it('defaults list project kind when project yaml parses to null', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue('null');
+
+    const result = await listProjects();
+
+    expect(result).toContain('Kind: project');
   });
 });
 
@@ -1993,6 +2117,7 @@ describe('getStatus', () => {
     mockStatusReads(
       {
         meta: { id: 'test-project', name: 'Test Project' },
+        agenticos: { project_kind: 'topic' },
         source_control: { topology: 'local_directory_only' },
       },
       {
@@ -2009,10 +2134,49 @@ describe('getStatus', () => {
     const result = await getStatus();
 
     expect(result).toContain('Test Project');
+    expect(result).toContain('Project kind: topic');
     expect(result).toContain('Implement X');
     expect(result).toContain('in_progress');
     expect(result).toContain('task 1');
     expect(result).toContain('decision 1');
+  });
+
+  it('fails closed when status reads an invalid project kind', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        agenticos: { project_kind: 'workflow' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {},
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('❌');
+    expect(result).toContain('agenticos.project_kind');
   });
 
   it('surfaces bootstrap failures from the runtime workspace state file', async () => {

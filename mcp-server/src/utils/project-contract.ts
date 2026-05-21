@@ -8,6 +8,7 @@ interface ArchiveContract {
 
 export type ProjectTopology = 'local_directory_only' | 'github_versioned';
 export type ContextPublicationPolicy = 'local_private' | 'private_continuity' | 'public_distilled';
+export type ProjectKind = 'topic' | 'project';
 
 interface SourceControlContract {
   topology?: ProjectTopology;
@@ -16,8 +17,43 @@ interface SourceControlContract {
   branch_strategy?: string;
 }
 
+interface AgenticOSProjectContract {
+  project_kind?: ProjectKind;
+}
+
 export function isValidContextPublicationPolicy(value: unknown): value is ContextPublicationPolicy {
   return value === 'local_private' || value === 'private_continuity' || value === 'public_distilled';
+}
+
+export function isValidProjectKind(value: unknown): value is ProjectKind {
+  return value === 'topic' || value === 'project';
+}
+
+function getAgenticOSProjectContract(projectYaml: any): AgenticOSProjectContract | null {
+  const contract = projectYaml?.agenticos;
+  if (!contract || typeof contract !== 'object') {
+    return null;
+  }
+  return contract as AgenticOSProjectContract;
+}
+
+export function validateProjectKind(projectName: string, projectYaml: any): { ok: true; project_kind: ProjectKind } | { ok: false; message: string } {
+  const contract = getAgenticOSProjectContract(projectYaml);
+
+  if (!contract || !Object.prototype.hasOwnProperty.call(contract, 'project_kind')) {
+    return { ok: true, project_kind: 'project' };
+  }
+
+  const rawKind = contract.project_kind;
+  const projectKind = typeof rawKind === 'string' ? rawKind.trim() : rawKind;
+  if (isValidProjectKind(projectKind)) {
+    return { ok: true, project_kind: projectKind };
+  }
+
+  return {
+    ok: false,
+    message: `Project "${projectName}" declares unsupported agenticos.project_kind "${String(rawKind)}". Supported values are "topic" and "project".`,
+  };
 }
 
 export function hasDeclaredContextPublicationPolicy(projectYaml: any): boolean {
