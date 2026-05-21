@@ -20,3 +20,4 @@ export { runCoverageCheck, runCoverageGenerate } from './coverage-check.js';
 export { runMultiAgentReview } from './multi-agent-review.js';
 export { runEnforceGitPolicy } from './git-policy-enforce.js';
 export { runWorktreeCleanup } from './worktree-cleanup.js';
+export { runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './task.js';
