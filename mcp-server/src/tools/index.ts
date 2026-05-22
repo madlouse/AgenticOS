@@ -1,5 +1,6 @@
 export { initProject } from './init.js';
 export { runProjectEnsure, runProjectResolve } from './project-resolve.js';
+export { runExternalThreadBind, runExternalThreadGet, runExternalThreadList } from './external-thread.js';
 export { switchProject, listProjects, getStatus } from './project.js';
 export { saveState } from './save.js';
 export { recordSession } from './record.js';
