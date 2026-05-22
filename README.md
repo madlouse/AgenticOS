@@ -54,6 +54,30 @@ AgenticOS does not treat every fallback as equal:
 - `Skills-only Guidance` is experimental and does not provide the canonical
   AgenticOS runtime surface
 
+## Optional Hermes + Discord Project Threads
+
+Hermes-side Discord routing is optional. A machine without Hermes or Discord
+keeps the normal AgenticOS MCP workflow: `agenticos_project_ensure` can still
+resolve or create a project, and Discord thread routing is skipped.
+
+When a Discord gateway is configured, Hermes can treat "切换到 AgenticOS 项目"
+and "新建 T5T 项目" as the same project-entry operation:
+
+1. call AgenticOS MCP `agenticos_project_ensure`
+2. create or reuse one Discord project thread
+3. persist the private thread binding with `agenticos_external_thread_bind`
+4. dispatch Codex by default, or Claude Code only when explicitly requested
+
+Discord is the only threaded surface in the MVP. Feishu does not get a thread
+path yet. Older AgenticOS installs that are missing `agenticos_project_ensure`
+or external thread binding tools must be upgraded and the agent restarted
+before Hermes should claim threaded routing is available.
+
+Real Discord validation requires credentials and permissions, so automated
+tests use fake adapters only. See
+[standards/knowledge/hermes-discord-project-thread-rollout-2026-05-22.md](standards/knowledge/hermes-discord-project-thread-rollout-2026-05-22.md)
+for the rollout checklist.
+
 ## Official Supported Agents
 
 The official bootstrap surface currently covers:
