@@ -192,6 +192,120 @@ describe('AgenticOS task MCP API', () => {
     expect(parseYamlFile(statePath).current_task.next_step).toBeNull();
   });
 
+  it('creates a related follow-up instead of reusing a done duplicate task', async () => {
+    fsMock.files.set(statePath, '');
+    const closed = {
+      id: 'sleep-plan',
+      title: 'Sleep Plan',
+      status: 'done',
+      priority: 'medium',
+      source: { kind: 'hermes', origin: 'chat', dedupe_key: 'same-key' },
+      acceptance_criteria: ['Existing criterion'],
+      refs: [],
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      closed_at: '2026-01-02T00:00:00.000Z',
+    };
+    seedTask(closed);
+
+    const result = parseResult(await runTaskCreate({
+      title: 'Sleep Plan Follow Up',
+      status: 'in_progress',
+      acceptance_criteria: ['New criterion'],
+      source: { kind: 'hermes', origin: 'chat', dedupe_key: 'same-key' },
+    }));
+
+    expect(result.status).toBe('CREATED');
+    expect(result.duplicate).toBeUndefined();
+    expect(result.task.id).toBe('sleep-plan-follow-up');
+    expect(result.task.related_tasks).toEqual(['sleep-plan']);
+    expect(parseYamlFile(`${tasksDir}/sleep-plan.yaml`).status).toBe('done');
+    expect(parseYamlFile(`${tasksDir}/sleep-plan-follow-up.yaml`).acceptance_criteria).toEqual(['New criterion']);
+    expect(parseYamlFile(statePath).current_task).toMatchObject({
+      id: 'sleep-plan-follow-up',
+      title: 'Sleep Plan Follow Up',
+      status: 'in_progress',
+      next_step: 'New criterion',
+    });
+  });
+
+  it('creates a suffixed related task instead of reusing a canceled id duplicate', async () => {
+    fsMock.files.set(statePath, '');
+    seedTask({
+      id: 'sleep-plan',
+      title: 'Sleep Plan',
+      status: 'canceled',
+      priority: 'medium',
+      source: { kind: 'manual', origin: 'manual' },
+      acceptance_criteria: ['Old criterion'],
+      refs: [],
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      closed_at: '2026-01-02T00:00:00.000Z',
+    });
+
+    const result = parseResult(await runTaskCreate({
+      id: 'sleep-plan',
+      title: 'Sleep Plan',
+      acceptance_criteria: ['New criterion'],
+      source: { kind: 'manual', origin: 'manual' },
+    }));
+
+    expect(result.status).toBe('CREATED');
+    expect(result.task.id).toBe('sleep-plan-2');
+    expect(result.task.related_tasks).toEqual(['sleep-plan']);
+    expect(parseYamlFile(`${tasksDir}/sleep-plan.yaml`).status).toBe('canceled');
+    expect(parseYamlFile(statePath).resume.task_id).toBe('sleep-plan-2');
+  });
+
+  it('fails closed when a closed duplicate cannot produce safe related metadata', async () => {
+    seedTask({
+      id: 'token=abc123',
+      title: 'Closed Secret Id',
+      status: 'done',
+      priority: 'medium',
+      source: { kind: 'hermes', origin: 'chat', dedupe_key: 'secret-id' },
+      acceptance_criteria: ['Old criterion'],
+      refs: [],
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      closed_at: '2026-01-02T00:00:00.000Z',
+    });
+
+    const secretId = parseResult(await runTaskCreate({
+      title: 'Safe Follow Up',
+      acceptance_criteria: ['New criterion'],
+      source: { kind: 'hermes', origin: 'chat', dedupe_key: 'secret-id' },
+    }));
+    expect(secretId.status).toBe('ERROR');
+    expect(secretId.errors.join(' ')).toContain('secret material');
+
+    for (let index = 1; index <= 100; index += 1) {
+      const id = index === 1 ? 'exhausted' : `exhausted-${index}`;
+      seedTask({
+        id,
+        title: `Exhausted ${index}`,
+        status: 'done',
+        priority: 'medium',
+        source: { kind: 'manual', origin: 'manual' },
+        acceptance_criteria: ['Old criterion'],
+        refs: [],
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+        closed_at: '2026-01-02T00:00:00.000Z',
+      });
+    }
+
+    const exhausted = parseResult(await runTaskCreate({
+      id: 'exhausted',
+      title: 'Exhausted',
+      acceptance_criteria: ['New criterion'],
+      source: { kind: 'manual', origin: 'manual' },
+    }));
+    expect(exhausted.status).toBe('ERROR');
+    expect(exhausted.errors.join(' ')).toContain('safe follow-up id');
+  });
+
   it('rejects invalid create payloads and secret-looking input', async () => {
     const missingTitle = parseResult(await runTaskCreate({ acceptance_criteria: ['Criterion'] }));
     expect(missingTitle.status).toBe('ERROR');
