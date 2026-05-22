@@ -340,11 +340,42 @@ function buildTaskFromCreateArgs(args: any, now: string): { task?: AgenticOSTask
   return { task, errors };
 }
 
-function findDuplicateTask(tasks: AgenticOSTask[], task: AgenticOSTask): AgenticOSTask | null {
+function isClosedTask(task: AgenticOSTask): boolean {
+  return CLOSE_STATUSES.has(task.status);
+}
+
+function matchingDuplicateTasks(tasks: AgenticOSTask[], task: AgenticOSTask): AgenticOSTask[] {
   const dedupeKey = deriveDedupeKey(task);
-  return tasks.find((candidate) => (
+  return tasks.filter((candidate) => (
     candidate.id === task.id || deriveDedupeKey(candidate) === dedupeKey
-  )) || null;
+  ));
+}
+
+function findActiveDuplicateTask(tasks: AgenticOSTask[], task: AgenticOSTask): AgenticOSTask | null {
+  return matchingDuplicateTasks(tasks, task).find((candidate) => !isClosedTask(candidate)) || null;
+}
+
+function findClosedDuplicateTasks(tasks: AgenticOSTask[], task: AgenticOSTask): AgenticOSTask[] {
+  return matchingDuplicateTasks(tasks, task).filter((candidate) => isClosedTask(candidate));
+}
+
+function deriveAvailableTaskId(tasks: AgenticOSTask[], preferredId: string): string | null {
+  const usedIds = new Set(tasks.map((task) => task.id));
+  if (!usedIds.has(preferredId)) {
+    return preferredId;
+  }
+
+  const base = preferredId.slice(0, 72).replace(/-+$/g, '');
+  for (let index = 2; index <= 100; index += 1) {
+    const suffix = `-${index}`;
+    const candidateBase = base.slice(0, 80 - suffix.length).replace(/-+$/g, '');
+    const candidate = `${candidateBase}${suffix}`;
+    if (!usedIds.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 function taskResponse(status: string, context: TaskCommandContext, task: AgenticOSTask, extra: Record<string, unknown> = {}): string {
@@ -371,10 +402,26 @@ export async function runTaskCreate(args: any = {}): Promise<string> {
       return errorResponse(built.errors);
     }
     await mkdir(context.tasks_dir, { recursive: true });
-    const existing = findDuplicateTask(await listTaskFiles(context), built.task);
+    const existingTasks = await listTaskFiles(context);
+    const existing = findActiveDuplicateTask(existingTasks, built.task);
     if (existing) {
       await syncState(context, existing);
       return taskResponse('EXISTING', context, existing, { duplicate: true });
+    }
+    const closedDuplicates = findClosedDuplicateTasks(existingTasks, built.task);
+    if (closedDuplicates.length > 0) {
+      const nextId = deriveAvailableTaskId(existingTasks, built.task.id);
+      if (!nextId) {
+        return errorResponse([
+          `matching closed task(s) found (${closedDuplicates.map((task) => task.id).join(', ')}) but a safe follow-up id could not be derived; pass an explicit id or reopen manually`,
+        ]);
+      }
+      const relatedTaskIds = [...new Set(closedDuplicates.map((task) => task.id))];
+      if (hasSecretLikeValue(relatedTaskIds)) {
+        return errorResponse(['matching closed task id appears to contain secret material; pass a safe explicit id and reference the closed task manually']);
+      }
+      built.task.id = nextId;
+      built.task.related_tasks = relatedTaskIds;
     }
     await writeFile(taskPath(context, built.task.id), yaml.stringify(built.task), 'utf-8');
     await syncState(context, built.task);
