@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'crypto';
 import { renderConfigAuditResult, runConfigAudit } from '../config-audit.js';
 import { renderAgenticosSkillContent } from '../agent-skill.js';
 
@@ -57,6 +58,8 @@ describe('config audit', () => {
     expect(rendered).toContain('Claude Code AgenticOS activation Skill');
     expect(rendered).toContain('Codex AgenticOS activation Skill');
     expect(rendered).toContain('Cursor MCP config');
+    expect(rendered).toContain('Hermes runtime');
+    expect(rendered).toContain('Discord configuration');
     expect(rendered).toContain('/opt/homebrew/var/agenticos');
   });
 
@@ -200,7 +203,73 @@ describe('config audit', () => {
     const codexSkill = result.sources.find((source) => source.id === 'codex_activation_skill');
 
     expect(codexSkill?.status).toBe('present');
+    expect(codexSkill?.detail).toContain('Skill state: modified-user');
     expect(codexSkill?.fix_target).toContain('--force-skills');
+  });
+
+  it('reports stale managed activation Skills with non-force upgrade recovery', () => {
+    const harness = createDeps();
+    const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';
+    const staleWithoutHash = renderAgenticosSkillContent()
+      .replace(/^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/, '')
+      .replace('project status', 'project context');
+    const staleHash = createHash('sha256').update(staleWithoutHash, 'utf-8').digest('hex');
+    harness.files.set(path, `<!-- agenticos-skill-managed-sha256: ${staleHash} -->\n${staleWithoutHash}`);
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const codexSkill = result.sources.find((source) => source.id === 'codex_activation_skill');
+
+    expect(codexSkill?.status).toBe('present');
+    expect(codexSkill?.detail).toContain('Skill state: stale-managed');
+    expect(codexSkill?.fix_target).toBe('agenticos-bootstrap --agent codex --install-skills --apply');
+  });
+
+  it('reports optional Hermes/Discord readiness without contributing to workspace drift', () => {
+    const harness = createDeps();
+    harness.deps.env.AGENTICOS_HOME = '/runtime/home';
+    harness.deps.env.HERMES_GATEWAY_URL = 'http://127.0.0.1:8787';
+    harness.deps.env.DISCORD_APP_ID = 'app-id';
+    harness.deps.env.DISCORD_BOT_TOKEN = 'secret-token';
+    harness.deps.commandExists = (command: string) => command === 'launchctl' || command === 'hermes-gateway';
+    harness.files.set('/runtime/home/.agent-workspace/integrations/discord/thread-bindings.yaml', 'bindings:\n  - project_id: agenticos\n');
+
+    const result = runConfigAudit({ action: 'show', scope: 'all' }, harness.deps);
+    const rendered = renderConfigAuditResult(result);
+    const hermesRuntime = result.sources.find((source) => source.id === 'hermes_discord:hermes_runtime');
+    const discordConfig = result.sources.find((source) => source.id === 'hermes_discord:discord_config');
+
+    expect(result.status).toBe('PASS');
+    expect(hermesRuntime?.status).toBe('configured');
+    expect(hermesRuntime?.contributes_to_workspace).toBe(false);
+    expect(discordConfig?.status).toBe('configured');
+    expect(rendered).toContain('Restart Hermes gateway');
+    expect(rendered).not.toContain('secret-token');
+  });
+
+  it('shows missing optional Hermes/Discord readiness as skip instead of a core failure', () => {
+    const harness = createDeps();
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const hermesRuntime = result.sources.find((source) => source.id === 'hermes_discord:hermes_runtime');
+    const discordConfig = result.sources.find((source) => source.id === 'hermes_discord:discord_config');
+
+    expect(result.status).toBe('PASS');
+    expect(result.canonical_workspace).toBeNull();
+    expect(hermesRuntime?.status).toBe('skip');
+    expect(discordConfig?.status).toBe('skip');
+  });
+
+  it('warns about partial Hermes readiness without failing config audit show mode', () => {
+    const harness = createDeps();
+    harness.deps.commandExists = (command: string) => command === 'launchctl' || command === 'hermes';
+
+    const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
+    const gateway = result.sources.find((source) => source.id === 'hermes_discord:hermes_gateway');
+    const discordConfig = result.sources.find((source) => source.id === 'hermes_discord:discord_config');
+
+    expect(result.status).toBe('PASS');
+    expect(gateway?.status).toBe('warn');
+    expect(discordConfig?.status).toBe('warn');
   });
 
   it('reports missing Claude Code cwd guidance hook when hooks do not match', () => {

@@ -5,11 +5,23 @@ import {
   inspectClaudePwdAlignmentHook,
 } from './claude-pwd-hook.js';
 import { inspectAgentSkill } from './agent-skill.js';
+import {
+  inspectHermesDiscordReadiness,
+  type ReadinessMarker,
+} from './integration-readiness.js';
 import type { SupportedAgentId } from './bootstrap-helper.js';
 
 export type ConfigAuditAction = 'show' | 'validate';
 export type ConfigAuditScope = 'all' | 'runtime' | 'mcp' | 'homebrew';
-export type ConfigSourceStatus = 'configured' | 'unset' | 'missing' | 'unavailable' | 'present';
+export type ConfigSourceStatus = 'configured' | 'unset' | 'missing' | 'unavailable' | 'present' | 'skip' | 'warn';
+
+const READINESS_CONFIG_STATUS: Record<ReadinessMarker, ConfigSourceStatus> = {
+  OK: 'configured',
+  WARN: 'warn',
+  SKIP: 'skip',
+  INFO: 'skip',
+  FAIL: 'missing',
+};
 
 export interface CommandResult {
   ok: boolean;
@@ -205,6 +217,7 @@ function collectConfigSources(deps: ConfigAuditDeps): ConfigSourceRecord[] {
     readAgentSkillSource(deps, 'codex'),
     readCursorConfigSource(deps),
     ...readHomebrewSources(deps),
+    ...readHermesDiscordReadinessSources(deps),
   ];
 }
 
@@ -232,8 +245,8 @@ function readAgentSkillSource(
       ? `${fixTarget} --force-skills`
       : fixTarget,
     detail: status === 'configured'
-      ? inspection.detail
-      : `${inspection.detail} Rerun bootstrap with --install-skills to install or update it.`,
+      ? `Skill state: ${inspection.status}. ${inspection.detail}`
+      : `Skill state: ${inspection.status}. ${inspection.detail} Rerun bootstrap with --install-skills to install or update it.`,
     contributes_to_workspace: false,
   };
 }
@@ -465,6 +478,32 @@ function readHomebrewSources(deps: ConfigAuditDeps): ConfigSourceRecord[] {
       ? 'Default Homebrew runtime-home path exists on this machine.'
       : 'Default Homebrew runtime-home path does not exist on this machine.',
   }));
+}
+
+function readHermesDiscordReadinessSources(deps: ConfigAuditDeps): ConfigSourceRecord[] {
+  const readiness = inspectHermesDiscordReadiness(deps, {
+    required: false,
+    workspace: deps.env.AGENTICOS_HOME || null,
+  });
+  return readiness.checks.map((check) => ({
+    id: `hermes_discord:${check.id}`,
+    label: check.label,
+    scope: 'mcp' as const,
+    status: configStatusFromReadinessMarker(check.marker),
+    value: check.marker === 'OK' ? 'ready' : null,
+    location: check.location,
+    fix_target: check.recovery || 'optional; no action required for core AgenticOS verification',
+    detail: [
+      `${check.marker}: ${check.detail}`,
+      check.recovery ? `Recovery: ${check.recovery}` : null,
+      check.restart_hint ? `Restart: ${check.restart_hint}` : null,
+    ].filter(Boolean).join(' '),
+    contributes_to_workspace: false,
+  }));
+}
+
+function configStatusFromReadinessMarker(marker: ReadinessMarker): ConfigSourceStatus {
+  return READINESS_CONFIG_STATUS[marker];
 }
 
 function normalizeValue(value: string | undefined | null): string | null {
