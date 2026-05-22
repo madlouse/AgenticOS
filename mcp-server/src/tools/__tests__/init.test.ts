@@ -161,6 +161,7 @@ describe('initProject', () => {
     // We expect mkdir for: .context/conversations, knowledge, tasks, artifacts
     const base = '/home/testuser/AgenticOS/projects/test-project';
     const expectedDirs = [
+      base,
       `${base}/.context/conversations`,
       `${base}/knowledge`,
       `${base}/knowledge/corner-cases`,

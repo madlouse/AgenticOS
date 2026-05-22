@@ -252,6 +252,7 @@ export async function initProject(args: any): Promise<string> {
     projectKind,
     githubRepo,
   });
+  await mkdir(projectPath, { recursive: true });
   await writeFile(join(projectPath, '.project.yaml'), yaml.stringify(projectYaml), 'utf-8');
   const contextPaths = resolveManagedProjectContextPaths(projectPath, projectYaml);
   const contextDisplayPaths = resolveManagedProjectContextDisplayPaths(projectYaml);

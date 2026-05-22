@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
+import { initProject, runProjectResolve, runProjectEnsure, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -61,6 +61,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           project: { type: 'string', description: 'Project ID or name' },
+        },
+        required: ['project'],
+      },
+    },
+    {
+      name: 'agenticos_project_resolve',
+      description: 'Resolve a registered AgenticOS project by id/name/path without binding session state or writing adapter/context files. Topics are surfaced as projects for Hermes/Discord routing.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Project ID, name, or registered path to resolve.' },
+        },
+        required: ['project'],
+      },
+    },
+    {
+      name: 'agenticos_project_ensure',
+      description: 'Return existing AgenticOS project metadata or create a missing local private project with safe defaults. Existing projects are not normalized or rewritten.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Project ID/name/path to resolve, or the new project name when creating.' },
+          name: { type: 'string', description: 'Optional display name for a new project. Defaults to project.' },
+          description: { type: 'string', description: 'Optional description used only when creating a new project.' },
+          path: { type: 'string', description: 'Optional absolute path used only when creating a new project, or checked against an existing project.' },
+          project_kind: { type: 'string', enum: ['topic', 'project'], description: 'Optional internal routing kind. Defaults to project; external surfaces still say project.' },
+          topology: { type: 'string', enum: ['local_directory_only', 'github_versioned'], description: 'Optional source-control topology. Defaults to local_directory_only.' },
+          context_publication_policy: { type: 'string', enum: ['local_private', 'private_continuity', 'public_distilled'], description: 'Optional context publication policy. Defaults to local_private for local_directory_only.' },
+          github_repo: { type: 'string', description: 'Required when creating a github_versioned project. Use OWNER/REPO.' },
         },
         required: ['project'],
       },
@@ -562,6 +591,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await initProject(args) }] };
     case 'agenticos_switch':
       return { content: [{ type: 'text', text: await switchProject(args) }] };
+    case 'agenticos_project_resolve':
+      return { content: [{ type: 'text', text: await runProjectResolve(args ?? {}) }] };
+    case 'agenticos_project_ensure':
+      return { content: [{ type: 'text', text: await runProjectEnsure(args ?? {}) }] };
     case 'agenticos_list':
       return { content: [{ type: 'text', text: await listProjects() }] };
     case 'agenticos_task_create':
