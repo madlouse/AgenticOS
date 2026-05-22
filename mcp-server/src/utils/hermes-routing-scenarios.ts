@@ -12,6 +12,7 @@ export const PROJECT_SWITCH_SUBSTITUTES = [
   'cd',
   'raw_directory_search',
   'git_branch_detection',
+  'agenticos_switch_lookup',
 ] as const;
 
 export type ProjectSwitchSubstitute = typeof PROJECT_SWITCH_SUBSTITUTES[number];
@@ -97,7 +98,7 @@ export const HERMES_ROUTING_SCENARIOS: readonly HermesRoutingScenario[] = [
     owner: 'AgenticOS',
     durable_write: 'agenticos_topic',
     requires_agenticos_mcp_first: true,
-    required_tool_calls: ['agenticos_switch', 'agenticos_init', 'agenticos_task_create'],
+    required_tool_calls: ['agenticos_project_ensure', 'agenticos_task_create'],
     rejected_switch_substitutes: [...PROJECT_SWITCH_SUBSTITUTES],
     gbrain_policy: {
       stores_distilled_summary: true,
@@ -113,7 +114,7 @@ export const HERMES_ROUTING_SCENARIOS: readonly HermesRoutingScenario[] = [
     durable_write: 'agenticos_project',
     requires_agenticos_mcp_first: true,
     required_tool_calls: [
-      'agenticos_switch',
+      'agenticos_project_ensure',
       'agenticos_issue_bootstrap',
       'agenticos_branch_bootstrap',
       'agenticos_preflight',
@@ -154,8 +155,8 @@ export function validateHermesRoutingScenarios(scenarios: readonly HermesRouting
     if (isAgenticosRoute && !scenario.requires_agenticos_mcp_first) {
       problems.push(`${scenario.route} must require AgenticOS MCP before filesystem discovery`);
     }
-    if (isAgenticosRoute && !scenario.required_tool_calls.some((tool) => tool === 'agenticos_switch' || tool === 'agenticos_init')) {
-      problems.push(`${scenario.route} must require agenticos_switch or agenticos_init`);
+    if (isAgenticosRoute && !scenario.required_tool_calls.some((tool) => tool === 'agenticos_project_resolve' || tool === 'agenticos_project_ensure')) {
+      problems.push(`${scenario.route} must require agenticos_project_resolve or agenticos_project_ensure`);
     }
     if (isAgenticosRoute) {
       for (const substitute of PROJECT_SWITCH_SUBSTITUTES) {

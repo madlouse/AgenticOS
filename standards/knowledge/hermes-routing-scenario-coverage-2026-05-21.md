@@ -7,9 +7,10 @@ AgenticOS coverage.
 
 The risk is not that agents forget the words "Chat-only" or "GBrain knowledge".
 The risk is that a future Hermes, Codex, or Claude Code integration treats
-`cd`, raw directory search, git branch detection, or GBrain task duplication as
-good enough substitutes for AgenticOS MCP. This document records the intended
-scenarios, and `mcp-server/src/utils/hermes-routing-scenarios.ts` provides the
+`cd`, raw directory search, git branch detection, `agenticos_switch` as lookup,
+or GBrain task duplication as good enough substitutes for AgenticOS MCP. This
+document records the intended scenarios, and
+`mcp-server/src/utils/hermes-routing-scenarios.ts` provides the
 machine-checkable contract.
 
 ## Scenario Matrix
@@ -19,7 +20,7 @@ machine-checkable contract.
 | Chat-only | Hermes | none | no | Answer in the current chat; do not write durable state |
 | Hermes memory | Hermes | Hermes local memory | no | Store only small assistant-continuity facts or preferences |
 | GBrain knowledge | GBrain | distilled summary and reference links | no | Store semantic summaries/entities/relations/links only |
-| AgenticOS topic | AgenticOS | topic state, tasks, knowledge, artifacts | yes | Call `agenticos_switch` or `agenticos_init`, then update topic surfaces |
+| AgenticOS topic | AgenticOS | topic state, tasks, knowledge, artifacts | yes | Call `agenticos_project_ensure`, then update topic surfaces |
 | AgenticOS project | AgenticOS | issue/worktree/PR governed project state | yes | Call AgenticOS MCP and follow issue/worktree/preflight/PR/CI flow |
 
 ## Executable Contract
@@ -35,8 +36,8 @@ The tests enforce:
 
 - all five routes exist and validate together
 - AgenticOS topic/project routes require MCP before filesystem discovery
-- `cd`, raw directory search, and git branch detection are rejected as project
-  switch substitutes
+- `cd`, raw directory search, git branch detection, and `agenticos_switch` as
+  lookup are rejected as project switch substitutes
 - GBrain stores distilled summary and reference links only
 - GBrain does not store active AgenticOS task state or a copied task board
 - full AgenticOS project routing requires issue bootstrap, isolated worktree,
@@ -89,9 +90,10 @@ questions, tasks, artifacts, or evolving knowledge are needed.
 
 Required behavior:
 
-1. Call `agenticos_switch` for an existing topic or `agenticos_init` for a new
-   topic.
-2. Treat the returned project path and explicit workdir as authoritative.
+1. Call `agenticos_project_ensure` for both existing and new topics. Use
+   `agenticos_project_resolve` only when creation is not allowed.
+2. Treat the returned project identity, project path, and explicit workdir as
+   authoritative.
 3. Update `tasks/<task_id>.yaml`, `.context/state.yaml`, `knowledge/`, or
    `artifacts/` through the AgenticOS topic contract.
 4. Optionally distill a GBrain summary with `agenticos://...` references.
@@ -101,6 +103,7 @@ Rejected substitutes:
 - `cd`
 - raw directory search
 - git branch detection
+- `agenticos_switch` as a read-only lookup substitute
 
 ### AgenticOS Project
 
@@ -109,7 +112,8 @@ skills, packages, or any rollback-managed product surface.
 
 Required behavior:
 
-1. Call AgenticOS MCP to align project identity.
+1. Call `agenticos_project_ensure` to align project identity. Use
+   `agenticos_project_resolve` only when creation is not allowed.
 2. Bootstrap the GitHub issue.
 3. Create an isolated worktree.
 4. Run preflight and edit guard.
@@ -119,15 +123,16 @@ Required behavior:
 8. Wait for CI green.
 9. Merge with a merge commit and cleanup.
 
-Shell `cd`, directory guessing, and git branch inspection do not satisfy project
-switching. They can only happen after AgenticOS MCP has returned the
-authoritative project path and explicit workdir.
+Shell `cd`, directory guessing, git branch inspection, and `agenticos_switch` as
+a lookup shortcut do not satisfy project switching. Filesystem work can only
+happen after AgenticOS MCP has returned the authoritative project path and
+explicit workdir.
 
 ## Regression Examples
 
 | Regression | Expected test signal |
 | --- | --- |
-| A topic route no longer requires `agenticos_switch` or `agenticos_init` | `validateHermesRoutingScenarios` reports the missing MCP requirement |
+| A topic route no longer requires `agenticos_project_resolve` or `agenticos_project_ensure` | `validateHermesRoutingScenarios` reports the missing MCP requirement |
 | A project route accepts `cd` as switching | `validateHermesRoutingScenarios` reports the missing rejected substitute |
 | GBrain route stores active AgenticOS task state | `validateHermesRoutingScenarios` reports a GBrain duplication violation |
 | Full project route omits PR or CI | `validateHermesRoutingScenarios` reports the missing workflow gate |
