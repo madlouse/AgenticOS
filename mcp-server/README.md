@@ -194,6 +194,38 @@ want to replace a local edit.
 
 These are currently experimental. Do not describe them as first-class supported agents unless they have a documented bootstrap, verification, and debugging contract.
 
+### Optional Hermes + Discord Routing
+
+Hermes + Discord project routing is an optional integration layer, not a core
+install requirement. AgenticOS works the same on machines that do not have
+Hermes, a Hermes gateway, or Discord credentials.
+
+The supported MVP flow is:
+
+1. Hermes parses a project-entry command such as "切换到 AgenticOS 项目" or
+   "新建 T5T 项目".
+2. Hermes calls AgenticOS MCP `agenticos_project_ensure` first. It must not use
+   `cd`, raw filesystem search, git branch detection, or `agenticos_switch` as
+   a lookup shortcut.
+3. If Discord is configured, Hermes creates or reuses a Discord project thread
+   and records the private binding with `agenticos_external_thread_bind`.
+4. Worker dispatch defaults to Codex. Explicit phrases such as "用 Claude Code"
+   or "Claude Agent" select Claude Code.
+5. Worker prompts must tell execution agents to use AgenticOS MCP and the
+   explicit workdir returned by AgenticOS. Progress and blocked/setup messages
+   are posted back to the Discord project thread.
+
+Feishu thread routing is intentionally out of scope for the MVP. If Discord is
+not configured, project ensure may still succeed and the response should say
+Discord routing was skipped. If older installs are missing
+`agenticos_project_ensure`, `agenticos_external_thread_get`, or
+`agenticos_external_thread_bind`, upgrade AgenticOS, rerun bootstrap verification,
+and restart the agent before retrying threaded routing.
+
+Verification without real Discord credentials is covered by fake E2E tests.
+For a real-gateway checklist, see
+`standards/knowledge/hermes-discord-project-thread-rollout-2026-05-22.md`.
+
 ### Repairing Stale Registrations
 
 The supported runtime entrypoint is `agenticos-mcp`.
