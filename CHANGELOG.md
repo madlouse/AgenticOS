@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.26] — 2026-05-22
+
+### Added
+- mcp-server: Hermes Discord worker dispatch helper can now start a routed Codex or Claude Code worker from an AgenticOS project thread, record backend/session/process metadata, and post startup or blocked status back to the Discord thread.
+- mcp-server: fake E2E smoke coverage now validates the Discord project-thread path from user command through AgenticOS project ensure, Discord thread binding, worker selection, and thread progress.
+- docs: Hermes Discord project-thread rollout guidance now documents optional setup, Homebrew verification, Discord-only MVP behavior, Codex default backend, and manual smoke expectations.
+
+### Changed
+- docs: Hermes/Discord routing guidance now explicitly treats topic and source projects as one AgenticOS project-entry operation before thread routing.
+
 ## [0.4.25] — 2026-05-21
 
 ### Added
