@@ -74,9 +74,11 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.join('\n')).toContain('agenticos-bootstrap');
     expect(buildHelpLines().join('\n')).toContain('--auto-configure-hooks');
     expect(buildHelpLines().join('\n')).toContain('--install-skills');
+    expect(buildHelpLines().join('\n')).toContain('--verify-hermes-discord');
     expect(parseCliArgs(['--all', '--auto-configure-hooks']).all).toBe(true);
     expect(parseCliArgs(['--install-skills', '--force-skills']).installSkills).toBe(true);
     expect(parseCliArgs(['--install-skills', '--force-skills']).forceSkills).toBe(true);
+    expect(parseCliArgs(['--verify-hermes-discord']).verifyHermesDiscord).toBe(true);
     expect(() => parseCliArgs(['--workspace'])).toThrow('--workspace requires a path.');
     expect(() => parseCliArgs(['--agent'])).toThrow('--agent requires a value.');
     expect(() => parseCliArgs(['--shell-profile'])).toThrow('--shell-profile requires a path.');
@@ -197,6 +199,7 @@ describe('bootstrap cli', () => {
         autoConfigureHooks: false,
         installSkills: true,
         forceSkills: true,
+        verifyHermesDiscord: true,
       },
       undefined,
       '/Users/tester',
@@ -204,6 +207,7 @@ describe('bootstrap cli', () => {
 
     expect(lines.join('\n')).toContain('cursor-skill: skip');
     expect(lines.join('\n')).toContain('overwrite user-modified managed Skill files');
+    expect(lines.join('\n')).toContain('hermes-discord: enforce Hermes+Discord');
   });
 
   it('reports non-Error thrown failures', () => {
@@ -731,6 +735,58 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.some((line) => line.includes('OK shell-profile'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK launchctl'))).toBe(true);
     expect(harness.files.has('/tmp/workspace/.agent-workspace/bootstrap-state.yaml')).toBe(false);
+  });
+
+  it('reports optional Hermes and Discord readiness during verification without blocking normal AgenticOS checks', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--verify'],
+      harness.deps,
+    );
+
+    const output = harness.stdout.join('\n');
+    expect(exitCode).toBe(0);
+    expect(output).toContain('Optional Hermes/Discord readiness');
+    expect(output).toContain('SKIP hermes_runtime');
+    expect(output).toContain('SKIP discord_config');
+    expect(output).toContain('core AgenticOS verification is unaffected');
+  });
+
+  it('blocks Hermes+Discord routing verification only when that workflow is explicitly required', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--verify', '--verify-hermes-discord'],
+      harness.deps,
+    );
+
+    const output = harness.stdout.join('\n');
+    expect(exitCode).toBe(1);
+    expect(output).toContain('FAIL hermes_runtime');
+    expect(output).toContain('FAIL discord_config');
+    expect(output).toContain('Recovery: Install or start Hermes');
+  });
+
+  it('passes required Hermes+Discord verification when prerequisites and thread bindings are present', () => {
+    const harness = createDeps();
+    harness.deps.env.HERMES_GATEWAY_URL = 'http://127.0.0.1:8787';
+    harness.deps.env.DISCORD_APP_ID = 'app-id';
+    harness.deps.env.DISCORD_BOT_TOKEN = 'secret-token';
+    harness.files.set('/tmp/workspace/.agent-workspace/integrations/discord/thread-bindings.yaml', 'bindings:\n  - project_id: agenticos\n');
+    harness.deps.commandExists = (command: string) => command === 'codex' || command === 'hermes-gateway';
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'codex', '--verify', '--verify-hermes-discord'],
+      harness.deps,
+    );
+
+    const output = harness.stdout.join('\n');
+    expect(exitCode).toBe(0);
+    expect(output).toContain('OK hermes_runtime');
+    expect(output).toContain('OK discord_config');
+    expect(output).toContain('Restart Hermes gateway');
+    expect(output).not.toContain('secret-token');
   });
 
   it('verifies activation Skill state when requested', () => {

@@ -12,6 +12,10 @@ import {
   isAgentSkillOkForVerify,
   type AgentSkillInstallResult,
 } from './agent-skill.js';
+import {
+  inspectHermesDiscordReadiness,
+  renderHermesDiscordReadinessLines,
+} from './integration-readiness.js';
 
 export interface CliOptions {
   apply: boolean;
@@ -27,6 +31,7 @@ export interface CliOptions {
   autoConfigureHooks: boolean;
   installSkills: boolean;
   forceSkills: boolean;
+  verifyHermesDiscord?: boolean;
 }
 
 export interface ApplyResult {
@@ -73,6 +78,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
     autoConfigureHooks: false,
     installSkills: false,
     forceSkills: false,
+    verifyHermesDiscord: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -108,6 +114,9 @@ export function parseCliArgs(argv: string[]): CliOptions {
         break;
       case '--force-skills':
         options.forceSkills = true;
+        break;
+      case '--verify-hermes-discord':
+        options.verifyHermesDiscord = true;
         break;
       case '--workspace': {
         const value = argv[index + 1];
@@ -273,7 +282,7 @@ export function buildHelpLines(): string[] {
     'agenticos-bootstrap — bootstrap AgenticOS MCP registrations',
     '',
     'Usage:',
-    '  agenticos-bootstrap [--workspace <path>] [--agent <id>] [--all] [--first-run] [--persist-shell-env] [--persist-launchctl-env] [--auto-configure-hooks] [--install-skills] [--force-skills] [--shell-profile <path>] [--verify] [--apply]',
+    '  agenticos-bootstrap [--workspace <path>] [--agent <id>] [--all] [--first-run] [--persist-shell-env] [--persist-launchctl-env] [--auto-configure-hooks] [--install-skills] [--force-skills] [--verify-hermes-discord] [--shell-profile <path>] [--verify] [--apply]',
     '',
     'Behavior:',
     '  Without `--apply`, prints a dry-run bootstrap plan.',
@@ -285,6 +294,7 @@ export function buildHelpLines(): string[] {
     '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to provide cwd guidance after agenticos_switch.',
     '  `--install-skills` installs or updates the AgenticOS activation Skill for agents that support local skills.',
     '  `--force-skills` allows `--install-skills` to overwrite a user-modified AgenticOS Skill.',
+    '  `--verify-hermes-discord` makes optional Hermes+Discord project routing prerequisites blocking during `--verify`.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli',
@@ -390,6 +400,11 @@ export function buildDryRunLines(
       lines.push('- agenticos-skill: overwrite user-modified managed Skill files if present');
     }
   }
+  if (options.verifyHermesDiscord) {
+    lines.push('- hermes-discord: enforce Hermes+Discord project routing prerequisites during verification');
+  } else {
+    lines.push('- hermes-discord: report optional readiness during verification without blocking core AgenticOS checks');
+  }
   if (selected.includes('claude-code')) {
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
     if (options.autoConfigureHooks) {
@@ -475,6 +490,15 @@ function runVerification(
         lines.push(`   Recovery: ${result.recovery}`);
       }
     }
+  }
+
+  const hermesDiscord = inspectHermesDiscordReadiness(deps, {
+    required: options.verifyHermesDiscord,
+    workspace,
+  });
+  lines.push('', ...renderHermesDiscordReadinessLines(hermesDiscord));
+  if (options.verifyHermesDiscord && !hermesDiscord.ok) {
+    ok = false;
   }
 
   return { ok, lines };
@@ -695,7 +719,7 @@ function verifyAgentSkill(
   return {
     ok,
     unsupported: inspection.status === 'unsupported',
-    detail: inspection.detail,
+    detail: `Skill state: ${inspection.status}. ${inspection.detail}`,
     recovery: formatCommand({ command: 'agenticos-bootstrap', args: recoveryArgs }),
   };
 }
