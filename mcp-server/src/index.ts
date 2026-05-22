@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, runProjectResolve, runProjectEnsure, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
+import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -92,6 +92,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           github_repo: { type: 'string', description: 'Required when creating a github_versioned project. Use OWNER/REPO.' },
         },
         required: ['project'],
+      },
+    },
+    {
+      name: 'agenticos_external_thread_bind',
+      description: 'Persist an optional Discord project thread binding in the private AgenticOS runtime sidecar. Does not write Discord ids into project files.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'AgenticOS project ID, name, or path.' },
+          provider: { type: 'string', enum: ['discord'], description: 'External provider. MVP supports discord only.' },
+          guild_id: { type: 'string', description: 'Optional Discord guild/server id.' },
+          channel_id: { type: 'string', description: 'Discord channel id containing the project thread.' },
+          thread_id: { type: 'string', description: 'Discord thread id for the project cockpit.' },
+          thread_url: { type: 'string', description: 'Optional Discord thread URL.' },
+          default_backend: { type: 'string', enum: ['codex', 'claude_code'], description: 'Optional default worker backend for this project thread.' },
+        },
+        required: ['project', 'channel_id', 'thread_id'],
+      },
+    },
+    {
+      name: 'agenticos_external_thread_get',
+      description: 'Read an optional Discord project thread binding from the private runtime sidecar. Missing bindings return NOT_FOUND instead of blocking project flow.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'AgenticOS project ID, name, or path.' },
+          provider: { type: 'string', enum: ['discord'], description: 'External provider. MVP supports discord only.' },
+          guild_id: { type: 'string', description: 'Optional Discord guild/server id filter.' },
+          channel_id: { type: 'string', description: 'Optional Discord channel id filter.' },
+        },
+        required: ['project'],
+      },
+    },
+    {
+      name: 'agenticos_external_thread_list',
+      description: 'List optional Discord project thread bindings from the private runtime sidecar.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'Optional AgenticOS project ID, name, or path filter.' },
+          provider: { type: 'string', enum: ['discord'], description: 'External provider. MVP supports discord only.' },
+        },
       },
     },
     {
@@ -595,6 +637,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runProjectResolve(args ?? {}) }] };
     case 'agenticos_project_ensure':
       return { content: [{ type: 'text', text: await runProjectEnsure(args ?? {}) }] };
+    case 'agenticos_external_thread_bind':
+      return { content: [{ type: 'text', text: await runExternalThreadBind(args ?? {}) }] };
+    case 'agenticos_external_thread_get':
+      return { content: [{ type: 'text', text: await runExternalThreadGet(args ?? {}) }] };
+    case 'agenticos_external_thread_list':
+      return { content: [{ type: 'text', text: await runExternalThreadList(args ?? {}) }] };
     case 'agenticos_list':
       return { content: [{ type: 'text', text: await listProjects() }] };
     case 'agenticos_task_create':
