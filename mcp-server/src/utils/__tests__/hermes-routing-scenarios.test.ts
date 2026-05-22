@@ -58,7 +58,7 @@ describe('Hermes routing scenarios', () => {
     for (const route of ['agenticos_topic', 'agenticos_project'] as const) {
       const scenario = getHermesRoutingScenario(route);
       expect(scenario.requires_agenticos_mcp_first).toBe(true);
-      expect(scenario.required_tool_calls).toEqual(expect.arrayContaining(['agenticos_switch']));
+      expect(scenario.required_tool_calls).toEqual(expect.arrayContaining(['agenticos_project_ensure']));
       expect(scenario.rejected_switch_substitutes).toEqual(PROJECT_SWITCH_SUBSTITUTES);
     }
   });
@@ -67,6 +67,7 @@ describe('Hermes routing scenarios', () => {
     const project = getHermesRoutingScenario('agenticos_project');
     expect(project.workflow_requirements).toEqual(FULL_PROJECT_WORKFLOW_REQUIREMENTS);
     expect(project.required_tool_calls).toEqual(expect.arrayContaining([
+      'agenticos_project_ensure',
       'agenticos_issue_bootstrap',
       'agenticos_branch_bootstrap',
       'agenticos_preflight',
@@ -87,9 +88,10 @@ describe('Hermes routing scenarios', () => {
     expect(validateHermesRoutingScenarios(scenarios)).toEqual(expect.arrayContaining([
       'missing route: chat_only',
       'agenticos_topic must require AgenticOS MCP before filesystem discovery',
-      'agenticos_topic must require agenticos_switch or agenticos_init',
+      'agenticos_topic must require agenticos_project_resolve or agenticos_project_ensure',
       'agenticos_topic must reject raw_directory_search as a project switch substitute',
       'agenticos_topic must reject git_branch_detection as a project switch substitute',
+      'agenticos_topic must reject agenticos_switch_lookup as a project switch substitute',
     ]));
   });
 
