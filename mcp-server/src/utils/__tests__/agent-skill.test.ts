@@ -8,6 +8,8 @@ import {
   resolveAgentSkillTarget,
 } from '../agent-skill.js';
 
+const HASH_MARKER_RE = /^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/m;
+
 function createDeps() {
   const files = new Map<string, string>();
   const dirs: string[] = [];
@@ -41,7 +43,8 @@ describe('agent skill bootstrap', () => {
   it('renders a managed Skill with project switch triggers and hash marker', () => {
     const content = renderAgenticosSkillContent();
 
-    expect(content).toMatch(/^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->/);
+    expect(content).toMatch(/^---\n/);
+    expect(content).toMatch(/\n---\n<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n\n# AgenticOS Activation/);
     expect(content).toContain('name: agenticos');
     expect(content).toContain('agenticos_switch');
     expect(content).toContain('切换到');
@@ -66,7 +69,7 @@ describe('agent skill bootstrap', () => {
     const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';
     installAgentSkill('codex', '/Users/tester', harness.deps);
     const stale = (harness.files.get(path) || '').replace('project status', 'project context');
-    const staleWithoutHash = stale.replace(/^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/, '');
+    const staleWithoutHash = stale.replace(HASH_MARKER_RE, '');
     const staleHash = createHash('sha256').update(staleWithoutHash, 'utf-8').digest('hex');
     const managedStale = `<!-- agenticos-skill-managed-sha256: ${staleHash} -->\n${staleWithoutHash}`;
     harness.files.set(path, managedStale);
@@ -84,8 +87,8 @@ describe('agent skill bootstrap', () => {
     const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';
     installAgentSkill('codex', '/Users/tester', harness.deps);
     const staleWithoutHash = (harness.files.get(path) || '')
-      .replace(/^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/, '')
-      .replace('agenticos-skill-template: v1', 'agenticos-skill-template: v99');
+      .replace(HASH_MARKER_RE, '')
+      .replace('template_version: 1', 'template_version: 99');
     const staleHash = createHash('sha256').update(staleWithoutHash, 'utf-8').digest('hex');
     harness.files.set(path, `<!-- agenticos-skill-managed-sha256: ${staleHash} -->\n${staleWithoutHash}`);
 
@@ -93,6 +96,36 @@ describe('agent skill bootstrap', () => {
 
     expect(inspection.status).toBe('stale-managed');
     expect(inspection.detail).toContain('is v99; expected v1');
+  });
+
+  it('repairs legacy managed content that put comments before frontmatter', () => {
+    const harness = createDeps();
+    const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';
+    const legacyWithoutHash = `<!-- agenticos-skill-template: v1 -->
+---
+name: agenticos
+description: Use when the user asks to switch, enter, continue, inspect, or verify an AgenticOS project; asks pwd/current project/project status/worktree status; or says 切换到/进入/继续项目. Discover and call AgenticOS MCP first.
+version: 1.0.0
+metadata:
+  agenticos:
+    managed: true
+    template_version: 1
+---
+
+# AgenticOS Activation
+`;
+    const legacyHash = createHash('sha256').update(legacyWithoutHash, 'utf-8').digest('hex');
+    harness.files.set(path, `<!-- agenticos-skill-managed-sha256: ${legacyHash} -->\n${legacyWithoutHash}`);
+
+    expect(inspectAgentSkill('codex', '/Users/tester', harness.deps.readFile).status)
+      .toBe('stale-managed');
+
+    const result = installAgentSkill('codex', '/Users/tester', harness.deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.wrote).toBe(true);
+    expect(result.status).toBe('current');
+    expect(harness.files.get(path)).toMatch(/^---\n/);
   });
 
   it('does not rewrite a current managed Skill', () => {

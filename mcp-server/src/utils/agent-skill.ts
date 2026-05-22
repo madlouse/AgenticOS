@@ -6,7 +6,8 @@ export const AGENTICOS_SKILL_TEMPLATE_VERSION = 1;
 export const AGENTICOS_SKILL_NAME = 'agenticos';
 
 const HASH_MARKER_RE = /^<!-- agenticos-skill-managed-sha256: ([a-f0-9]{64}) -->\n?/m;
-const VERSION_MARKER_RE = /<!-- agenticos-skill-template: v(\d+) -->/;
+const LEGACY_VERSION_MARKER_RE = /<!-- agenticos-skill-template: v(\d+) -->/;
+const FRONTMATTER_TEMPLATE_VERSION_RE = /^\s*template_version:\s*(\d+)\s*$/m;
 
 export type AgentSkillStatus =
   | 'unsupported'
@@ -87,7 +88,10 @@ export function resolveAgentSkillTarget(
 export function renderAgenticosSkillContent(): string {
   const withoutHash = renderAgenticosSkillContentWithoutHash();
   const hash = sha256(withoutHash);
-  return `<!-- agenticos-skill-managed-sha256: ${hash} -->\n${withoutHash}`;
+  return insertAfterYamlFrontmatter(
+    withoutHash,
+    `<!-- agenticos-skill-managed-sha256: ${hash} -->\n`,
+  );
 }
 
 export function inspectAgentSkill(
@@ -220,8 +224,7 @@ export function isAgentSkillOkForVerify(inspection: AgentSkillInspection): boole
 }
 
 function renderAgenticosSkillContentWithoutHash(): string {
-  return `<!-- agenticos-skill-template: v${AGENTICOS_SKILL_TEMPLATE_VERSION} -->
----
+  return `---
 name: agenticos
 description: Use when the user asks to switch, enter, continue, inspect, or verify an AgenticOS project; asks pwd/current project/project status/worktree status; or says 切换到/进入/继续项目. Discover and call AgenticOS MCP first.
 version: 1.0.0
@@ -272,7 +275,8 @@ Before using shell directory search, raw cd behavior, git branch inspection, or 
 }
 
 function extractSkillTemplateVersion(content: string): number | null {
-  const match = content.match(VERSION_MARKER_RE);
+  const match = content.match(FRONTMATTER_TEMPLATE_VERSION_RE)
+    || content.match(LEGACY_VERSION_MARKER_RE);
   return match ? Number(match[1]) : null;
 }
 
@@ -287,4 +291,18 @@ function stripHashMarker(content: string): string {
 
 function sha256(content: string): string {
   return createHash('sha256').update(content, 'utf-8').digest('hex');
+}
+
+function insertAfterYamlFrontmatter(content: string, insertion: string): string {
+  if (!content.startsWith('---\n')) {
+    throw new Error('AgenticOS Skill template must start with YAML frontmatter');
+  }
+
+  const closingDelimiterIndex = content.indexOf('\n---\n', 4);
+  if (closingDelimiterIndex === -1) {
+    throw new Error('AgenticOS Skill template is missing a closing YAML frontmatter delimiter');
+  }
+
+  const insertionIndex = closingDelimiterIndex + '\n---\n'.length;
+  return `${content.slice(0, insertionIndex)}${insertion}${content.slice(insertionIndex)}`;
 }

@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.27] — 2026-05-22
+
+### Fixed
+- bootstrap: generated AgenticOS activation Skills now start with YAML frontmatter so Codex can load them, while legacy managed copies with pre-frontmatter comments are upgraded automatically.
+
 ## [0.4.26] — 2026-05-22
 
 ### Added
