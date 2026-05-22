@@ -91,8 +91,8 @@ function toJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function errorPayload(error: unknown, requestedProject?: string): string {
-  const message = error instanceof Error ? error.message : String(error);
+function errorPayload(error: Error, requestedProject?: string): string {
+  const message = error.message;
   const code = error instanceof ProjectResolveError ? error.code : 'UNKNOWN';
   const recovery = code === 'NOT_FOUND'
     ? [
@@ -335,7 +335,7 @@ export async function runProjectResolve(args: ProjectResolveArgs = {}): Promise<
     const payload = await resolveProjectPayload(requestedProject, 'RESOLVED', false);
     return toJson(payload);
   } catch (error) {
-    return errorPayload(error, requestedProject);
+    return errorPayload(error as Error, requestedProject);
   }
 }
 
@@ -388,6 +388,6 @@ export async function runProjectEnsure(args: ProjectEnsureArgs = {}): Promise<st
     const created = await resolveProjectPayload(requestedPath || name, 'CREATED', true);
     return toJson(created);
   } catch (error) {
-    return errorPayload(error, requestedProject);
+    return errorPayload(error as Error, requestedProject);
   }
 }
