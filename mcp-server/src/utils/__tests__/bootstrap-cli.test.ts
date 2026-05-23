@@ -179,20 +179,21 @@ describe('bootstrap cli', () => {
     expect(lines.join('\n')).toContain('launchctl setenv AGENTICOS_HOME');
   });
 
-  it('renders dry-run Skill skip and force overwrite actions', () => {
+  it('renders dry-run Skill install, skip, and force overwrite actions', () => {
     const lines = buildDryRunLines(
       '/tmp/workspace',
       'explicit --workspace',
       [
         { id: 'cursor', label: 'Cursor', installed: true, detection_hint: 'test' },
+        { id: 'gemini-cli', label: 'Gemini CLI', installed: true, detection_hint: 'test' },
       ],
-      ['cursor'],
+      ['cursor', 'gemini-cli'],
       {
         apply: false,
         verify: false,
         firstRun: false,
         all: false,
-        agents: ['cursor'],
+        agents: ['cursor', 'gemini-cli'],
         help: false,
         persistShellEnv: false,
         persistLaunchctlEnv: false,
@@ -205,9 +206,11 @@ describe('bootstrap cli', () => {
       '/Users/tester',
     );
 
-    expect(lines.join('\n')).toContain('cursor-skill: skip');
-    expect(lines.join('\n')).toContain('overwrite user-modified managed Skill files');
-    expect(lines.join('\n')).toContain('hermes-discord: enforce Hermes+Discord');
+    const text = lines.join('\n');
+    expect(text).toContain('cursor-skill: install/update /Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
+    expect(text).toContain('gemini-cli-skill: skip');
+    expect(text).toContain('overwrite user-modified managed Skill files');
+    expect(text).toContain('hermes-discord: enforce Hermes+Discord');
   });
 
   it('reports non-Error thrown failures', () => {
@@ -415,7 +418,7 @@ describe('bootstrap cli', () => {
     expect(bootstrapState.agenticos_skills[0].status).toBe('current');
   });
 
-  it('skips unsupported activation Skill installs without failing apply', () => {
+  it('installs the Cursor activation Skill during apply', () => {
     const harness = createDeps();
 
     const exitCode = runBootstrapCli(
@@ -424,7 +427,26 @@ describe('bootstrap cli', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.stdout.some((line) => line.includes('SKIP cursor-skill'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK cursor-skill'))).toBe(true);
+    const cursorSkill = harness.files.get('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
+    expect(cursorSkill).toContain('agenticos-skill-managed-sha256');
+    expect(cursorSkill).toContain('AgenticOS Activation');
+    const bootstrapState = yaml.parse(harness.files.get('/tmp/workspace/.agent-workspace/bootstrap-state.yaml') || '');
+    expect(bootstrapState.agenticos_skills[0].agent_id).toBe('cursor');
+    expect(bootstrapState.agenticos_skills[0].status).toBe('current');
+    expect(bootstrapState.agenticos_skills[0].path).toBe('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
+  });
+
+  it('skips unsupported activation Skill installs without failing apply', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'gemini-cli', '--install-skills', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('SKIP gemini-cli-skill'))).toBe(true);
   });
 
   it('fails Skill install on user-modified files unless force is requested', () => {
@@ -813,12 +835,26 @@ describe('bootstrap cli', () => {
     expect(missingHarness.stdout.some((line) => line.includes('FAIL codex-skill'))).toBe(true);
     expect(missingHarness.stdout.some((line) => line.includes('--install-skills --apply'))).toBe(true);
 
-    const unsupportedHarness = createDeps();
+    const cursorAppliedHarness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'cursor', '--install-skills', '--apply'],
+      cursorAppliedHarness.deps,
+    )).toBe(0);
+    cursorAppliedHarness.stdout.length = 0;
     expect(runBootstrapCli(
       ['--workspace', '/tmp/workspace', '--agent', 'cursor', '--install-skills', '--verify'],
+      cursorAppliedHarness.deps,
+    )).toBe(0);
+    expect(cursorAppliedHarness.stdout.some((line) => line.includes('OK cursor-skill'))).toBe(true);
+    expect(cursorAppliedHarness.files.get('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md'))
+      .toMatch(/AgenticOS Activation/);
+
+    const unsupportedHarness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'gemini-cli', '--install-skills', '--verify'],
       unsupportedHarness.deps,
-    )).toBe(1);
-    expect(unsupportedHarness.stdout.some((line) => line.includes('SKIP cursor-skill'))).toBe(true);
+    )).toBe(0);
+    expect(unsupportedHarness.stdout.some((line) => line.includes('SKIP gemini-cli-skill'))).toBe(true);
 
     const modifiedHarness = createDeps();
     modifiedHarness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', '# local edit\n');

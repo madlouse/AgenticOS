@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.28] — 2026-05-23
+
+### Added
+- bootstrap: managed AgenticOS activation Skill is now installed for Cursor at `~/.cursor/skills-cursor/agenticos/SKILL.md` via the same `--install-skills` / `--force-skills` flow already shipped for Codex and Claude Code. The Skill body is rendered from the single canonical template and sha256-guarded, so Codex, Claude Code, and Cursor share one drift-tracked routing contract (#480 Phase 1, follow-up to #432/#434).
+- bootstrap: `--verify` now reports `OK cursor-skill: Skill state: current ...` for Cursor instead of `SKIP cursor-skill: unsupported`, closing the activation-Skill coverage gap left open when #432 landed for Codex/Claude Code only.
+
 ## [0.4.27] — 2026-05-22
 
 ### Fixed

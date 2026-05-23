@@ -70,9 +70,9 @@ export function resolveAgentSkillTarget(
       return {
         agentId,
         label: 'Cursor AgenticOS activation Skill',
-        supported: false,
-        path: null,
-        reloadHint: 'Cursor Skill installation is not supported by AgenticOS bootstrap yet.',
+        supported: true,
+        path: join(homeDir, '.cursor', 'skills-cursor', AGENTICOS_SKILL_NAME, 'SKILL.md'),
+        reloadHint: 'Restart Cursor or reload its Skill index so the AgenticOS activation Skill is picked up.',
       };
     case 'gemini-cli':
       return {
