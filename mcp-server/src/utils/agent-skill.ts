@@ -100,18 +100,9 @@ export function inspectAgentSkill(
   readFile: (path: string) => string | null,
 ): AgentSkillInspection {
   const target = resolveAgentSkillTarget(agentId, homeDir);
-  if (!target.supported || !target.path) {
-    return {
-      agentId,
-      target,
-      status: 'unsupported',
-      installedVersion: null,
-      expectedVersion: AGENTICOS_SKILL_TEMPLATE_VERSION,
-      detail: `${target.label} is not supported by this bootstrap version.`,
-    };
-  }
+  const skillPath = target.path!;
 
-  const content = readFile(target.path);
+  const content = readFile(skillPath);
   if (content === null) {
     return {
       agentId,
@@ -119,7 +110,7 @@ export function inspectAgentSkill(
       status: 'missing',
       installedVersion: null,
       expectedVersion: AGENTICOS_SKILL_TEMPLATE_VERSION,
-      detail: `missing ${target.path}`,
+      detail: `missing ${skillPath}`,
     };
   }
 
@@ -135,7 +126,7 @@ export function inspectAgentSkill(
       status: 'modified-user',
       installedVersion,
       expectedVersion: AGENTICOS_SKILL_TEMPLATE_VERSION,
-      detail: `${target.path} exists but is not a managed AgenticOS Skill.`,
+      detail: `${skillPath} exists but is not a managed AgenticOS Skill.`,
     };
   }
 
@@ -146,7 +137,7 @@ export function inspectAgentSkill(
       status: 'modified-user',
       installedVersion,
       expectedVersion: AGENTICOS_SKILL_TEMPLATE_VERSION,
-      detail: `${target.path} was modified after AgenticOS installed it.`,
+      detail: `${skillPath} was modified after AgenticOS installed it.`,
     };
   }
 
@@ -157,7 +148,7 @@ export function inspectAgentSkill(
       status: 'current',
       installedVersion,
       expectedVersion: AGENTICOS_SKILL_TEMPLATE_VERSION,
-      detail: `current v${installedVersion} at ${target.path}`,
+      detail: `current v${installedVersion} at ${skillPath}`,
     };
   }
 
@@ -168,8 +159,8 @@ export function inspectAgentSkill(
     installedVersion,
     expectedVersion: AGENTICOS_SKILL_TEMPLATE_VERSION,
     detail: installedVersion === AGENTICOS_SKILL_TEMPLATE_VERSION
-      ? `managed Skill at ${target.path} differs from the current v${AGENTICOS_SKILL_TEMPLATE_VERSION} template`
-      : `managed Skill at ${target.path} is v${installedVersion}; expected v${AGENTICOS_SKILL_TEMPLATE_VERSION}`,
+      ? `managed Skill at ${skillPath} differs from the current v${AGENTICOS_SKILL_TEMPLATE_VERSION} template`
+      : `managed Skill at ${skillPath} is v${installedVersion}; expected v${AGENTICOS_SKILL_TEMPLATE_VERSION}`,
   };
 }
 
@@ -180,14 +171,6 @@ export function installAgentSkill(
   options: { force?: boolean } = {},
 ): AgentSkillInstallResult {
   const inspection = inspectAgentSkill(agentId, homeDir, deps.readFile);
-  if (!inspection.target.supported || !inspection.target.path) {
-    return {
-      ...inspection,
-      ok: true,
-      wrote: false,
-      skipped: true,
-    };
-  }
 
   if (inspection.status === 'current') {
     return {
@@ -208,14 +191,15 @@ export function installAgentSkill(
     };
   }
 
-  deps.mkdirp(dirname(inspection.target.path));
-  deps.writeFile(inspection.target.path, renderAgenticosSkillContent());
+  deps.mkdirp(dirname(inspection.target.path!));
+  deps.writeFile(inspection.target.path!, renderAgenticosSkillContent());
+  const installedPath = inspection.target.path!;
   return {
     ...inspectAgentSkill(agentId, homeDir, deps.readFile),
     ok: true,
     wrote: true,
     skipped: false,
-    detail: `installed v${AGENTICOS_SKILL_TEMPLATE_VERSION} at ${inspection.target.path}. ${inspection.target.reloadHint}`,
+    detail: `installed v${AGENTICOS_SKILL_TEMPLATE_VERSION} at ${installedPath}. ${inspection.target.reloadHint}`,
   };
 }
 
