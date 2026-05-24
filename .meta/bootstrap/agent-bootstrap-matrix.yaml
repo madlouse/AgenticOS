@@ -135,8 +135,15 @@ supported_agents:
     canonical_bootstrap_method: cli-command
     canonical_config_location: ~/.gemini/settings.json managed via `gemini mcp add -s user`
     bootstrap_command: gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp
+    activation_skill:
+      support: official
+      path: ~/.gemini/skills/agenticos/SKILL.md
+      install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --apply
+      verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --verify
+      purpose: route project switch/status/pwd prompts through AgenticOS MCP before filesystem guessing
     verification:
       - run `gemini mcp list`
+      - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --verify` when natural-language routing is required
       - restart Gemini CLI after registration
       - confirm `agenticos` appears and can call `agenticos_list`
     transport_debug:
@@ -146,8 +153,8 @@ supported_agents:
       - if the stored server environment does not include `AGENTICOS_HOME`, treat the registration as incomplete and re-add it with explicit env injection
     routing_debug:
       - transport registration only proves MCP availability, not project-intent recognition
-      - AgenticOS activation Skill install is not supported for Gemini CLI in this bootstrap version
-      - if intent routing does not trigger, use explicit `agenticos_*` calls and ensure the project instructions are loaded
+      - if the activation Skill is missing or stale, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --verify`
+      - load the project `AGENTS.md` adapter surface and explicit `agenticos_*` tool calls before treating routing failure as transport failure
 experimental_agents:
   - id: generic-mcp-tool
     label: Other MCP-Compatible Tools

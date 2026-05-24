@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.31] — 2026-05-24
+
+### Added
+- bootstrap: managed AgenticOS activation Skill is now installed for Gemini CLI at `~/.gemini/skills/agenticos/SKILL.md` via the same `--install-skills` / `--force-skills` flow already shipped for Codex, Claude Code, and Cursor (#483 Phase 1).
+
+### Changed
+- bootstrap matrix: Gemini CLI now declares an official `activation_skill` block and updated routing-debug guidance instead of stating Skill install is unsupported.
+- docs/Homebrew caveats: Gemini CLI is included in activation-skill install guidance alongside Codex, Claude Code, and Cursor.
+
 ## [0.4.30] — 2026-05-24
 
 ### Added
