@@ -66,6 +66,14 @@ vi.mock('../../utils/worktree-topology.js', () => ({
   inspectProjectWorktreeTopology: worktreeTopologyMock.inspectProjectWorktreeTopology,
 }));
 
+const assessKnowledgeEvolutionHealthMock = vi.hoisted(() => vi.fn());
+const buildKnowledgeEvolutionStatusLinesMock = vi.hoisted(() => vi.fn(() => ['📚 Knowledge evolution: PASS']));
+
+vi.mock('../../utils/knowledge-evolution-health.js', () => ({
+  assessKnowledgeEvolutionHealth: assessKnowledgeEvolutionHealthMock,
+  buildKnowledgeEvolutionStatusLines: buildKnowledgeEvolutionStatusLinesMock,
+}));
+
 vi.mock('../../utils/standard-kit.js', () => ({
   adoptStandardKit: standardKitMock.adoptStandardKit,
   checkStandardKitUpgrade: standardKitMock.checkStandardKitUpgrade,
@@ -139,6 +147,11 @@ describe('switchProject', () => {
       source: null,
       state: {},
       state_path: null,
+    });
+    assessKnowledgeEvolutionHealthMock.mockResolvedValue({
+      status: 'PASS',
+      summary: 'Knowledge evolution healthy',
+      findings: [],
     });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
@@ -2047,6 +2060,11 @@ describe('getStatus', () => {
     yamlMock.parse.mockImplementation((content: string) => {
       try { return JSON.parse(content); } catch { return undefined; }
     });
+    assessKnowledgeEvolutionHealthMock.mockResolvedValue({
+      status: 'PASS',
+      summary: 'Knowledge evolution healthy',
+      findings: [],
+    });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
       status: 'PASS',
@@ -3547,5 +3565,39 @@ describe('getStatus', () => {
     const result = await getStatus();
 
     expect(result).toContain('has not completed source-control topology initialization');
+  });
+
+  it('continues status output when knowledge evolution assessment fails', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    });
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/test/path',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    });
+    mockStatusReads({
+      meta: { id: 'test-project', name: 'Test Project' },
+      source_control: { topology: 'local_directory_only' },
+    }, {
+      session: {},
+      working_memory: { pending: [], decisions: [], facts: [] },
+    });
+    assessKnowledgeEvolutionHealthMock.mockRejectedValue(new Error('knowledge health unavailable'));
+
+    const result = await getStatus();
+
+    expect(result).toContain('# Status: Test Project');
+    expect(buildKnowledgeEvolutionStatusLinesMock).not.toHaveBeenCalled();
   });
 });

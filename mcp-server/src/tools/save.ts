@@ -72,7 +72,7 @@ function toGitRelativePath(gitWorktreeRoot: string, absolutePath: string, option
   return options?.directory && !relativePath.endsWith('/') ? `${relativePath}/` : relativePath;
 }
 
-function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: ProjectYamlSchema): string[] {
+export function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: ProjectYamlSchema): string[] {
   if (!Array.isArray(projectYaml?.execution?.source_repo_roots)) {
     return [];
   }
@@ -90,7 +90,7 @@ function normalizeGitHubRepo(value: string): string {
   return value.trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '').toLowerCase();
 }
 
-function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
+export function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
@@ -114,7 +114,7 @@ function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
   return null;
 }
 
-async function validateGitBackedContinuityRepoBinding(args: {
+export async function validateGitBackedContinuityRepoBinding(args: {
   projectName: string;
   policy: 'private_continuity' | 'public_distilled' | 'local_private';
   projectPath: string;

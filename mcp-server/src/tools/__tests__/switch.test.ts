@@ -379,6 +379,92 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('cannot be bound to repo_path');
       expect(result).toContain('does not match registry id');
     });
+
+    it('rejects repo_path when meta.id is missing', async () => {
+      const worktreePath = '/repo/worktrees/issue-482';
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [{
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        }],
+      }));
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          return JSON.stringify({
+            meta: { description: 'missing id' },
+            source_control: { topology: 'local_directory_only' },
+          });
+        }
+        return '';
+      });
+
+      const result = await switchProject({ project: 'test-project', repo_path: worktreePath });
+
+      expect(result).toContain('missing meta.id');
+    });
+
+    it('rejects repo_path when project yaml is unreadable', async () => {
+      const worktreePath = '/repo/worktrees/issue-482';
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [{
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        }],
+      }));
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          throw new Error('ENOENT');
+        }
+        return '';
+      });
+
+      const result = await switchProject({ project: 'test-project', repo_path: worktreePath });
+
+      expect(result).toContain('missing or unreadable');
+    });
+
+    it('rejects repo_path when project yaml parses to null', async () => {
+      const worktreePath = '/repo/worktrees/issue-482';
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [{
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        }],
+      }));
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          return '';
+        }
+        return '';
+      });
+      yamlMock.parse.mockReturnValue(null);
+
+      const result = await switchProject({ project: 'test-project', repo_path: worktreePath });
+
+      expect(result).toContain('missing meta.id');
+    });
+
+    it('ignores non-string repo_path values', async () => {
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      const result = await switchProject({ project: 'test-project', repo_path: 123 });
+
+      expect(result).toContain('Path: /test/path');
+      expect(getSessionProjectBinding()?.projectPath).toBe('/test/path');
+    });
   });
 
   describe('registry fallback when no session binding', () => {
