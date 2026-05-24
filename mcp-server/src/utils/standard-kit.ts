@@ -5,6 +5,14 @@ import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getOfficialAgentAdapters, loadAgentAdapterMatrix } from './agent-adapter-matrix.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion, generateAgentsMd, generateClaudeMd, upgradeClaudeMd, upgradeAgentsMd } from './distill.js';
+import {
+  CURSOR_PROJECT_RULE_RELATIVE_PATH,
+  CURSOR_PROJECT_RULE_TEMPLATE_VERSION,
+  cursorProjectRuleUpgradeStatus,
+  inspectCursorProjectRule,
+  renderCursorProjectRule,
+  upgradeCursorProjectRule,
+} from './cursor-project-rule.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject } from './project-contract.js';
 import { validateContextPublicationPolicy } from './project-contract.js';
 import { resolveAgenticOSProductPath, resolveAgenticOSProductRoot, toCanonicalProductRelativePath } from './product-source-root.js';
@@ -1006,6 +1014,69 @@ function getCopiedTemplateEntries(manifest: StandardKitManifest): StandardKitEnt
   return manifest.layers.copied_templates?.entries || [];
 }
 
+function renderGeneratedFileContent(
+  entryPath: string,
+  project: ResolvedProjectTarget,
+): string {
+  switch (entryPath) {
+    case 'AGENTS.md':
+      return generateAgentsMd(project.projectName, project.projectDescription, project.agentContextPaths);
+    case 'CLAUDE.md':
+      return generateClaudeMd(project.projectName, project.projectDescription, undefined, project.agentContextPaths);
+    case CURSOR_PROJECT_RULE_RELATIVE_PATH:
+      return renderCursorProjectRule(project.projectName, project.projectDescription, project.agentContextPaths);
+    default:
+      throw new Error(`Unsupported generated standard-kit file "${entryPath}".`);
+  }
+}
+
+function upgradeGeneratedFileContent(
+  entryPath: string,
+  destination: string,
+  project: ResolvedProjectTarget,
+): string {
+  switch (entryPath) {
+    case 'AGENTS.md':
+      return upgradeAgentsMd(destination, project.projectName, project.projectDescription, project.agentContextPaths);
+    case 'CLAUDE.md':
+      return upgradeClaudeMd(destination, project.projectName, project.projectDescription, undefined, project.agentContextPaths);
+    case CURSOR_PROJECT_RULE_RELATIVE_PATH:
+      return upgradeCursorProjectRule(
+        destination,
+        project.projectName,
+        project.projectDescription,
+        project.agentContextPaths,
+      );
+    default:
+      throw new Error(`Unsupported generated standard-kit file "${entryPath}".`);
+  }
+}
+
+function resolveGeneratedFileExpectedVersion(entryPath: string): number {
+  return entryPath === CURSOR_PROJECT_RULE_RELATIVE_PATH
+    ? CURSOR_PROJECT_RULE_TEMPLATE_VERSION
+    : CURRENT_TEMPLATE_VERSION;
+}
+
+function resolveGeneratedFileUpgradeStatus(
+  entryPath: string,
+  content: string | null,
+  project: ResolvedProjectTarget,
+): 'missing' | 'current' | 'stale' {
+  if (entryPath === CURSOR_PROJECT_RULE_RELATIVE_PATH) {
+    return cursorProjectRuleUpgradeStatus(
+      content,
+      project.projectName,
+      project.projectDescription,
+      project.agentContextPaths,
+    );
+  }
+
+  if (content === null) return 'missing';
+  const version = extractTemplateVersion(content);
+  return version >= CURRENT_TEMPLATE_VERSION ? 'current' : 'stale';
+}
+
 async function readProjectFile(projectPath: string, relativePath: string): Promise<string | null> {
   const absolutePath = join(projectPath, relativePath);
   if (!existsSync(absolutePath)) return null;
@@ -1048,26 +1119,36 @@ export async function adoptStandardKit(args: { project_path?: string; project?: 
   }
 
   for (const entry of getGeneratedEntries(manifest)) {
-      const destination = join(project.projectPath, entry.path);
-      if (!existsSync(destination)) {
-      const content = entry.path === 'AGENTS.md'
-        ? generateAgentsMd(project.projectName, project.projectDescription, project.agentContextPaths)
-        : generateClaudeMd(project.projectName, project.projectDescription, undefined, project.agentContextPaths);
+    const destination = join(project.projectPath, entry.path);
+    if (!existsSync(destination)) {
+      const content = renderGeneratedFileContent(entry.path, project);
+      await ensureParentDir(destination);
       await writeFile(destination, content, 'utf-8');
       createdFiles.push(entry.path);
       continue;
     }
 
     const existingContent = await readFile(destination, 'utf-8');
-    const version = extractTemplateVersion(existingContent);
-    if (version >= CURRENT_TEMPLATE_VERSION) {
+    const upgradeStatus = resolveGeneratedFileUpgradeStatus(entry.path, existingContent, project);
+    if (upgradeStatus === 'current') {
       skippedCurrentGeneratedFiles.push(entry.path);
       continue;
     }
 
-    const upgraded = entry.path === 'AGENTS.md'
-      ? upgradeAgentsMd(destination, project.projectName, project.projectDescription, project.agentContextPaths)
-      : upgradeClaudeMd(destination, project.projectName, project.projectDescription, undefined, project.agentContextPaths);
+    if (entry.path === CURSOR_PROJECT_RULE_RELATIVE_PATH) {
+      const inspection = inspectCursorProjectRule(
+        existingContent,
+        project.projectName,
+        project.projectDescription,
+        project.agentContextPaths,
+      );
+      if (inspection.status === 'modified-user') {
+        skippedExistingTemplates.push(entry.path);
+        continue;
+      }
+    }
+
+    const upgraded = upgradeGeneratedFileContent(entry.path, destination, project);
     await writeFile(destination, upgraded, 'utf-8');
     upgradedGeneratedFiles.push(entry.path);
   }
@@ -1110,23 +1191,27 @@ export async function checkStandardKitUpgrade(args: {
 
   for (const entry of getGeneratedEntries(manifest)) {
     const destination = join(project.projectPath, entry.path);
+    const expectedVersion = resolveGeneratedFileExpectedVersion(entry.path);
     if (!existsSync(destination)) {
       generatedFiles.push({
         path: entry.path,
         status: 'missing',
         current_version: null,
-        expected_version: CURRENT_TEMPLATE_VERSION,
+        expected_version: expectedVersion,
       });
       continue;
     }
 
     const content = await readFile(destination, 'utf-8');
-    const version = extractTemplateVersion(content);
+    const upgradeStatus = resolveGeneratedFileUpgradeStatus(entry.path, content, project);
+    const installedVersion = entry.path === CURSOR_PROJECT_RULE_RELATIVE_PATH
+      ? inspectCursorProjectRule(content, project.projectName, project.projectDescription, project.agentContextPaths).installedVersion
+      : extractTemplateVersion(content);
     generatedFiles.push({
       path: entry.path,
-      status: version >= CURRENT_TEMPLATE_VERSION ? 'current' : 'stale',
-      current_version: version,
-      expected_version: CURRENT_TEMPLATE_VERSION,
+      status: upgradeStatus,
+      current_version: installedVersion,
+      expected_version: expectedVersion,
     });
   }
 
@@ -1465,6 +1550,7 @@ export async function checkStandardKitConformance(args: { project_path?: string;
   const stateYaml = yaml.parse((await readProjectFile(upgrade.project_path, '.context/state.yaml')) || '{}') as any;
   const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
   const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');
+  const cursorRuleMd = await readProjectFile(upgrade.project_path, CURSOR_PROJECT_RULE_RELATIVE_PATH);
   const designBrief = await readProjectFile(upgrade.project_path, 'tasks/templates/issue-design-brief.md');
   const bootstrapMatrixSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'agent-bootstrap-matrix.yaml'), 'utf-8');
   const adapterMatrixSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'agent-adapter-matrix.yaml'), 'utf-8');
@@ -1730,7 +1816,11 @@ export async function checkStandardKitConformance(args: { project_path?: string;
   }
 
   const adapterChecks: ConformanceAdapterStatus[] = officialAdapters.map((adapter) => {
-    const content = adapter.adapter_file === 'CLAUDE.md' ? claudeMd : agentsMd;
+    const content = adapter.adapter_file === 'CLAUDE.md'
+      ? claudeMd
+      : adapter.adapter_file === CURSOR_PROJECT_RULE_RELATIVE_PATH
+        ? cursorRuleMd
+        : agentsMd;
     const generatedStatus = upgrade.generated_files.find((item) => item.path === adapter.adapter_file);
     const pass = generatedStatus?.status === 'current'
       && fileContainsAll(content, adapter.required_runtime_guidance);

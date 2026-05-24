@@ -17,6 +17,10 @@ layers:
         canonical_source: projects/agenticos/mcp-server/src/utils/distill.ts
         inheritance: generated
         customizable: limited
+      - path: .cursor/rules/agenticos.mdc
+        canonical_source: projects/agenticos/mcp-server/src/utils/cursor-project-rule.ts
+        inheritance: generated
+        customizable: limited
 
   copied_templates:
     description: Files copied into a downstream project and then edited in-project.
@@ -102,6 +106,7 @@ upgrade_rules:
   template_marker_version:
     AGENTS.md: 14
     CLAUDE.md: 14
+    .cursor/rules/agenticos.mdc: 1
   compatibility_rule: >
     Generated files may be upgraded in place by distill when the template marker version changes.
   copied_template_rule: >
@@ -111,6 +116,7 @@ adoption:
   required_files:
     - AGENTS.md
     - CLAUDE.md
+    - .cursor/rules/agenticos.mdc
     - .project.yaml
     - .context/quick-start.md
     - .context/state.yaml

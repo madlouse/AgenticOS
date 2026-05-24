@@ -43,6 +43,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         entries: [
           { path: 'AGENTS.md', canonical_source: 'projects/agenticos/mcp-server/src/utils/distill.ts' },
           { path: 'CLAUDE.md', canonical_source: 'projects/agenticos/mcp-server/src/utils/distill.ts' },
+          { path: '.cursor/rules/agenticos.mdc', canonical_source: 'projects/agenticos/mcp-server/src/utils/cursor-project-rule.ts' },
         ],
       },
       copied_templates: {
@@ -63,6 +64,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
       required_files: [
         'AGENTS.md',
         'CLAUDE.md',
+        '.cursor/rules/agenticos.mdc',
         '.project.yaml',
         '.context/quick-start.md',
         '.context/state.yaml',
@@ -158,6 +160,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
       adapter_surfaces: [
         { id: 'codex-generic', generated_file: 'AGENTS.md' },
         { id: 'claude-code', generated_file: 'CLAUDE.md' },
+        { id: 'cursor', generated_file: '.cursor/rules/agenticos.mdc' },
       ],
     }),
     'utf-8',
@@ -193,6 +196,21 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
             '## Codex / Generic Runtime Notes',
             'use explicit `agenticos_*` tool calls',
             'Bootstrap differences are runtime concerns',
+            '`agenticos_status`',
+            '`agenticos_switch`',
+            '`agenticos_issue_bootstrap`',
+          ],
+        },
+        {
+          agent_id: 'cursor',
+          support_tier: 'official',
+          adapter_file: '.cursor/rules/agenticos.mdc',
+          adapter_family: 'cursor',
+          required_runtime_guidance: [
+            '`.cursor/rules/agenticos.mdc` is the Cursor adapter surface for this project.',
+            '## Cursor Runtime Notes',
+            'global activation Skill at `~/.cursor/skills-cursor/agenticos/SKILL.md`',
+            'Use AgenticOS MCP tools before shell directory search',
             '`agenticos_status`',
             '`agenticos_switch`',
             '`agenticos_issue_bootstrap`',
@@ -250,6 +268,7 @@ describe('standard kit commands', () => {
     expect(result.created_files).toContain('.project.yaml');
     expect(result.created_files).toContain('AGENTS.md');
     expect(result.created_files).toContain('CLAUDE.md');
+    expect(result.created_files).toContain('.cursor/rules/agenticos.mdc');
     expect(result.created_files).toContain('tasks/templates/non-code-evaluation-rubric.yaml');
     expect(result.created_files).toContain('tasks/templates/sub-agent-handoff.md');
     expect(result.skipped_existing_templates).toContain('.context/quick-start.md');
@@ -577,6 +596,7 @@ status:
       expect.arrayContaining([
         expect.objectContaining({ agent_id: 'claude-code', status: 'PASS', adapter_file: 'CLAUDE.md' }),
         expect.objectContaining({ agent_id: 'codex', status: 'PASS', adapter_file: 'AGENTS.md' }),
+        expect.objectContaining({ agent_id: 'cursor', status: 'PASS', adapter_file: '.cursor/rules/agenticos.mdc' }),
       ]),
     );
   });

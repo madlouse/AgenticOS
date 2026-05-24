@@ -72,7 +72,7 @@ async function readProjectYaml(projectPath?: string): Promise<any | null> {
 
 function resolveRuntimeManagedEntries(projectYaml: any | null): string[] {
   if (!projectYaml) {
-    return ['CLAUDE.md', 'AGENTS.md'];
+    return ['CLAUDE.md', 'AGENTS.md', '.cursor/rules/agenticos.mdc'];
   }
 
   const contextPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
@@ -85,6 +85,7 @@ function resolveRuntimeManagedEntries(projectYaml: any | null): string[] {
     toRelative(contextPaths.conversationsDir),
     'CLAUDE.md',
     'AGENTS.md',
+    '.cursor/rules/agenticos.mdc',
   ];
 }
 

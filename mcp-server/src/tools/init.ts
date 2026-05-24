@@ -1,8 +1,9 @@
 import { mkdir, writeFile, access, readFile } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import yaml from 'yaml';
 import { loadRegistry, patchRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
+import { renderCursorProjectRule, CURSOR_PROJECT_RULE_RELATIVE_PATH } from '../utils/cursor-project-rule.js';
 import { buildProjectTopologyInitializationMessage, hasDeclaredContextPublicationPolicy, validateContextPublicationPolicy, validateProjectKind, type ContextPublicationPolicy, type ProjectKind, type ProjectTopology } from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 import { ensureCaseKnowledgeDirectories } from '../utils/case-knowledge.js';
@@ -303,6 +304,11 @@ ${description ?? existingProjectYaml?.meta?.description ?? ''}
 
   const agentsMd = generateAgentsMd(name, description ?? existingProjectYaml?.meta?.description ?? '', contextDisplayPaths);
   await writeFile(join(projectPath, 'AGENTS.md'), agentsMd, 'utf-8');
+
+  const cursorRule = renderCursorProjectRule(name, description ?? existingProjectYaml?.meta?.description ?? '', contextDisplayPaths);
+  const cursorRulePath = join(projectPath, CURSOR_PROJECT_RULE_RELATIVE_PATH);
+  await mkdir(dirname(cursorRulePath), { recursive: true });
+  await writeFile(cursorRulePath, cursorRule, 'utf-8');
 
   const projectEntry = {
     id,

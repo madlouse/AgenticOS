@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.29] — 2026-05-24
+
+### Added
+- standard-kit: managed Cursor project rule is now generated at `.cursor/rules/agenticos.mdc` with `alwaysApply: true`, sha256-managed template versioning, and the same canonical guardrail/recording/session-start policy as `AGENTS.md` and `CLAUDE.md` (#480 Phase 2).
+- init: new projects receive the Cursor adapter rule during `agenticos_init`, alongside the existing Claude and Codex adapter surfaces.
+- conformance: standard-kit adapter checks now validate the Cursor adapter surface and required Cursor runtime guidance.
+
 ## [0.4.28] — 2026-05-23
 
 ### Added

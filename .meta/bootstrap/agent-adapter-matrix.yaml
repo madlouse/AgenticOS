@@ -27,13 +27,13 @@ adapters:
       - '`agenticos_issue_bootstrap`'
   - agent_id: cursor
     support_tier: official
-    adapter_file: AGENTS.md
-    adapter_family: generic
+    adapter_file: .cursor/rules/agenticos.mdc
+    adapter_family: cursor
     required_runtime_guidance:
-      - '`AGENTS.md` is the Codex/generic adapter surface for this project.'
-      - '## Codex / Generic Runtime Notes'
-      - 'use explicit `agenticos_*` tool calls'
-      - 'Bootstrap differences are runtime concerns'
+      - '`.cursor/rules/agenticos.mdc` is the Cursor adapter surface for this project.'
+      - '## Cursor Runtime Notes'
+      - 'global activation Skill at `~/.cursor/skills-cursor/agenticos/SKILL.md`'
+      - 'Use AgenticOS MCP tools before shell directory search'
       - '`agenticos_status`'
       - '`agenticos_switch`'
       - '`agenticos_issue_bootstrap`'
