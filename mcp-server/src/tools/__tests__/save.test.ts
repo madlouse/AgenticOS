@@ -1393,4 +1393,55 @@ describe('saveState', () => {
     expect(result).not.toContain('blocked');
     expect(result).toContain('State saved locally');
   });
+
+  it('uses repo_path for canonical-main guard and git binding when registry path differs', async () => {
+    const worktreePath = '/repo/worktrees/issue-482';
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: false,
+      git_worktree_root: worktreePath,
+      current_branch: 'fix/482-guardrail-resolver-gaps',
+      workspace_type: 'isolated_worktree',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/repo/projects/test-project',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    }));
+    mockProjectFiles();
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, `${worktreePath}\n`, ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/repo/.git\n', ''); return; }
+      if (cmd.includes('worktree list')) {
+        cb(null, `${worktreePath} (isolated)`, '');
+        return;
+      }
+      if (cmd.includes('remote get-url')) { cb(null, 'https://github.com/test/project.git\n', ''); return; }
+      if (cmd.includes('add -A')) { cb(null, '', ''); return; }
+      if (cmd.includes('commit')) { cb(null, '', ''); return; }
+      if (cmd.includes('push')) { cb(new Error('push failed'), '', 'push failed'); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    await bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/projects/test-project',
+    });
+
+    const result = await saveState({
+      project: 'test-project',
+      repo_path: worktreePath,
+      project_path: worktreePath,
+      message: 'save from isolated worktree',
+    });
+
+    expect(detectCanonicalMainWriteProtection).toHaveBeenCalledWith(worktreePath);
+    expect(result).not.toContain('blocked');
+    expect(result).toContain('State saved locally');
+  });
 });

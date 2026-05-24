@@ -310,6 +310,77 @@ describe('switchProject — agenticos_switch tests', () => {
     });
   });
 
+  describe('repo_path override', () => {
+    it('binds session to repo_path when project yaml meta.id matches registry id', async () => {
+      const worktreePath = '/repo/worktrees/issue-482';
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [{
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        }],
+      }));
+      fsMock.existsSync.mockImplementation((path: string) =>
+        path === worktreePath || path.startsWith(`${worktreePath}/`));
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          return JSON.stringify({
+            meta: { id: 'test-project', description: 'Test project description' },
+            source_control: { topology: 'local_directory_only' },
+          });
+        }
+        if (path.endsWith('/state.yaml')) {
+          return JSON.stringify({
+            current_task: { title: 'Test task', status: 'in_progress' },
+            working_memory: { pending: ['Next step'], decisions: ['Made a choice'] },
+          });
+        }
+        if (path.endsWith('/quick-start.md')) {
+          return '# Quick Start\n\nTest quick start content.\n\nBody text here.';
+        }
+        return '';
+      });
+
+      const result = await switchProject({ project: 'test-project', repo_path: worktreePath });
+
+      expect(result).toContain('✅ Switched to project "Test Project"');
+      expect(result).toContain(`Path: ${worktreePath}`);
+      const binding = getSessionProjectBinding();
+      expect(binding?.projectPath).toBe(worktreePath);
+    });
+
+    it('rejects repo_path when meta.id does not match registry id', async () => {
+      const worktreePath = '/repo/worktrees/issue-482';
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [{
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        }],
+      }));
+      fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('/.project.yaml')) {
+          return JSON.stringify({
+            meta: { id: 'other-project' },
+            source_control: { topology: 'local_directory_only' },
+          });
+        }
+        return '';
+      });
+
+      const result = await switchProject({ project: 'test-project', repo_path: worktreePath });
+
+      expect(result).toContain('cannot be bound to repo_path');
+      expect(result).toContain('does not match registry id');
+    });
+  });
+
   describe('registry fallback when no session binding', () => {
     it('switches using registry even when no session project is bound', async () => {
       clearSessionProjectBinding();

@@ -57,4 +57,24 @@ describe('runtime review surface', () => {
       fail_closed_on_context_policy_error: true,
     })).toThrow();
   });
+
+  it('uses managed project root for surface comparison when repo_root is an external worktree', () => {
+    const result = resolveRuntimeReviewSurfacePaths('/repo/projects/agenticos', {
+      meta: { name: 'AgenticOS' },
+      source_control: {
+        topology: 'github_versioned',
+        context_publication_policy: 'private_continuity',
+      },
+      agent_context: {
+        current_state: 'standards/.context/state.yaml',
+        conversations: 'standards/.context/conversations/',
+        last_record_marker: 'standards/.context/.last_record',
+      },
+    }, {
+      repo_root: '/repo/worktrees/issue-482',
+    });
+
+    expect(result.tracked_review_excluded_paths).toContain('standards/.context/state.yaml');
+    expect(result.tracked_review_excluded_paths).toContain('standards/.context/conversations/');
+  });
 });

@@ -406,10 +406,13 @@ Switch to existing project and load context.
 
 **Parameters**:
 - `project` (required) - Project ID or name
+- `repo_path` (optional) - Absolute checkout path (for example an issue worktree) to bind the MCP session to instead of the registry path. The checkout must contain a readable `.project.yaml` whose `meta.id` matches the registry project id.
 
 **Returns**: Loaded context (project config, quick-start, state)
 
 Use this when `agenticos_status` shows that no session project is bound or the bound project is not the intended one.
+
+When working in an isolated issue worktree, pass `repo_path` so guardrail tools, record/save, and session binding all target the worktree instead of the canonical registry checkout.
 
 The quick-start/state split is intentional:
 - `quick-start.md` is a concise entry surface
@@ -441,9 +444,16 @@ Capture session activity and, when allowed, distill it into project continuity.
 Save state and backup to Git.
 
 **Parameters**:
+- `project` (optional) - Project ID, name, or path. Defaults to the current session project.
+- `project_path` (optional) - Absolute project checkout path for continuity resolution. Use the issue worktree when saving from an isolated worktree.
+- `repo_path` (optional) - Absolute git checkout path for commit/push and canonical-main guard evaluation. Use the issue worktree when the git root differs from the registry project path.
 - `message` (optional) - Commit message
 
 **Returns**: Backup confirmation with timestamp
+
+**Worktree binding**:
+- when the registry path points at canonical main but edits happened in an issue worktree, pass the same worktree path as both `project_path` and `repo_path`
+- `agenticos_switch(project, repo_path=...)` should be used first so session binding and save/evaluate tools agree on the active checkout
 
 **Policy-aware behavior**:
 - `private_continuity` validates the tracked continuity plan before mutating `state.yaml` or staging files
@@ -516,10 +526,13 @@ Validate that the current branch diff stays within the intended issue scope.
 **Parameters**:
 - `issue_id` (required)
 - `repo_path` (required)
+- `project_path` (optional, but recommended when `repo_path` is a self-hosting checkout or larger worktree)
 - `declared_target_files` (required)
 - `remote_base_branch` (optional, default `origin/main`)
 
 **Returns**: JSON with `PASS` or `BLOCK`
+
+When `project_path` points at the managed project root and `repo_path` is an external issue worktree, runtime review surface paths are resolved relative to the managed project root instead of failing with a comparison-root escape.
 
 ### agenticos_health
 Evaluate whether a canonical checkout and project context are fresh enough to trust before starting work.

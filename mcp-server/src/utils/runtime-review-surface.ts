@@ -1,4 +1,4 @@
-import { basename, join, relative } from 'path';
+import { basename, join, relative, resolve } from 'path';
 import { resolveContextPolicyPlan } from './context-policy-plan.js';
 import { resolveManagedProjectContextPaths } from './project-target.js';
 
@@ -22,6 +22,26 @@ function normalizeRelativePathFromBase(basePath: string, absolutePath: string, t
   return treatAsDirectory && !relativePath.endsWith('/') ? `${relativePath}/` : relativePath;
 }
 
+export function resolveRuntimeReviewComparisonRoot(
+  managedProjectPath: string,
+  repoRoot?: string | null,
+): string {
+  const normalizedProjectPath = resolve(managedProjectPath);
+  if (!repoRoot) {
+    return normalizedProjectPath;
+  }
+
+  const normalizedRepoRoot = resolve(repoRoot);
+  if (
+    normalizedProjectPath === normalizedRepoRoot
+    || normalizedProjectPath.startsWith(`${normalizedRepoRoot}/`)
+  ) {
+    return normalizedRepoRoot;
+  }
+
+  return normalizedProjectPath;
+}
+
 function normalizeCandidatePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '');
 }
@@ -31,7 +51,7 @@ export function resolveRuntimeReviewSurfacePaths(
   projectYaml: any,
   options: ResolveRuntimeReviewSurfaceOptions = {},
 ): RuntimeReviewSurfacePaths {
-  const comparisonRoot = options.repo_root || projectPath;
+  const comparisonRoot = resolveRuntimeReviewComparisonRoot(projectPath, options.repo_root);
   let contextPolicyPlan;
   try {
     contextPolicyPlan = resolveContextPolicyPlan({
