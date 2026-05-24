@@ -126,6 +126,18 @@ describe('cursor-project-rule', () => {
     expect(inspectCursorProjectRule(null, 'AgenticOS', '').status).toBe('missing');
   });
 
+  it('treats managed rules without template_version as stale-managed', () => {
+    const rendered = renderCursorProjectRule('AgenticOS', '');
+    const withoutVersionLine = rendered
+      .replace(/^\s{4}template_version: 1\s*$/m, '')
+      .replace(HASH_MARKER_RE, '');
+    const staleHash = createHash('sha256').update(withoutVersionLine, 'utf-8').digest('hex');
+    const staleManaged = withoutVersionLine.replace('\n---\n', `\n---\n<!-- agenticos-skill-managed-sha256: ${staleHash} -->\n`);
+    const inspection = inspectCursorProjectRule(staleManaged, 'AgenticOS', '');
+    expect(inspection.status).toBe('stale-managed');
+    expect(inspection.detail).toContain('unknown');
+  });
+
   it('detects template drift when managed hash still matches stored body', () => {
     const rendered = renderCursorProjectRule('AgenticOS', 'Self-hosting project');
     expect(inspectCursorProjectRule(rendered, 'Other Project', 'Self-hosting project').status).toBe('modified-user');

@@ -231,7 +231,7 @@ export function inspectCursorProjectRule(
   if (withoutHash === expectedWithoutHash) {
     return {
       status: 'current',
-      installedVersion: installedVersion ?? expectedVersion,
+      installedVersion: expectedVersion,
       expectedVersion,
       detail: `Cursor project rule is current at v${expectedVersion}.`,
     };

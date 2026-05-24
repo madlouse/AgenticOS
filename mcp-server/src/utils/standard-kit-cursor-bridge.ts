@@ -29,8 +29,7 @@ export interface CursorBridgeProjectContext {
 }
 
 function fileContainsAll(content: string | null, needles: string[]): boolean {
-  if (!content) return false;
-  return needles.every((needle) => content.includes(needle));
+  return needles.every((needle) => Boolean(content?.includes(needle)));
 }
 
 export function resolveCursorBridgeProjectContext(

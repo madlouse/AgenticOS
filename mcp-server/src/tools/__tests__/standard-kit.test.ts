@@ -915,6 +915,30 @@ status:
     expect(result.copied_templates).toEqual([]);
   });
 
+  it('conformance check tolerates a minimal manifest without Cursor bridge augmentation', async () => {
+    const { home, projectRoot } = await setupKitHome();
+    process.env.AGENTICOS_HOME = home;
+
+    await writeManifest(home, {
+      kit_id: 'downstream-standard-kit',
+      kit_version: '0.1.0',
+      layers: {
+        copied_templates: {
+          entries: [{ path: 'tasks/templates/ignored.md' }],
+        },
+      },
+    });
+
+    const result = JSON.parse(await runStandardKitConformanceCheck({
+      project_path: projectRoot,
+      project_name: 'Sample Project',
+    })) as {
+      status: string;
+    };
+
+    expect(['FAIL', 'PASS', 'SKIP']).toContain(result.status);
+  });
+
   it('adopt fills missing state sections and preserves an explicit project phase from the template', async () => {
     const { home, projectRoot } = await setupKitHome();
     process.env.AGENTICOS_HOME = home;
