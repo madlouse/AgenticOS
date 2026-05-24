@@ -6,6 +6,7 @@ import {
   isAgentSkillOkForVerify,
   renderAgenticosSkillContent,
   resolveAgentSkillTarget,
+  __testInsertAfterYamlFrontmatter,
 } from '../agent-skill.js';
 
 const HASH_MARKER_RE = /^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/m;
@@ -32,12 +33,52 @@ function createDeps() {
 }
 
 describe('agent skill bootstrap', () => {
-  it('resolves Codex and Claude Code Skill targets', () => {
+  it('resolves Codex, Claude Code, and Cursor Skill targets', () => {
     expect(resolveAgentSkillTarget('codex', '/Users/tester').path)
       .toBe('/Users/tester/.codex/skills/agenticos/SKILL.md');
     expect(resolveAgentSkillTarget('claude-code', '/Users/tester').path)
       .toBe('/Users/tester/.claude/skills/agenticos/SKILL.md');
-    expect(resolveAgentSkillTarget('cursor', '/Users/tester').supported).toBe(false);
+
+    const cursorTarget = resolveAgentSkillTarget('cursor', '/Users/tester');
+    expect(cursorTarget.supported).toBe(true);
+    expect(cursorTarget.path).toBe('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
+    expect(cursorTarget.reloadHint).toMatch(/Cursor/);
+
+    expect(resolveAgentSkillTarget('gemini-cli', '/Users/tester').supported).toBe(false);
+  });
+
+  it('installs and verifies the Cursor managed Skill at ~/.cursor/skills-cursor/agenticos/SKILL.md', () => {
+    const harness = createDeps();
+
+    const result = installAgentSkill('cursor', '/Users/tester', harness.deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.wrote).toBe(true);
+    expect(result.status).toBe('current');
+    expect(harness.dirs).toEqual(['/Users/tester/.cursor/skills-cursor/agenticos']);
+
+    const installedPath = '/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md';
+    const installed = harness.files.get(installedPath);
+    expect(installed).toContain('AgenticOS Activation');
+    expect(installed).toMatch(/^---\n/);
+    expect(installed).toContain('agenticos-skill-managed-sha256');
+    expect(isAgentSkillOkForVerify(inspectAgentSkill('cursor', '/Users/tester', harness.deps.readFile))).toBe(true);
+  });
+
+  it('renders the same canonical Skill content for Codex, Claude Code, and Cursor', () => {
+    const harness = createDeps();
+
+    installAgentSkill('codex', '/Users/tester', harness.deps);
+    installAgentSkill('claude-code', '/Users/tester', harness.deps);
+    installAgentSkill('cursor', '/Users/tester', harness.deps);
+
+    const codex = harness.files.get('/Users/tester/.codex/skills/agenticos/SKILL.md');
+    const claude = harness.files.get('/Users/tester/.claude/skills/agenticos/SKILL.md');
+    const cursor = harness.files.get('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
+
+    expect(codex).toBeDefined();
+    expect(claude).toBe(codex);
+    expect(cursor).toBe(codex);
   });
 
   it('renders a managed Skill with project switch triggers and hash marker', () => {
@@ -180,5 +221,14 @@ metadata:
     expect(result.skipped).toBe(true);
     expect(result.status).toBe('unsupported');
     expect(isAgentSkillOkForVerify(result)).toBe(true);
+  });
+
+  it('rejects invalid YAML frontmatter when inserting managed hash markers', () => {
+    expect(() => __testInsertAfterYamlFrontmatter('no frontmatter', 'x')).toThrow(
+      'AgenticOS Skill template must start with YAML frontmatter',
+    );
+    expect(() => __testInsertAfterYamlFrontmatter('---\nopen\n', 'x')).toThrow(
+      'AgenticOS Skill template is missing a closing YAML frontmatter delimiter',
+    );
   });
 });

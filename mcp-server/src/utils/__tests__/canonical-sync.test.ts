@@ -55,7 +55,7 @@ describe('runCanonicalSync', () => {
   });
 
   it('resolves runtime-managed entries from configured agent context paths', () => {
-    expect(resolveRuntimeManagedEntries(null)).toEqual(['CLAUDE.md', 'AGENTS.md']);
+    expect(resolveRuntimeManagedEntries(null)).toEqual(['CLAUDE.md', 'AGENTS.md', '.cursor/rules/agenticos.mdc']);
     expect(resolveRuntimeManagedEntries({
       agent_context: {
         quick_start: './standards/.context/quick-start.md',
@@ -70,6 +70,7 @@ describe('runCanonicalSync', () => {
       'standards/.context/conversations/',
       'CLAUDE.md',
       'AGENTS.md',
+      '.cursor/rules/agenticos.mdc',
     ]);
     expect(resolveRuntimeManagedEntries({
       agent_context: {
@@ -199,7 +200,7 @@ describe('runCanonicalSync', () => {
     expect(result.status).toBe('PASS');
     expect(result.summary).toContain('no snapshot was needed');
     expect(result.snapshot).toBeUndefined();
-    expect(result.runtime_managed_entries).toEqual(['CLAUDE.md', 'AGENTS.md']);
+    expect(result.runtime_managed_entries).toEqual(['CLAUDE.md', 'AGENTS.md', '.cursor/rules/agenticos.mdc']);
   });
 
   it('succeeds without project_path and uses repo-path fallback metadata', async () => {
@@ -222,7 +223,7 @@ describe('runCanonicalSync', () => {
 
     expect(result.project_path).toBeNull();
     expect(result.status).toBe('PASS');
-    expect(result.runtime_managed_entries).toEqual(['CLAUDE.md', 'AGENTS.md']);
+    expect(result.runtime_managed_entries).toEqual(['CLAUDE.md', 'AGENTS.md', '.cursor/rules/agenticos.mdc']);
     expect(result.summary).toContain('no snapshot was needed');
   });
 

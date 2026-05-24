@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.30] — 2026-05-24
+
+### Added
+- bootstrap/docs: Cursor activation Skill and project-rule parity are now documented alongside Codex and Claude Code, including Homebrew caveats, `agenticos-bootstrap --agent cursor --install-skills`, and the managed project rule at `.cursor/rules/agenticos.mdc` (#480 Phase 3).
+- standard-kit: Cursor project-rule adopt/upgrade/conformance is handled through a dedicated bridge so standard-kit core stays unchanged while still creating and validating `.cursor/rules/agenticos.mdc`.
+
+### Changed
+- bootstrap matrix: Cursor now declares an official `activation_skill` block and updated routing-debug guidance instead of stating Skill install is unsupported.
+- standard-kit manifest: Cursor project rule remains required for adoption/conformance but is generated outside the AGENTS/CLAUDE generated-files loop to avoid mis-rendering adapter content.
+
+## [0.4.29] — 2026-05-24
+
+### Added
+- standard-kit: managed Cursor project rule is now generated at `.cursor/rules/agenticos.mdc` with `alwaysApply: true`, sha256-managed template versioning, and the same canonical guardrail/recording/session-start policy as `AGENTS.md` and `CLAUDE.md` (#480 Phase 2).
+- init: new projects receive the Cursor adapter rule during `agenticos_init`, alongside the existing Claude and Codex adapter surfaces.
+- conformance: standard-kit adapter checks now validate the Cursor adapter surface and required Cursor runtime guidance.
+
+## [0.4.28] — 2026-05-23
+
+### Added
+- bootstrap: managed AgenticOS activation Skill is now installed for Cursor at `~/.cursor/skills-cursor/agenticos/SKILL.md` via the same `--install-skills` / `--force-skills` flow already shipped for Codex and Claude Code. The Skill body is rendered from the single canonical template and sha256-guarded, so Codex, Claude Code, and Cursor share one drift-tracked routing contract (#480 Phase 1, follow-up to #432/#434).
+- bootstrap: `--verify` now reports `OK cursor-skill: Skill state: current ...` for Cursor instead of `SKIP cursor-skill: unsupported`, closing the activation-Skill coverage gap left open when #432 landed for Codex/Claude Code only.
+
 ## [0.4.27] — 2026-05-22
 
 ### Fixed

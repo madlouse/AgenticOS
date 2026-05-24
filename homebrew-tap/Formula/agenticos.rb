@@ -24,7 +24,7 @@ class Agenticos < Formula
     ohai "  export AGENTICOS_HOME=\"#{var}/agenticos\""
     ohai ""
     ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --first-run --auto-configure-hooks"
-    ohai "First-run mode installs AgenticOS activation Skills for Codex/Claude Code when selected."
+    ohai "First-run mode installs AgenticOS activation Skills for Codex, Claude Code, and Cursor when selected."
     ohai "On macOS, first-run mode also enables launchctl persistence for GUI/session inheritance."
     ohai "To audit the current Homebrew/runtime bootstrap state without changes, use: agenticos-config --validate"
     ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --all --install-skills --verify"
@@ -50,7 +50,7 @@ class Agenticos < Formula
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 
            First-run mode registers MCP, persists AGENTICOS_HOME where applicable,
-           and installs the AgenticOS activation Skill for Codex/Claude Code when
+           and installs the AgenticOS activation Skill for Codex, Claude Code, and Cursor when
            those agents are selected. The Skill helps natural-language requests
            such as "switch to 360Teams" or "切换到 360Teams 项目" discover and
            call AgenticOS MCP before filesystem guessing.
@@ -67,6 +67,7 @@ class Agenticos < Formula
          Activation Skill install/update
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --apply
            agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --apply
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --apply
 
            AgenticOS-managed Skill files are updated by content hash. User-modified
            files are not overwritten unless you rerun with --force-skills.
