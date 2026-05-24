@@ -18,6 +18,9 @@ _No unreleased changes._
 ### Changed
 - bootstrap matrix: Gemini CLI now declares an official `activation_skill` block and updated routing-debug guidance instead of stating Skill install is unsupported.
 - docs/Homebrew caveats: Gemini CLI is included in activation-skill install guidance alongside Codex, Claude Code, and Cursor.
+- guardrails: `agenticos_switch` and `agenticos_save` accept optional worktree `repo_path` / `project_path` binding so session git operations stay on the active issue worktree instead of the managed registry checkout (#482).
+- guardrails: `agenticos_pr_scope_check` resolves runtime review comparison roots against external worktrees via managed project fallback (#482).
+- release: Homebrew tap bump is skipped with an explicit workflow notice when `HOMEBREW_TAP_PAT` is unset; source formula sync still runs (#438).
 
 ## [0.4.30] — 2026-05-24
 
