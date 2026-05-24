@@ -33,7 +33,7 @@ function createDeps() {
 }
 
 describe('agent skill bootstrap', () => {
-  it('resolves Codex, Claude Code, and Cursor Skill targets', () => {
+  it('resolves Codex, Claude Code, Cursor, and Gemini CLI Skill targets', () => {
     expect(resolveAgentSkillTarget('codex', '/Users/tester').path)
       .toBe('/Users/tester/.codex/skills/agenticos/SKILL.md');
     expect(resolveAgentSkillTarget('claude-code', '/Users/tester').path)
@@ -44,7 +44,10 @@ describe('agent skill bootstrap', () => {
     expect(cursorTarget.path).toBe('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
     expect(cursorTarget.reloadHint).toMatch(/Cursor/);
 
-    expect(resolveAgentSkillTarget('gemini-cli', '/Users/tester').supported).toBe(false);
+    const geminiTarget = resolveAgentSkillTarget('gemini-cli', '/Users/tester');
+    expect(geminiTarget.supported).toBe(true);
+    expect(geminiTarget.path).toBe('/Users/tester/.gemini/skills/agenticos/SKILL.md');
+    expect(geminiTarget.reloadHint).toMatch(/Gemini CLI/);
   });
 
   it('installs and verifies the Cursor managed Skill at ~/.cursor/skills-cursor/agenticos/SKILL.md', () => {
@@ -65,20 +68,41 @@ describe('agent skill bootstrap', () => {
     expect(isAgentSkillOkForVerify(inspectAgentSkill('cursor', '/Users/tester', harness.deps.readFile))).toBe(true);
   });
 
-  it('renders the same canonical Skill content for Codex, Claude Code, and Cursor', () => {
+  it('installs and verifies the Gemini CLI managed Skill at ~/.gemini/skills/agenticos/SKILL.md', () => {
+    const harness = createDeps();
+
+    const result = installAgentSkill('gemini-cli', '/Users/tester', harness.deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.wrote).toBe(true);
+    expect(result.status).toBe('current');
+    expect(harness.dirs).toEqual(['/Users/tester/.gemini/skills/agenticos']);
+
+    const installedPath = '/Users/tester/.gemini/skills/agenticos/SKILL.md';
+    const installed = harness.files.get(installedPath);
+    expect(installed).toContain('AgenticOS Activation');
+    expect(installed).toMatch(/^---\n/);
+    expect(installed).toContain('agenticos-skill-managed-sha256');
+    expect(isAgentSkillOkForVerify(inspectAgentSkill('gemini-cli', '/Users/tester', harness.deps.readFile))).toBe(true);
+  });
+
+  it('renders the same canonical Skill content for Codex, Claude Code, Cursor, and Gemini CLI', () => {
     const harness = createDeps();
 
     installAgentSkill('codex', '/Users/tester', harness.deps);
     installAgentSkill('claude-code', '/Users/tester', harness.deps);
     installAgentSkill('cursor', '/Users/tester', harness.deps);
+    installAgentSkill('gemini-cli', '/Users/tester', harness.deps);
 
     const codex = harness.files.get('/Users/tester/.codex/skills/agenticos/SKILL.md');
     const claude = harness.files.get('/Users/tester/.claude/skills/agenticos/SKILL.md');
     const cursor = harness.files.get('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
+    const gemini = harness.files.get('/Users/tester/.gemini/skills/agenticos/SKILL.md');
 
     expect(codex).toBeDefined();
     expect(claude).toBe(codex);
     expect(cursor).toBe(codex);
+    expect(gemini).toBe(codex);
   });
 
   it('renders a managed Skill with project switch triggers and hash marker', () => {
@@ -212,15 +236,13 @@ metadata:
     expect(isAgentSkillOkForVerify(inspection)).toBe(false);
   });
 
-  it('skips unsupported agents without failing verification', () => {
+  it('reports missing Gemini CLI Skill as not OK for verify until installed', () => {
     const harness = createDeps();
 
-    const result = installAgentSkill('gemini-cli', '/Users/tester', harness.deps);
+    const inspection = inspectAgentSkill('gemini-cli', '/Users/tester', harness.deps.readFile);
 
-    expect(result.ok).toBe(true);
-    expect(result.skipped).toBe(true);
-    expect(result.status).toBe('unsupported');
-    expect(isAgentSkillOkForVerify(result)).toBe(true);
+    expect(inspection.status).toBe('missing');
+    expect(isAgentSkillOkForVerify(inspection)).toBe(false);
   });
 
   it('rejects invalid YAML frontmatter when inserting managed hash markers', () => {

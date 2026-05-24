@@ -208,7 +208,7 @@ describe('bootstrap cli', () => {
 
     const text = lines.join('\n');
     expect(text).toContain('cursor-skill: install/update /Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
-    expect(text).toContain('gemini-cli-skill: skip');
+    expect(text).toContain('gemini-cli-skill: install/update /Users/tester/.gemini/skills/agenticos/SKILL.md');
     expect(text).toContain('overwrite user-modified managed Skill files');
     expect(text).toContain('hermes-discord: enforce Hermes+Discord');
   });
@@ -437,7 +437,7 @@ describe('bootstrap cli', () => {
     expect(bootstrapState.agenticos_skills[0].path).toBe('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
   });
 
-  it('skips unsupported activation Skill installs without failing apply', () => {
+  it('installs the Gemini CLI activation Skill during apply', () => {
     const harness = createDeps();
 
     const exitCode = runBootstrapCli(
@@ -446,7 +446,14 @@ describe('bootstrap cli', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.stdout.some((line) => line.includes('SKIP gemini-cli-skill'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK gemini-cli-skill'))).toBe(true);
+    const geminiSkill = harness.files.get('/Users/tester/.gemini/skills/agenticos/SKILL.md');
+    expect(geminiSkill).toContain('agenticos-skill-managed-sha256');
+    expect(geminiSkill).toContain('AgenticOS Activation');
+    const bootstrapState = yaml.parse(harness.files.get('/tmp/workspace/.agent-workspace/bootstrap-state.yaml') || '');
+    expect(bootstrapState.agenticos_skills[0].agent_id).toBe('gemini-cli');
+    expect(bootstrapState.agenticos_skills[0].status).toBe('current');
+    expect(bootstrapState.agenticos_skills[0].path).toBe('/Users/tester/.gemini/skills/agenticos/SKILL.md');
   });
 
   it('fails Skill install on user-modified files unless force is requested', () => {
@@ -849,12 +856,26 @@ describe('bootstrap cli', () => {
     expect(cursorAppliedHarness.files.get('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md'))
       .toMatch(/AgenticOS Activation/);
 
-    const unsupportedHarness = createDeps();
+    const geminiAppliedHarness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'gemini-cli', '--install-skills', '--apply'],
+      geminiAppliedHarness.deps,
+    )).toBe(0);
+    geminiAppliedHarness.stdout.length = 0;
     expect(runBootstrapCli(
       ['--workspace', '/tmp/workspace', '--agent', 'gemini-cli', '--install-skills', '--verify'],
-      unsupportedHarness.deps,
+      geminiAppliedHarness.deps,
     )).toBe(0);
-    expect(unsupportedHarness.stdout.some((line) => line.includes('SKIP gemini-cli-skill'))).toBe(true);
+    expect(geminiAppliedHarness.stdout.some((line) => line.includes('OK gemini-cli-skill'))).toBe(true);
+    expect(geminiAppliedHarness.files.get('/Users/tester/.gemini/skills/agenticos/SKILL.md'))
+      .toMatch(/AgenticOS Activation/);
+
+    const missingGeminiHarness = createDeps();
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'gemini-cli', '--install-skills', '--verify'],
+      missingGeminiHarness.deps,
+    )).toBe(1);
+    expect(missingGeminiHarness.stdout.some((line) => line.includes('FAIL gemini-cli-skill'))).toBe(true);
 
     const modifiedHarness = createDeps();
     modifiedHarness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', '# local edit\n');

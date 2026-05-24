@@ -78,9 +78,9 @@ export function resolveAgentSkillTarget(
       return {
         agentId,
         label: 'Gemini CLI AgenticOS activation Skill',
-        supported: false,
-        path: null,
-        reloadHint: 'Gemini CLI Skill installation is not supported by AgenticOS bootstrap yet.',
+        supported: true,
+        path: join(homeDir, '.gemini', 'skills', AGENTICOS_SKILL_NAME, 'SKILL.md'),
+        reloadHint: 'Restart Gemini CLI or run `/skills reload` so the AgenticOS activation Skill is indexed.',
       };
   }
 }

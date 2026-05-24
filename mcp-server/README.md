@@ -20,7 +20,7 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
-It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, and Cursor — so switch/status/pwd prompts route to AgenticOS MCP before filesystem guessing.
+It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, Cursor, and Gemini CLI — so switch/status/pwd prompts route to AgenticOS MCP before filesystem guessing.
 Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 

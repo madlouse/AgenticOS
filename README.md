@@ -112,7 +112,7 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-h
 
 On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
 inherit `AGENTICOS_HOME` across sessions. It installs the AgenticOS activation
-Skill for local-skill-capable agents: Codex, Claude Code, and Cursor.
+Skill for local-skill-capable agents: Codex, Claude Code, Cursor, and Gemini CLI.
 `--auto-configure-hooks` adds the Claude Code PostToolUse hook that reads the
 `agenticos_switch` result from hook stdin and feeds the selected project path
 back into Claude as explicit cwd guidance. The hook cannot mutate a parent
@@ -156,6 +156,12 @@ Install or refresh the Cursor activation Skill with:
 
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --apply
+```
+
+For Gemini CLI, install or refresh the activation Skill with:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --apply
 ```
 
 Managed projects also receive the always-applied project rule at
