@@ -92,17 +92,17 @@ Both must be updated on every release. The local tap is what `brew install` read
 
 ## Required Secrets
 
-For automated Homebrew bumps, the repository needs:
+For automated Homebrew bumps, configure **Settings → Secrets and variables → Actions** on the AgenticOS repository:
 
 | Secret | Purpose |
 |--------|---------|
-| `HOMEBREW_TAP_PAT` | PAT with `repo` scope for `mislav/bump-homebrew-formula-action` to create PRs |
+| `HOMEBREW_TAP_PAT` | Fine-grained or classic PAT with `contents: write` on `madlouse/homebrew-agenticos` (or full `repo` scope) for `mislav/bump-homebrew-formula-action` |
 
-If `HOMEBREW_TAP_PAT` is absent or empty, the release can still create the
-GitHub Release artifact, but the Homebrew tap update will fail and the source
-formula sync step will be skipped. In that case, manually update both formula
-locations to the release artifact URL and SHA256 before considering the release
-complete.
+If `HOMEBREW_TAP_PAT` is absent or empty, the release workflow skips the tap-repo
+bump step with an explicit warning instead of failing on an empty
+`COMMITTER_TOKEN`. The GitHub Release artifact and source-repo formula sync still
+run. Manually update both formula locations (canonical source and local tap) to
+the release artifact URL and SHA256 before considering the release complete.
 
 ## Post-release
 
