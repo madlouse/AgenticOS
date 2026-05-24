@@ -43,7 +43,6 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
         entries: [
           { path: 'AGENTS.md', canonical_source: 'projects/agenticos/mcp-server/src/utils/distill.ts' },
           { path: 'CLAUDE.md', canonical_source: 'projects/agenticos/mcp-server/src/utils/distill.ts' },
-          { path: '.cursor/rules/agenticos.mdc', canonical_source: 'projects/agenticos/mcp-server/src/utils/cursor-project-rule.ts' },
         ],
       },
       copied_templates: {

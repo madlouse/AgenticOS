@@ -6,6 +6,7 @@ import {
   isAgentSkillOkForVerify,
   renderAgenticosSkillContent,
   resolveAgentSkillTarget,
+  __testInsertAfterYamlFrontmatter,
 } from '../agent-skill.js';
 
 const HASH_MARKER_RE = /^<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n?/m;
@@ -220,5 +221,14 @@ metadata:
     expect(result.skipped).toBe(true);
     expect(result.status).toBe('unsupported');
     expect(isAgentSkillOkForVerify(result)).toBe(true);
+  });
+
+  it('rejects invalid YAML frontmatter when inserting managed hash markers', () => {
+    expect(() => __testInsertAfterYamlFrontmatter('no frontmatter', 'x')).toThrow(
+      'AgenticOS Skill template must start with YAML frontmatter',
+    );
+    expect(() => __testInsertAfterYamlFrontmatter('---\nopen\n', 'x')).toThrow(
+      'AgenticOS Skill template is missing a closing YAML frontmatter delimiter',
+    );
   });
 });

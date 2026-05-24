@@ -109,9 +109,16 @@ supported_agents:
           }
         }
       }
+    activation_skill:
+      support: official
+      path: ~/.cursor/skills-cursor/agenticos/SKILL.md
+      install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --apply
+      verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --verify
+      purpose: route project switch/status/pwd prompts through AgenticOS MCP before filesystem guessing
     verification:
       - restart Cursor after saving `~/.cursor/mcp.json`
       - open Cursor MCP settings or run `cursor-agent mcp list` if Cursor CLI is installed
+      - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --verify` when natural-language routing is required
       - confirm `agenticos` appears and can call `agenticos_list`
     transport_debug:
       - if `agenticos` is absent after restart, validate JSON syntax and confirm `agenticos-mcp --version`
@@ -119,8 +126,8 @@ supported_agents:
       - if using `cursor-agent`, compare `cursor-agent mcp list` with the editor view to rule out config-scope confusion
     routing_debug:
       - project-specific `.cursor/mcp.json` exists, but AgenticOS bootstrap should stay user-global by default
-      - AgenticOS activation Skill install is not supported for Cursor in this bootstrap version
-      - if tools appear but intent routing is weak, use explicit `agenticos_*` tool calls and rely on project instructions
+      - if the activation Skill is missing or stale, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --verify`
+      - load the project `.cursor/rules/agenticos.mdc` rule and explicit `agenticos_*` tool calls before treating routing failure as transport failure
   - id: gemini-cli
     label: Gemini CLI
     support_tier: official

@@ -282,3 +282,8 @@ export function cursorProjectRuleUpgradeStatus(
   if (inspection.status === 'current') return 'current';
   return 'stale';
 }
+
+/** @internal Exported for unit tests only. */
+export function __testInsertAfterYamlFrontmatter(content: string, insertion: string): string {
+  return insertAfterYamlFrontmatter(content, insertion);
+}

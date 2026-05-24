@@ -17,10 +17,6 @@ layers:
         canonical_source: projects/agenticos/mcp-server/src/utils/distill.ts
         inheritance: generated
         customizable: limited
-      - path: .cursor/rules/agenticos.mdc
-        canonical_source: projects/agenticos/mcp-server/src/utils/cursor-project-rule.ts
-        inheritance: generated
-        customizable: limited
 
   copied_templates:
     description: Files copied into a downstream project and then edited in-project.

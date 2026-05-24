@@ -23,7 +23,7 @@ Homebrew does **not**:
 - verify activation for you
 
 After installation, set `AGENTICOS_HOME` explicitly, bootstrap one officially supported agent, restart it, and verify the Homebrew/runtime bootstrap state before relying on `agenticos_list`.
-The recommended bootstrap also installs the AgenticOS activation Skill for Codex and Claude Code when selected, which helps route "switch project", `pwd`, and "切换到 ... 项目" prompts through AgenticOS MCP:
+The recommended bootstrap also installs the AgenticOS activation Skill for Codex, Claude Code, and Cursor when selected, which helps route "switch project", `pwd`, and "切换到 ... 项目" prompts through AgenticOS MCP:
 
 ```bash
 # Example default workspace path for a Homebrew-only install
@@ -69,7 +69,7 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verif
 Then confirm the server appears in the tool's MCP diagnostics and verify `agenticos_list` works.
 If you prefer not to edit your shell profile, omit `--first-run` and use the explicit MCP commands above instead.
 On macOS, `--first-run` also enables `launchctl` persistence so GUI/session processes inherit `AGENTICOS_HOME`.
-For Codex and Claude Code, `--first-run` implies `--install-skills`; bootstrap updates AgenticOS-managed Skill files by content hash and refuses to overwrite user-modified files unless you pass `--force-skills`.
+For Codex, Claude Code, and Cursor, `--first-run` implies `--install-skills`; bootstrap updates AgenticOS-managed Skill files by content hash and refuses to overwrite user-modified files unless you pass `--force-skills`.
 For Claude Code PWD guidance after `agenticos_switch`, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply` or include `--auto-configure-hooks` with `--first-run`. The hook reads Claude's PostToolUse stdin payload and feeds the switched project path back into Claude; it does not mutate a parent shell process.
 Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` with the same flags to audit the current machine state without mutating it.
 

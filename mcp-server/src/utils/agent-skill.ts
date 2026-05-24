@@ -306,3 +306,8 @@ function insertAfterYamlFrontmatter(content: string, insertion: string): string 
   const insertionIndex = closingDelimiterIndex + '\n---\n'.length;
   return `${content.slice(0, insertionIndex)}${insertion}${content.slice(insertionIndex)}`;
 }
+
+/** @internal Exported for unit tests only. */
+export function __testInsertAfterYamlFrontmatter(content: string, insertion: string): string {
+  return insertAfterYamlFrontmatter(content, insertion);
+}

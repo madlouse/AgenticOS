@@ -20,7 +20,7 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
-It also installs the AgenticOS activation Skill for local-skill-capable agents, currently Codex and Claude Code, so switch/status/pwd prompts route to AgenticOS MCP before filesystem guessing.
+It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, and Cursor — so switch/status/pwd prompts route to AgenticOS MCP before filesystem guessing.
 Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
@@ -127,12 +127,14 @@ surface:
 
 - Codex: `~/.codex/skills/agenticos/SKILL.md`
 - Claude Code: `~/.claude/skills/agenticos/SKILL.md`
+- Cursor: `~/.cursor/skills-cursor/agenticos/SKILL.md`
 
 Install or update it with:
 
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --apply
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --apply
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --apply
 ```
 
 `--first-run` implies `--install-skills`. Managed Skill files carry a content
@@ -170,13 +172,16 @@ want to replace a local edit.
 ### Cursor
 
 - canonical bootstrap: add `agenticos` with explicit `env.AGENTICOS_HOME` to `~/.cursor/mcp.json`
+- activation Skill: `~/.cursor/skills-cursor/agenticos/SKILL.md`
+- project adapter rule: `.cursor/rules/agenticos.mdc` (`alwaysApply: true`)
 - verify:
   - restart Cursor
   - check Cursor MCP settings or `cursor-agent mcp list` if the Cursor CLI is installed
+  - `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --verify`
   - explicit `agenticos_list`
 - debug split:
   - if `agenticos` never appears after restart, validate the JSON and executable path
-  - if tools appear but project-intent routing is weak, use explicit tools and project instructions
+  - if tools appear but project-intent routing is weak, verify the activation Skill and project rule, then use explicit tools
 
 ### Gemini CLI
 
