@@ -1,109 +1,48 @@
 issue_bootstrap:
-  updated_at: 2026-04-10T08:45:19.949Z
-  latest:
-    issue_id: "260"
-    issue_title: "fix: stop active-project drift and canonical-main runtime
-      persistence pollution"
-    issue_body: Harden runtime reliability so active project alignment does not
-      drift across issue work and canonical main state surfaces do not get
-      dirtied by runtime persistence.
-    labels: []
-    linked_artifacts: []
-    startup_context_paths:
-      - /Users/jeking/dev/AgenticOS/projects/agenticos/.project.yaml
-      - /Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/quick-start.md
-      - /Users/jeking/dev/AgenticOS/projects/agenticos/standards/.context/state.yaml
-      - /Users/jeking/dev/AgenticOS/projects/agenticos/AGENTS.md
-      - /Users/jeking/dev/AgenticOS/projects/agenticos/CLAUDE.md
-    additional_context: []
-    repo_path: /Users/jeking/dev/AgenticOS/worktrees/agenticos-260-stop-active-project-drift-and-main-state-pollution
-    project_path: /Users/jeking/dev/AgenticOS/projects/agenticos
-    current_branch: fix/260-stop-active-project-drift-and-main-state-pollution
-    workspace_type: isolated_worktree
-    stages:
-      context_reset_performed: true
-      project_hot_load_performed: true
-      issue_payload_attached: true
-    recorded_at: 2026-04-10T08:45:19.949Z
+  updated_at: 2026-05-24T14:30:00.000Z
+  latest: null
 working_memory:
   facts:
-    - "PR #329 merged: fix/release-0.4.5 → main, all CI green, 561/561 tests
-      passing"
-    - "Root-Git Exit plan executed: root directory stale product-source files
-      already removed, workspace pointer files (AGENTS.md, CLAUDE.md, README.md)
-      are lightweight redirects, no action needed"
-    - Homebrew tap updated to v0.4.5 in madlouse/homebrew-agenticos, local
-      agenticos 0.4.3 → 0.4.5 upgrade complete
-    - "Issue #302 (release/install parity) is DONE — v0.4.4 and v0.4.5 cover
-      post-0.4.3 continuity and transcript fixes"
-    - "Issue #328 (AGENTICOS_HOME UX) filed as agent-cli-api issue #82 — not an
-      AgenticOS product source issue"
-    - "Root-Git Exit already executed in prior work: .github/, mcp-server/,
-      scripts/, tools/, CHANGELOG.md, CONTRIBUTING.md, ROADMAP.md, LICENSE,
-      .gitignore already deleted from root"
-    - "Project state.yaml refreshed — reflects v0.4.5 release, Root-Git Exit
-      status, #82 filed in agent-cli-api"
-    - quick-start.md updated with accurate post-release status
-    - "All AgenticOS project concerns addressed: Root-Git Exit DONE, v0.4.5
-      shipped, only open issue is #328 which is agent-cli-api territory"
-    - "AgenticOS v0.4.5: shipped, all 561 tests green, Root-Git Exit confirmed
-      complete"
-    - Project state.yaml and quick-start.md refreshed to accurate post-release
-      status
-    - "agent-cli-api issue #82 filed for #328 AGENTICOS_HOME UX with full
-      implementation guidance"
-    - structural-move test 验证通过：1 passed | 31 skipped
-    - "v0.4.5 quick-start.md 已刷新，包含 Root-Git Exit + #82 filed 状态"
-    - 14 项目合规审查结果已汇总
-    - "360teams: 12/13 PASS — adopt standard-kit + 补字段 + transcript phrases"
-    - "qifu-web-opencli: 12/13 PASS — adopt standard-kit + 补字段 + transcript
-      phrases + memory_contract"
-    - "ghostty-optimization: 12/13 PASS — adopt standard-kit + 补字段 + transcript
-      phrases + memory_contract"
-    - 所有 YELLOW 项目的 WIP 占位符已清理
-    - 所有 3 项目均保留 divergent 状态（custom .project.yaml 和 state.yaml 符合项目实际需求）
+    - "v0.4.31 released 2026-05-24: #483 Gemini activation Skill, #482 guardrail worktree binding, #438 HOMEBREW_TAP_PAT release guard."
+    - "PRs #484, #485, #486 merged; GitHub open issues for AgenticOS product repo are zero."
+    - "Local machine: agenticos-mcp 0.4.31 via Homebrew; bootstrap verify OK for Claude, Codex, Cursor, Gemini CLI."
+    - "agenticos-config --validate PASS; AGENTICOS_HOME=/Users/jeking/dev/AgenticOS."
+    - "Homebrew tap madlouse/homebrew-agenticos and source formula synced to v0.4.31."
+    - "Gitee homebrew-services tap removed; brew update clean."
+    - "360teams and qifu-web-opencli dirty git committed locally during 2026-05-24 context refresh."
+    - "agent-cli-api issue #82 (AGENTICOS_HOME UX) is CLOSED."
   decisions:
-    - "Root-Git Exit: no further action needed — plan was already executed
-      before this session"
-    - "Issue #328 AGENTICOS_HOME UX: belongs to agent-cli-api, issue #82 filed
-      there with detailed implementation guidance"
-    - "After v0.4.5 release, the next meaningful work is: (a) v0.5.x planning,
-      or (b) any new backlog items the user wants to prioritize"
-    - This session's state.yaml is being refreshed to reflect the actual
-      post-release status
-    - Keep stale issue_bootstrap (#260 from 2026-04-10) — next bootstrap
-      deferred until a real implementation-affecting issue is started
-    - structural-move preflight test fix 已确认完成（prior session 已应用）
-    - 14 项目合规审查已完成，3 个 RED（目录不存在），5 个 YELLOW（WIP + 缺 standards/knowledge）
-    - 3 个 RED 项目（agentic-devops/okr-management/2025-review）已归档，目录不存在
-    - YELLOW 项目统一用 adopt 工具 + 手动补字段方式处理
-    - 所有 YELLOW 项目的 public_transcript_isolation_contract 行为检查持续
-      FAIL，但文本要求（transcript isolation phrases）均已满足——这是 MCP 工具级问题
+    - "Unified v0.4.31 release grouped #483/#482/#438; changelog consolidated on main before tag."
+    - "Manual Homebrew tap bump used when PAT skip fired; tap repo updated manually for v0.4.31."
+    - "Claude MCP env AGENTICOS_HOME patched in ~/.claude.json because agent_cli_api wrapper rejects -e flag."
+    - "Clear stale issue worktrees after merge; issue_bootstrap reset until next implementation issue."
   pending:
-    - 确认 360teams/qifu-web-opencli/ghostty-optimization 的 Git 提交（项目有 dirty git）
-    - "agent-cli-api #82 等待用户处理"
-    - T5T/dev-report/workforce-analytics 不需要 git，但可选择性补 knowledge/ 和 standards/
+    - "Verify HOMEBREW_TAP_PAT automates tap bump on next release tag."
+    - "360teams and qifu-web-opencli: pull/rebase against origin (both behind remote) if pushing commits."
+    - "Optional: Hermes gateway + Discord routing configuration."
+    - "Product planning: lightweight topic lifecycle (#441 direction) and knowledge distillation ledger."
 session:
-  last_backup: 2026-04-22T07:11:50.602Z
-  id: entry-refresh-2026-04-10
-  started: 2026-04-10T10:58:11.098Z
-  agent: agenticos-entry-refresh
-  last_entry_surface_refresh: 2026-04-22T05:43:35.171Z
+  last_backup: 2026-05-24T14:30:00.000Z
+  id: post-v0.4.31-machine-bootstrap
+  started: 2026-05-24T05:00:00.000Z
+  agent: cursor
+  last_entry_surface_refresh: 2026-05-24T14:30:00.000Z
 current_task:
-  title: 14 项目合规审查 + YELLOW 项目修复
+  title: Post-v0.4.31 machine bootstrap and context refresh
   status: completed
-  updated: 2026-04-22T07:11:01.526Z
-  next_step: Refresh standards/.context/quick-start.md to reflect v0.4.5 completion
+  updated: 2026-05-24T14:30:00.000Z
+  next_step: Intake next issue via agenticos_preflight when new implementation work starts.
 loaded_context:
   - .project.yaml
   - standards/.context/quick-start.md
+  - standards/.context/state.yaml
 entry_surface_refresh:
-  refreshed_at: 2026-04-22T05:43:35.171Z
+  refreshed_at: 2026-05-24T14:30:00.000Z
   issue_id: null
-  summary: "PR #329 merged, all 561 tests green, v0.4.5 released, Root-Git Exit
-    executed, agent-cli-api issue #82 filed for #328 AGENTICOS_HOME UX"
+  summary: "v0.4.31 shipped; machine bootstrap complete; context files refreshed; sibling dirty git committed."
   status: active
-  current_focus: "AgenticOS v0.4.5 shipped. Root-Git Exit completed. #82 filed for
-    AGENTICOS_HOME UX fix in agent-cli-api."
+  current_focus: "No open AgenticOS issues. Runtime and Homebrew aligned at 0.4.31."
   report_paths: []
-  recommended_entry_documents: []
+  recommended_entry_documents:
+    - CHANGELOG.md
+    - standards/knowledge/agenticos-goal-completion-and-hermes-gbrain-matrix-review-2026-05-21.md

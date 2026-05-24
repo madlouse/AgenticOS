@@ -2,34 +2,37 @@
 
 ## Project Overview
 
-Self-hosting AgenticOS product project. Canonical operational context lives under standards/.context while the root .context files remain compatibility shims.
+Self-hosting AgenticOS product project. Canonical operational context lives under `standards/.context` while the root `.context` files remain compatibility shims.
 
 ## Current Status
 
 - **Status**: active
-- **Last Action**: Issue #302 merged — Created issue #302 to track release/install parity after confirming that main already contains post-0.4.3 continuity and transcript fixes while shipped/runtime distribution remains behind.
-- **Current Focus**: Issue #302 is now the active backlog item: ship the next release so installed/runtime AgenticOS catches up with post-0.4.3 continuity and transcript behavior.
-- **Resume Here**: Run issue-bootstrap and release-prep implementation flow for #302 in an isolated worktree.
-- **Refreshed At**: 2026-04-19T03:56:50.359Z
+- **Last Action**: Unified release **v0.4.31** shipped (#483 Gemini activation Skill, #482 guardrail worktree binding, #438 release tap guard). Local machine bootstrap verified (Claude/Codex/Cursor/Gemini MCP + Skills).
+- **Current Focus**: No open GitHub implementation issues. Next work is operator-driven (new issue intake) or product planning (topic lifecycle / knowledge evolution).
+- **Resume Here**: Call `agenticos_status`, read this file and `standards/.context/state.yaml`, then open or create an issue worktree before implementation edits.
+- **Refreshed At**: 2026-05-24T14:30:00Z
 
 ## Key Facts
-- GitHub issue #302 was created on 2026-04-19 for the post-0.4.3 runtime release parity gap.
-- Source main already contains merged PR #270 and PR #278, but releases still stop at v0.4.3 and the Homebrew formula still points to v0.4.2.
-- Targeted continuity/transcript verification passed locally on 2026-04-18 in the source tree.
+
+- **v0.4.31** is the current release: GitHub Release published; Homebrew tap and local install at 0.4.31.
+- Issues **#483**, **#482**, **#438** are closed and merged; AgenticOS repo has **0 open issues**.
+- Machine bootstrap: `agenticos-bootstrap --all --install-skills --verify` passes; `agenticos-config --validate` passes.
+- `HOMEBREW_TAP_PAT` secret exists on GitHub — verify it works on the next tag push so tap bump is fully automated.
+- Sibling projects **360teams** and **qifu-web-opencli** local dirty git was committed in this refresh pass (branches may still be behind origin).
 
 ## Latest Landed Reports
 
-- tasks/issue-302-post-043-runtime-release-parity.md
-- tasks/issue-266-homebrew-runtime-session-local-release.md
-- tasks/issue-266-pr-draft.md
+- CHANGELOG.md — [0.4.31] — 2026-05-24
+- standards/knowledge/agenticos-goal-completion-and-hermes-gbrain-matrix-review-2026-05-21.md
 
 ## Recommended Entry Documents
 
-1. tasks/issue-302-post-043-runtime-release-parity.md
-2. CHANGELOG.md
-3. homebrew-tap/Formula/agenticos.rb
+1. CHANGELOG.md
+2. standards/.context/state.yaml
+3. AGENTS.md / CLAUDE.md (adapter surfaces)
 
 ## Canonical Layers
+
 - Operational state: `standards/.context/state.yaml`
 - Session history: `standards/.context/conversations/`
 - Durable knowledge: `knowledge/`
