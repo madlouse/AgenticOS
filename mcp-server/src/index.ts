@@ -61,6 +61,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           project: { type: 'string', description: 'Project ID or name' },
+          repo_path: { type: 'string', description: 'Optional absolute checkout path (e.g. issue worktree) to bind the session to instead of the registry path.' },
         },
         required: ['project'],
       },
@@ -276,6 +277,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           project: { type: 'string', description: 'Optional project ID, name, or path. If omitted, uses the current session project.' },
+          project_path: { type: 'string', description: 'Optional absolute project checkout path for continuity resolution. Use the issue worktree when saving from an isolated worktree.' },
+          repo_path: { type: 'string', description: 'Optional absolute git checkout path for commit/push operations. Use the issue worktree when the git root differs from the registry project path.' },
           message: { type: 'string', description: 'Optional commit message' },
         },
       },

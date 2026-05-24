@@ -403,6 +403,9 @@ async function readProjectKindForList(projectName: string, projectPath: string):
 
 export async function switchProject(args: any): Promise<string> {
   const { project } = args;
+  const explicitRepoPath = typeof args.repo_path === 'string' && args.repo_path.trim().length > 0
+    ? args.repo_path.trim()
+    : null;
   const registry = await loadRegistry();
 
   const found = registry.projects.find(
@@ -413,14 +416,31 @@ export async function switchProject(args: any): Promise<string> {
     return `❌ Project "${project}" not found.\n\nAvailable projects:\n${registry.projects.map((p) => `- ${p.name} (${p.id})`).join('\n')}`;
   }
 
+  const sessionPath = explicitRepoPath || found.path;
+  if (explicitRepoPath) {
+    const explicitProjectYamlPath = join(explicitRepoPath, '.project.yaml');
+    try {
+      const explicitProjectYaml = yaml.parse(await readFile(explicitProjectYamlPath, 'utf-8')) || {};
+      const explicitProjectId = explicitProjectYaml?.meta?.id;
+      if (!explicitProjectId) {
+        return `❌ Project "${found.name}" cannot be bound to repo_path because ${explicitProjectYamlPath} is missing meta.id.`;
+      }
+      if (explicitProjectId !== found.id) {
+        return `❌ Project "${found.name}" cannot be bound to repo_path because ${explicitProjectYamlPath} meta.id "${explicitProjectId}" does not match registry id "${found.id}".`;
+      }
+    } catch {
+      return `❌ Project "${found.name}" cannot be bound to repo_path because ${explicitProjectYamlPath} is missing or unreadable.`;
+    }
+  }
+
   // Validate the project path before loading context or binding the MCP session.
   // A stale registry entry should not produce a successful switch.
-  const pwdResult = await alignPwd(found.path);
+  const pwdResult = await alignPwd(sessionPath);
   if (!pwdResult.success) {
     return [
       `❌ Project "${found.name}" cannot be switched because its registered path is not usable.`,
       '',
-      `Path: ${JSON.stringify(found.path)}`,
+      `Path: ${JSON.stringify(sessionPath)}`,
       `Reason: ${stripPwdWarningPrefix(pwdResult.warning)}`,
       'Recovery: repair or re-register the project path, then run agenticos_switch again.',
     ].join('\n');
@@ -428,7 +448,7 @@ export async function switchProject(args: any): Promise<string> {
 
   let projectYaml: any = {};
   try {
-    projectYaml = yaml.parse(await readFile(join(found.path, '.project.yaml'), 'utf-8')) || {};
+    projectYaml = yaml.parse(await readFile(join(sessionPath, '.project.yaml'), 'utf-8')) || {};
   } catch {}
 
   if (isArchivedReferenceProject(projectYaml, found.status)) {
@@ -452,11 +472,11 @@ export async function switchProject(args: any): Promise<string> {
   bindSessionProject({
     projectId: found.id,
     projectName: found.name,
-    projectPath: found.path,
+    projectPath: sessionPath,
   });
 
   // Check if entry surface writes are allowed in this checkout
-  const writeProtection = await detectCanonicalMainWriteProtection(found.path);
+  const writeProtection = await detectCanonicalMainWriteProtection(sessionPath);
   const bootstrapNotes: string[] = [];
   try {
     await patchProjectMetadata(found.id, {
@@ -465,15 +485,15 @@ export async function switchProject(args: any): Promise<string> {
   } catch (error: any) {
     bootstrapNotes.push(`⚠️ Session bound, but registry metadata was not updated: ${error.message}`);
   }
-  const claudeMdPath = join(found.path, 'CLAUDE.md');
-  const agentsMdPath = join(found.path, 'AGENTS.md');
+  const claudeMdPath = join(sessionPath, 'CLAUDE.md');
+  const agentsMdPath = join(sessionPath, 'AGENTS.md');
 
   let description = '';
   let state: any = undefined;
   let displayState: any = undefined;
   let quickStart = '';
   description = projectYaml?.meta?.description || '';
-  const contextPaths = resolveManagedProjectContextPaths(found.path, projectYaml);
+  const contextPaths = resolveManagedProjectContextPaths(sessionPath, projectYaml);
   const contextDisplayPaths = resolveManagedProjectContextDisplayPaths(projectYaml);
   try {
     state = yaml.parse(await readFile(contextPaths.statePath, 'utf-8'));
@@ -494,7 +514,7 @@ export async function switchProject(args: any): Promise<string> {
   try {
     const contextPolicyPlan = resolveContextPolicyPlan({
       projectName: found.name,
-      projectPath: found.path,
+      projectPath: sessionPath,
       projectYaml,
     });
     transcriptRoutingSummary = buildConversationRoutingStatusLines(
@@ -547,14 +567,14 @@ export async function switchProject(args: any): Promise<string> {
   // because adoptStandardKit preserves user modifications to copied templates
   if (!writeProtection.blocked) {
     try {
-      const upgradeCheck = await checkStandardKitUpgrade({ project_path: found.path });
+      const upgradeCheck = await checkStandardKitUpgrade({ project_path: sessionPath });
       const hasIssues =
         (upgradeCheck.missing_required_files.length > 0) ||
         (upgradeCheck.generated_files.some(f => f.status === 'stale')) ||
         (upgradeCheck.copied_templates.some(t => t.status === 'missing'));
 
       if (hasIssues) {
-        const adoptResult = await adoptStandardKit({ project_path: found.path });
+        const adoptResult = await adoptStandardKit({ project_path: sessionPath });
         const summaryParts: string[] = [];
         if (adoptResult.upgraded_generated_files.length > 0) {
           summaryParts.push(`upgraded: ${adoptResult.upgraded_generated_files.join(', ')}`);
@@ -575,7 +595,7 @@ export async function switchProject(args: any): Promise<string> {
   const committedSnapshotAssessment = assessVersionedEntrySurfaceState({
     projectYaml,
     state,
-    projectPath: found.path,
+    projectPath: sessionPath,
   });
   const committedSnapshotSummary = buildCommittedSnapshotSummaryLines(committedSnapshotAssessment);
   const guardrailSummary = buildGuardrailSummaryLines(
@@ -586,8 +606,8 @@ export async function switchProject(args: any): Promise<string> {
   const bootstrapContinuity = latestSwitchBootstrap
     ? await assessIssueBootstrapContinuity({
         bootstrap: latestSwitchBootstrap,
-        currentRepoPath: found.path,
-        projectPath: found.path,
+        currentRepoPath: sessionPath,
+        projectPath: sessionPath,
       })
     : undefined;
   const issueBootstrapSummary = buildIssueBootstrapSummaryLines({
@@ -601,9 +621,9 @@ export async function switchProject(args: any): Promise<string> {
     lastRecorded: found.last_recorded,
     committedSnapshotAssessment,
   });
-  const filesystemAlignmentSummary = buildFilesystemAlignmentLines(found.path, pwdResult);
+  const filesystemAlignmentSummary = buildFilesystemAlignmentLines(sessionPath, pwdResult);
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${found.path}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${found.path}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function listProjects(): Promise<string> {

@@ -49,8 +49,9 @@ vi.mock('child_process', () => ({
   exec: vi.fn(),
 }));
 
-import { saveState } from '../save.js';
+import { saveState, validateGitBackedContinuityRepoBinding, extractGitHubRepoFromRemoteOrigin, resolveDeclaredSourceRepoRoots } from '../save.js';
 import * as fsPromises from 'fs/promises';
+import * as fs from 'fs';
 import * as registry from '../../utils/registry.js';
 import * as childProcess from 'child_process';
 import { updateClaudeMdState } from '../../utils/distill.js';
@@ -66,6 +67,7 @@ const registryMock = registry as typeof registry & { loadRegistry: ReturnType<ty
 const childProcessMock = childProcess as typeof childProcess & { exec: ReturnType<typeof vi.fn> };
 const updateClaudeMdStateMock = updateClaudeMdState as unknown as ReturnType<typeof vi.fn>;
 const detectCanonicalMainWriteProtectionMock = detectCanonicalMainWriteProtection as unknown as ReturnType<typeof vi.fn>;
+const fsMock = fs as typeof fs & { existsSync: ReturnType<typeof vi.fn> };
 
 function buildRegistry(overrides: Record<string, unknown> = {}) {
   return {
@@ -157,6 +159,7 @@ describe('saveState', () => {
     });
     yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
     updateClaudeMdStateMock.mockResolvedValue({ updated: true, created: false });
+    fsMock.existsSync.mockReturnValue(false);
     mockProjectFiles();
   });
 
@@ -1392,5 +1395,671 @@ describe('saveState', () => {
 
     expect(result).not.toContain('blocked');
     expect(result).toContain('State saved locally');
+  });
+
+  it('uses repo_path for canonical-main guard and git binding when registry path differs', async () => {
+    const worktreePath = '/repo/worktrees/issue-482';
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: false,
+      git_worktree_root: worktreePath,
+      current_branch: 'fix/482-guardrail-resolver-gaps',
+      workspace_type: 'isolated_worktree',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/repo/projects/test-project',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    }));
+    mockProjectFiles();
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, `${worktreePath}\n`, ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/repo/.git\n', ''); return; }
+      if (cmd.includes('worktree list')) {
+        cb(null, `${worktreePath} (isolated)`, '');
+        return;
+      }
+      if (cmd.includes('remote get-url')) { cb(null, 'https://github.com/test/project.git\n', ''); return; }
+      if (cmd.includes('add -A')) { cb(null, '', ''); return; }
+      if (cmd.includes('commit')) { cb(null, '', ''); return; }
+      if (cmd.includes('push')) { cb(new Error('push failed'), '', 'push failed'); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    await bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/projects/test-project',
+    });
+
+    const result = await saveState({
+      project: 'test-project',
+      repo_path: worktreePath,
+      project_path: worktreePath,
+      message: 'save from isolated worktree',
+    });
+
+    expect(detectCanonicalMainWriteProtection).toHaveBeenCalledWith(worktreePath);
+    expect(result).not.toContain('blocked');
+    expect(result).toContain('State saved locally');
+  });
+
+  it('ignores blank project_path and repo_path overrides', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles();
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        cb(new Error('not a git repo'), '', '');
+      },
+    );
+
+    const result = await saveState({
+      message: 'blank overrides',
+      project_path: '   ',
+      repo_path: '',
+    });
+
+    expect(detectCanonicalMainWriteProtection).toHaveBeenCalledWith('/test/path');
+    expect(result).not.toContain('blocked');
+    expect(result).toMatch(/State saved/);
+  });
+
+  it('reports full git-backed restore sync when private_continuity push succeeds', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' push')) {
+          cb(null, '', '');
+          return;
+        }
+        cb(null, '', '');
+      },
+    );
+
+    const result = await saveState({ message: 'synced continuity save' });
+
+    expect(result).toContain('Pushed to remote');
+    expect(result).toContain('Recovery: full tracked continuity synced for Git-backed restore');
+  });
+
+  it('reports distilled restore sync when public_distilled push succeeds', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' push')) {
+          cb(null, '', '');
+          return;
+        }
+        cb(null, '', '');
+      },
+    );
+
+    const result = await saveState({ message: 'public synced save' });
+
+    expect(result).toContain('Recovery: distilled continuity synced for Git-backed restore');
+  });
+
+  it('reports pending remote sync for public_distilled when push fails after commit', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: {
+          source_repo_roots: ['.'],
+        },
+      },
+      state: { session: {} },
+    });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, '/test/path\n', '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(null, '', '');
+          return;
+        }
+        if (cmd.includes(' push')) {
+          cb(new Error('push failed'), '', '');
+          return;
+        }
+        cb(null, '', '');
+      },
+    );
+
+    const result = await saveState({ message: 'public pending sync save' });
+
+    expect(result).toContain('distilled continuity committed locally; remote sync is still pending');
+  });
+
+  it('returns resolver errors when project_path override cannot be resolved', async () => {
+    const result = await saveState({
+      project: 'missing-project',
+      project_path: '/missing/worktree',
+      message: 'resolver failure',
+    });
+
+    expect(result).toContain('❌');
+  });
+
+  it('uses project_path alone for git binding when repo_path is omitted', async () => {
+    const worktreePath = '/repo/worktrees/issue-482-only-project-path';
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: false,
+      git_worktree_root: worktreePath,
+      current_branch: 'fix/482-guardrail-resolver-gaps',
+      workspace_type: 'isolated_worktree',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/repo/projects/test-project',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    }));
+    mockProjectFiles();
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, `${worktreePath}\n`, ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/repo/.git\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(null, 'https://github.com/test/project.git\n', ''); return; }
+      if (cmd.includes('add -A')) { cb(null, '', ''); return; }
+      if (cmd.includes('commit')) { cb(new Error('nothing to commit'), '', 'nothing to commit'); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    await saveState({
+      project: 'test-project',
+      project_path: worktreePath,
+      message: 'project_path binding only',
+    });
+
+    expect(detectCanonicalMainWriteProtection).toHaveBeenCalledWith(worktreePath);
+  });
+
+  it('blocks save on gitBindingPath when canonical-main guard triggers', async () => {
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: true,
+      reason: 'canonical main checkout is not a supported runtime workspace',
+      git_worktree_root: '/repo',
+      current_branch: 'main',
+      workspace_type: 'main',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+
+    const result = await saveState({
+      project: 'test-project',
+      repo_path: '/repo/projects/test-project',
+      message: 'blocked on binding path',
+    });
+
+    expect(result).toContain('agenticos_save blocked');
+    expect(detectCanonicalMainWriteProtection).toHaveBeenCalledWith('/repo/projects/test-project');
+  });
+
+  it('returns context policy errors before mutating state', async () => {
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: false,
+      git_worktree_root: '/test/path',
+      current_branch: 'fix/test',
+      workspace_type: 'isolated_worktree',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: {
+          id: 'test-project',
+          name: 'Test Project',
+        },
+        source_control: {
+          topology: 'local_directory_only',
+          context_publication_policy: 'not-a-real-policy',
+        },
+      },
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/repo/.git\n', ''); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({
+      project: 'test-project',
+      message: 'context policy failure',
+    });
+
+    expect(result).toMatch(/^❌/);
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('blocks save when github_versioned project omits execution.source_repo_roots', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+      },
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({ message: 'missing source roots' });
+
+    expect(result).toContain('missing execution.source_repo_roots');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('blocks save when public_distilled routing targets raw conversations in tracked paths', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'public_distilled',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+        agent_context: { conversations: '.private/conversations/' },
+      },
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(null, 'https://github.com/example/test-project.git\n', ''); return; }
+      cb(null, '', '');
+    });
+
+    const result = await saveState({ message: 'misconfigured routing' });
+
+    expect(result).toContain('public transcript routing is misconfigured');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('reports github repo mismatch using https remote origin URLs', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/expected-repo',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(null, 'https://github.com/example/actual-repo.git\n', ''); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({ message: 'remote mismatch' });
+
+    expect(result).toContain('does not match declared source_control.github_repo');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('reports github repo mismatch using ssh:// remote origin URLs', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/expected-repo',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(null, 'ssh://git@github.com/example/actual-repo.git\n', ''); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({ message: 'ssh remote mismatch' });
+
+    expect(result).toContain('does not match declared source_control.github_repo');
+  });
+
+  it('reports github repo mismatch when remote get-url fails', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(new Error('no origin'), '', 'fatal: No such remote'); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({ message: 'missing remote' });
+
+    expect(result).toContain('does not match declared source_control.github_repo');
+  });
+
+  it('stages AGENTS.md when it exists for private_continuity projects', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    fsMock.existsSync.mockImplementation((path: string) => path === '/test/path/AGENTS.md');
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      state: { session: {} },
+    });
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      commands.push(cmd);
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(null, 'git@github.com:example/test-project.git\n', ''); return; }
+      if (cmd.includes(' add -A')) { cb(null, '', ''); return; }
+      if (cmd.includes('commit')) { cb(new Error('nothing to commit'), '', 'nothing to commit'); return; }
+      cb(null, '', '');
+    });
+
+    const result = await saveState({ message: 'stage agents guidance' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(result).toMatch(/State saved/);
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('"AGENTS.md"');
+  });
+
+  it('returns partial save when tracked continuity paths escape git worktree root', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [{
+        id: 'test-project',
+        name: 'Test Project',
+        path: '/repo/projects/app',
+        status: 'active' as const,
+        created: '2025-01-01',
+        last_accessed: '2025-01-01T00:00:00.000Z',
+      }],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/projects/app',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === '/repo/projects/app/.project.yaml') {
+        return JSON.stringify({
+          meta: { id: 'test-project', name: 'Test Project' },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'private_continuity',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: { source_repo_roots: ['/repo'] },
+        });
+      }
+      if (path === '/repo/projects/app/.context/state.yaml') {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/other/worktree\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/repo/.git\n', ''); return; }
+      if (cmd.includes('remote get-url')) { cb(null, 'git@github.com:example/test-project.git\n', ''); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({ message: 'escape path' });
+
+    expect(result).toContain('Partial save completed');
+    expect(result).toContain('Path escapes git worktree root');
+  });
+
+  it('blocks save on gitBindingPath when canonical-main guard omits reason', async () => {
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({
+      blocked: true,
+      git_worktree_root: '/repo',
+      current_branch: 'main',
+      workspace_type: 'main',
+    });
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+
+    const result = await saveState({
+      project: 'test-project',
+      repo_path: '/repo/projects/test-project',
+      message: 'blocked on binding path',
+    });
+
+    expect(result).toContain('agenticos_save blocked');
+    expect(result).toContain('/repo');
+  });
+});
+
+describe('save repo binding helpers', () => {
+  it('resolveDeclaredSourceRepoRoots returns empty when source_repo_roots is not an array', () => {
+    expect(resolveDeclaredSourceRepoRoots('/test/path', {
+      execution: { source_repo_roots: 'invalid' as unknown as string[] },
+    })).toEqual([]);
+  });
+
+  it('extractGitHubRepoFromRemoteOrigin returns null for unrecognized remotes', () => {
+    expect(extractGitHubRepoFromRemoteOrigin('https://gitlab.com/example/repo.git')).toBeNull();
+  });
+
+  it('validateGitBackedContinuityRepoBinding reports missing source_repo_roots', async () => {
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'Test Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: { github_repo: 'example/test-project' },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons).toContain('Project "Test Project" is marked github_versioned but missing execution.source_repo_roots.');
+  });
+
+  it('validateGitBackedContinuityRepoBinding skips github_repo comparison when repo is undeclared', async () => {
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'Test Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons).toEqual([]);
+  });
+
+  it('validateGitBackedContinuityRepoBinding reports remote lookup failures', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(Object.assign(new Error('missing remote'), { stderr: 'fatal: No such remote' }), '', 'fatal: No such remote');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'Test Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: { github_repo: 'example/test-project' },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons.join('\n')).toContain('fatal: No such remote');
+  });
+
+  it('validateGitBackedContinuityRepoBinding uses stdout and message fallbacks for remote lookup failures', async () => {
+    const cases = [
+      Object.assign(new Error('remote failed'), { stdout: 'origin missing from stdout' }),
+      Object.assign(new Error('remote failed'), { message: 'origin missing from message' }),
+      new Error(''),
+    ];
+
+    for (const error of cases) {
+      childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+        if (cmd.includes('remote get-url')) {
+          cb(error, '', '');
+          return;
+        }
+        cb(new Error('Unexpected command: ' + cmd), '', '');
+      });
+
+      const reasons = await validateGitBackedContinuityRepoBinding({
+        projectName: 'Test Project',
+        policy: 'private_continuity',
+        projectPath: '/test/path',
+        projectYaml: {
+          source_control: { github_repo: 'example/test-project' },
+          execution: { source_repo_roots: ['.'] },
+        },
+        gitWorktreeRoot: '/test/path',
+        gitCommonRepoRoot: '/test/path',
+      });
+
+      expect(reasons.length).toBeGreaterThan(0);
+    }
   });
 });

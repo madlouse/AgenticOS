@@ -72,7 +72,7 @@ function toGitRelativePath(gitWorktreeRoot: string, absolutePath: string, option
   return options?.directory && !relativePath.endsWith('/') ? `${relativePath}/` : relativePath;
 }
 
-function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: ProjectYamlSchema): string[] {
+export function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml: ProjectYamlSchema): string[] {
   if (!Array.isArray(projectYaml?.execution?.source_repo_roots)) {
     return [];
   }
@@ -90,7 +90,7 @@ function normalizeGitHubRepo(value: string): string {
   return value.trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '').toLowerCase();
 }
 
-function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
+export function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
@@ -114,7 +114,7 @@ function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
   return null;
 }
 
-async function validateGitBackedContinuityRepoBinding(args: {
+export async function validateGitBackedContinuityRepoBinding(args: {
   projectName: string;
   policy: 'private_continuity' | 'public_distilled' | 'local_private';
   projectPath: string;
@@ -174,15 +174,22 @@ async function hasTrackedPublicTranscriptDiffs(gitRoot: string, trackedConversat
   return stdout.trim().length > 0;
 }
 
+function normalizeOptionalPath(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
 export async function saveState(args: any): Promise<string> {
   const now = new Date();
   const timestamp = now.toISOString().replace('T', ' ').substring(0, 16);
   const { message } = args;
   const commitMessage = message || `Auto-save [${timestamp}]`;
+  const explicitProjectPath = normalizeOptionalPath(args.project_path);
+  const explicitRepoPath = normalizeOptionalPath(args.repo_path);
   let resolved;
   try {
     resolved = await resolveManagedProjectTarget({
       project: args.project,
+      projectPath: explicitProjectPath || explicitRepoPath || undefined,
       commandName: 'agenticos_save',
     });
   } catch (error: any) {
@@ -190,9 +197,10 @@ export async function saveState(args: any): Promise<string> {
   }
 
   const { project, projectPath, projectYaml, statePath } = resolved;
+  const gitBindingPath = explicitRepoPath || explicitProjectPath || projectPath;
 
   // Canonical-main guard: block save on canonical main checkouts to protect the trusted baseline
-  const writeProtection = await detectCanonicalMainWriteProtection(projectPath);
+  const writeProtection = await detectCanonicalMainWriteProtection(gitBindingPath);
   if (writeProtection.blocked) {
     return `❌ agenticos_save blocked for "${project.name}" — git persistence is not allowed on the canonical main checkout.\n\n` +
       `Canonical main checkout: ${writeProtection.reason ?? writeProtection.git_worktree_root}\n` +
@@ -203,8 +211,8 @@ export async function saveState(args: any): Promise<string> {
   }
 
   try {
-    // Find git root from the project path (works regardless of AGENTICOS_HOME)
-    const gitIdentity = await findGitIdentity(projectPath);
+    // Find git root from the binding path (worktree-aware when repo_path/project_path is supplied)
+    const gitIdentity = await findGitIdentity(gitBindingPath);
     const gitWorktreeRoot = gitIdentity?.worktreeRoot || null;
     const gitCommonRepoRoot = gitIdentity?.commonRepoRoot || null;
 
