@@ -50,11 +50,11 @@ describe('assessVersionedEntrySurfaceState', () => {
     ]);
   });
 
-  it('marks github-versioned state unproven when no explicit refresh metadata exists', () => {
+  it('marks git-versioned state unproven when no explicit refresh metadata exists', () => {
     const result = assessVersionedEntrySurfaceState({
       projectYaml: {
         source_control: {
-          topology: 'github_versioned',
+          topology: 'git_versioned',
         },
       },
       state: {},

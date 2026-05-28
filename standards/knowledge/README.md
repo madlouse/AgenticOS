@@ -34,7 +34,8 @@ Files without explicit frontmatter are implicitly LIVE unless the filename or co
 | `standalone-product-repo-extraction-runbook-2026-04-07.md` | LIVE | Runbook for converting agenticos into a standalone product repository |
 | `workspace-migration-runbook-2026-04-07.md` | LIVE | Transitional workspace migration runbook (historical; superseded by final model) |
 | `local-project-source-inclusion-policy-2026-04-07.md` | LIVE | Policy for when project source should stay inside Git-backed canonical tree |
-| `project-topology-decision-rubric-2026-04-07.md` | LIVE | Decision rubric for choosing github_versioned vs local_directory_only topology |
+| `project-topology-decision-rubric-2026-04-07.md` | LIVE | Historical decision rubric for choosing github_versioned vs local_directory_only topology |
+| `git-backed-development-workflow-standard-2026-05-28.md` | LIVE | Host-neutral Git-backed development standard for GitHub, GitLab, Gitee, and generic Git |
 | `sibling-project-normalization-policy-2026-04-06.md` | LIVE | Policy for normalizing status of sibling project roots and helper trees |
 
 ---

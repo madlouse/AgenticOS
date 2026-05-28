@@ -1,9 +1,14 @@
 import { resolve, sep } from 'path';
+import {
+  normalizeRepositorySlug,
+  type GitRepositoryContract,
+} from './project-contract.js';
 
 interface ValidateGuardrailRepoIdentityArgs {
   projectId: string;
   projectYamlPath: string;
   declaredGithubRepo?: string | null;
+  declaredRepository?: GitRepositoryContract | null;
   declaredSourceRepoRoots: string[];
   sourceRepoRootsDeclared: boolean;
   expectedWorktreeRoot?: string | null;
@@ -29,31 +34,85 @@ function pathIsWithinDeclaredRoot(candidatePath: string, declaredRoot: string): 
   return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}${sep}`);
 }
 
-function normalizeGitHubRepo(value: string): string {
-  return value.trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '').toLowerCase();
+function legacyGithubRepository(githubRepo: string): GitRepositoryContract {
+  return {
+    provider: 'github',
+    remote: 'origin',
+    slug: normalizeRepositorySlug(githubRepo),
+    default_base_branch: null,
+    review_system: 'pull_request',
+  };
 }
 
-function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
+function hostForProvider(provider: GitRepositoryContract['provider']): string | null {
+  if (provider === 'github') return 'github.com';
+  if (provider === 'gitlab') return 'gitlab.com';
+  if (provider === 'gitee') return 'gitee.com';
+  return null;
+}
+
+export function extractRepositorySlugFromRemoteOrigin(value: string, provider: GitRepositoryContract['provider']): string | null {
+  const host = hostForProvider(provider);
+  if (!host) {
+    return null;
+  }
+
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
   }
+  const escapedHost = host.replace(/\./g, '\\.');
 
-  const sshMatch = trimmed.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i);
+  const sshMatch = trimmed.match(new RegExp(`^[^@\\s]+@${escapedHost}:(.+?)(?:\\.git)?$`, 'i'));
   if (sshMatch) {
-    return normalizeGitHubRepo(sshMatch[1]);
+    return normalizeRepositorySlug(sshMatch[1]);
   }
 
-  const httpsMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i);
+  const httpsMatch = trimmed.match(new RegExp(`^https?://${escapedHost}/(.+?)(?:\\.git)?$`, 'i'));
   if (httpsMatch) {
-    return normalizeGitHubRepo(httpsMatch[1]);
+    return normalizeRepositorySlug(httpsMatch[1]);
   }
 
-  const sshUrlMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i);
+  const sshUrlMatch = trimmed.match(new RegExp(`^ssh://[^@\\s]+@${escapedHost}/(.+?)(?:\\.git)?$`, 'i'));
   if (sshUrlMatch) {
-    return normalizeGitHubRepo(sshUrlMatch[1]);
+    return normalizeRepositorySlug(sshUrlMatch[1]);
   }
 
+  return null;
+}
+
+function repositoryMismatchMessage(args: {
+  projectId: string;
+  gitRemoteOrigin?: string | null;
+  declaredGithubRepo?: string | null;
+  repository: GitRepositoryContract;
+}): string {
+  if (args.declaredGithubRepo) {
+    return `git remote origin "${args.gitRemoteOrigin || 'missing'}" does not match declared source_control.github_repo "${args.declaredGithubRepo}" for target project "${args.projectId}"`;
+  }
+  return `git remote origin "${args.gitRemoteOrigin || 'missing'}" does not match declared source_control.repository ${args.repository.provider}:${args.repository.slug || '(no slug)'} for target project "${args.projectId}"`;
+}
+
+function validateRepositoryRemote(args: {
+  projectId: string;
+  declaredGithubRepo?: string | null;
+  repository: GitRepositoryContract | null;
+  gitRemoteOrigin?: string | null;
+}): string | null {
+  const { repository } = args;
+  if (!repository || repository.provider === 'generic') {
+    return null;
+  }
+  const expectedSlug = repository.slug ? normalizeRepositorySlug(repository.slug) : null;
+  const actualSlug = extractRepositorySlugFromRemoteOrigin(args.gitRemoteOrigin || '', repository.provider);
+  if (!expectedSlug || actualSlug !== expectedSlug) {
+    return repositoryMismatchMessage({
+      projectId: args.projectId,
+      declaredGithubRepo: args.declaredGithubRepo,
+      repository,
+      gitRemoteOrigin: args.gitRemoteOrigin,
+    });
+  }
   return null;
 }
 
@@ -62,6 +121,7 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
     projectId,
     projectYamlPath,
     declaredGithubRepo,
+    declaredRepository,
     declaredSourceRepoRoots,
     sourceRepoRootsDeclared,
     expectedWorktreeRoot,
@@ -86,18 +146,21 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
     ? implicitWorktreeRoot
     : undefined;
   const commonRepoMatch = normalizedDeclaredRoots.find((root) => pathIsWithinDeclaredRoot(gitCommonRepoRoot, root));
+  const repository = declaredRepository || (declaredGithubRepo ? legacyGithubRepository(declaredGithubRepo) : null);
   if (commonRepoMatch) {
-    if (declaredGithubRepo) {
-      const expectedRepo = normalizeGitHubRepo(declaredGithubRepo);
-      const actualRepo = extractGitHubRepoFromRemoteOrigin(gitRemoteOrigin || '');
-      if (actualRepo !== expectedRepo) {
-        return {
-          ok: false,
-          matchedBy: null,
-          matchedDeclaredRoot: null,
-          message: `git remote origin "${gitRemoteOrigin || 'missing'}" does not match declared source_control.github_repo "${declaredGithubRepo}" for target project "${projectId}"`,
-        };
-      }
+    const remoteMismatch = validateRepositoryRemote({
+      projectId,
+      declaredGithubRepo,
+      repository,
+      gitRemoteOrigin,
+    });
+    if (remoteMismatch) {
+      return {
+        ok: false,
+        matchedBy: null,
+        matchedDeclaredRoot: null,
+        message: remoteMismatch,
+      };
     }
     return {
       ok: true,
@@ -107,15 +170,19 @@ export function validateGuardrailRepoIdentity(args: ValidateGuardrailRepoIdentit
     };
   }
 
-  if (declaredWorktreeMatch && declaredGithubRepo) {
-    const expectedRepo = normalizeGitHubRepo(declaredGithubRepo);
-    const actualRepo = extractGitHubRepoFromRemoteOrigin(gitRemoteOrigin || '');
-    if (actualRepo !== expectedRepo) {
+  if (declaredWorktreeMatch) {
+    const remoteMismatch = validateRepositoryRemote({
+      projectId,
+      declaredGithubRepo,
+      repository,
+      gitRemoteOrigin,
+    });
+    if (remoteMismatch) {
       return {
         ok: false,
         matchedBy: null,
         matchedDeclaredRoot: null,
-        message: `git remote origin "${gitRemoteOrigin || 'missing'}" does not match declared source_control.github_repo "${declaredGithubRepo}" for target project "${projectId}"`,
+        message: remoteMismatch,
       };
     }
   }

@@ -370,36 +370,39 @@ Create new project with standard structure.
 
 **Parameters**:
 - `name` (required) - Project name
-- `topology` (required) - `local_directory_only` or `github_versioned`
-- `context_publication_policy` (required for `github_versioned`, optional for `local_directory_only`) - `local_private`, `private_continuity`, or `public_distilled`
+- `topology` (required) - `local_directory_only`, `git_versioned`, or legacy-compatible `github_versioned`
+- `context_publication_policy` (required for Git-backed projects, optional for `local_directory_only`) - `local_private`, `private_continuity`, or `public_distilled`
 - `description` (optional) - What this project is about
 - `path` (optional) - Custom location (otherwise uses $AGENTICOS_HOME/projects/{id})
-- `github_repo` (required when `topology=github_versioned`) - `OWNER/REPO`
+- `repository` (required when `topology=git_versioned` unless the legacy `github_repo` shorthand is supplied) - object with `provider`, `remote`, `slug`, optional `default_base_branch`, and `review_system`
+- `github_repo` (legacy shorthand; required only when `topology=github_versioned`) - `OWNER/REPO`
 - `normalize_existing` (optional) - Normalize an existing project directory into the required contract instead of only creating a new one
 
 **Returns**: Project created confirmation with path and ID
 
 **Topology rubric**:
 - choose `local_directory_only` for ongoing local work, knowledge evolution, weekly writing, and private operating material
-- choose `github_versioned` for reusable capabilities that should evolve through issue/PR/release flow
+- choose `git_versioned` for reusable Git-backed capabilities that should evolve through issue branch, PR/MR/review, CI, merge, and cleanup flow across GitHub, GitLab, Gitee, or generic Git
+- keep `github_versioned` for existing installed GitHub projects until an explicit normalization flow rewrites metadata
 - if the boundary is unclear, require explicit confirmation instead of guessing
 
 **Context publication rubric**:
 - `local_directory_only` projects default to `context_publication_policy=local_private`
-- `github_versioned + private_continuity` means full AI continuity surfaces may live in the repo because the repo is private
-- `github_versioned + public_distilled` means distilled context may ship, but raw session history and other non-publishable runtime surfaces must be isolated from the public source tree
+- `git_versioned + private_continuity` means full AI continuity surfaces may live in the repo because the repo is private
+- `git_versioned + public_distilled` means distilled context may ship, but raw session history and other non-publishable runtime surfaces must be isolated from the public source tree
 
 **Current recovery contract**:
 - `local_private`: Git is not the continuity recovery mechanism; `agenticos_save` keeps the existing narrow runtime-managed backup behavior
 - `private_continuity`: `agenticos_save` stages the tracked continuity core for Git-backed recovery, including `.project.yaml`, quick-start, state, conversations, `knowledge/`, `tasks/`, and mirrored guidance such as `CLAUDE.md` / `AGENTS.md` when present and repo-local
 - `public_distilled`: `agenticos_save` stages a distilled tracked continuity core for Git-backed recovery (`.project.yaml`, quick-start, state, `knowledge/`, `tasks/`, and mirrored guidance when present), while raw transcripts route to `.private/conversations/`
 
-Publication policy is not the same as workflow topology or canonical source inclusion. A project can be `github_versioned` and still require `public_distilled`.
+Publication policy is not the same as workflow topology or canonical source inclusion. A project can be `git_versioned` and still require `public_distilled`.
 
 **Upgrade path**:
 - a project may start as `local_directory_only`
-- later, re-run `agenticos_init` with `normalize_existing=true`, `topology=github_versioned`, `context_publication_policy=private_continuity|public_distilled`, and `github_repo=OWNER/REPO`
+- later, re-run `agenticos_init` with `normalize_existing=true`, `topology=git_versioned`, `context_publication_policy=private_continuity|public_distilled`, and `repository={provider, slug}` or the legacy `github_repo=OWNER/REPO` shorthand
 - only do that when the project has clearly become a reusable capability surface
+- existing `github_versioned`, `github_repo`, and `github_flow` metadata remains readable and operational; AgenticOS does not silently rewrite it during switch/status/preflight
 
 ### agenticos_switch
 Switch to existing project and load context.
@@ -546,7 +549,7 @@ Evaluate whether a canonical checkout and project context are fresh enough to tr
 
 **Returns**: JSON with overall `PASS`, `WARN`, or `BLOCK`
 
-For `github_versioned` projects, the health result also distinguishes stale
+For Git-backed projects, the health result also distinguishes stale
 committed entry-surface state from canonical checkout runtime drift.
 When `repo_path` is inside a managed repo or its derived project-scoped
 worktree root, `agenticos_health` resolves the effective project automatically

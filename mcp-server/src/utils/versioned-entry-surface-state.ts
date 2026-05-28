@@ -1,4 +1,5 @@
 import { resolve } from 'path';
+import { isGitBackedTopology } from './project-contract.js';
 
 export type VersionedEntrySurfaceFreshness = 'fresh' | 'stale' | 'unproven' | 'not_applicable';
 
@@ -52,12 +53,12 @@ export function assessVersionedEntrySurfaceState(args: {
     issue_bootstrap_repo_path: issueBootstrapRepoPath,
   };
 
-  if (topology !== 'github_versioned') {
+  if (!isGitBackedTopology(topology)) {
     return {
       applies: false,
       freshness: 'not_applicable',
       status: 'PASS',
-      summary: 'Committed versioned snapshot freshness is only evaluated for github_versioned projects.',
+      summary: 'Committed versioned snapshot freshness is only evaluated for git-backed projects.',
       reasons: [],
       details,
     };

@@ -6,10 +6,17 @@ meta:
   description: "Project description"
 
 source_control:
-  topology: "local_directory_only"  # local_directory_only for local work/knowledge; github_versioned for reusable capability surfaces
-  context_publication_policy: "local_private"  # local_private for local_directory_only; private_continuity or public_distilled for github_versioned
-  # github_repo: "OWNER/REPO"       # Required when topology is github_versioned
-  # branch_strategy: "github_flow"  # Required when topology is github_versioned
+  topology: "local_directory_only"  # local_directory_only for local work/knowledge; git_versioned for GitHub/GitLab/Gitee/generic Git projects
+  context_publication_policy: "local_private"  # local_private for local_directory_only; private_continuity or public_distilled for git_versioned
+  # repository:                    # Required when topology is git_versioned
+  #   provider: "github"           # github/gitlab/gitee/generic
+  #   remote: "origin"
+  #   slug: "OWNER/REPO"           # Optional only for provider=generic
+  #   default_base_branch: "origin/main"
+  #   review_system: "pull_request" # pull_request/merge_request/none
+  # branch_strategy: "issue_branch_review_merge"
+  # github_repo: "OWNER/REPO"      # Legacy compatibility only when topology is github_versioned
+  # branch_strategy: "github_flow" # Legacy compatibility alias for github_versioned projects
 
 agent_context:
   quick_start: ".context/quick-start.md"
@@ -35,7 +42,7 @@ status:
 
 execution:
   source_repo_roots:
-    - "."  # Only required for github_versioned projects. Relative to the managed project root.
+    - "."  # Required for git_versioned and legacy github_versioned projects. Relative to the managed project root.
 
 archive_import_policy:
   active_source_allowlist: []

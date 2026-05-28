@@ -72,6 +72,12 @@ The contract distinguishes:
 - project orientation vs raw session history
 - topology/source inclusion vs publication visibility
 
+For Git-backed projects, the canonical topology is `git_versioned` with
+`source_control.repository.provider` set to `github`, `gitlab`, `gitee`, or
+`generic`. Existing `github_versioned` / `github_repo` / `github_flow`
+projects remain readable for installed machines, but downstream upgrades
+should only rewrite them during an explicit normalization flow.
+
 `.project.yaml` also carries the canonical context publication policy field:
 
 - `local_private`

@@ -46,9 +46,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           description: { type: 'string', description: 'Project description' },
           path: { type: 'string', description: 'Optional custom path (otherwise uses $AGENTICOS_HOME/projects/{id})' },
           project_kind: { type: 'string', enum: ['topic', 'project'], description: 'Optional AgenticOS routing kind. Defaults to project; use topic for durable non-repo topics.' },
-          topology: { type: 'string', enum: ['local_directory_only', 'github_versioned'], description: 'Required source-control topology for the project.' },
-          context_publication_policy: { type: 'string', enum: ['local_private', 'private_continuity', 'public_distilled'], description: 'Context publication policy. local_directory_only projects use local_private; github_versioned projects must choose private_continuity or public_distilled.' },
-          github_repo: { type: 'string', description: 'Required when topology is github_versioned. Use OWNER/REPO.' },
+          topology: { type: 'string', enum: ['local_directory_only', 'git_versioned', 'github_versioned'], description: 'Required source-control topology. Use git_versioned for GitHub/GitLab/Gitee/generic Git; github_versioned is legacy-compatible.' },
+          context_publication_policy: { type: 'string', enum: ['local_private', 'private_continuity', 'public_distilled'], description: 'Context publication policy. local_directory_only projects use local_private; Git-backed projects must choose private_continuity or public_distilled.' },
+          repository: {
+            type: 'object',
+            description: 'Required when topology is git_versioned unless github_repo shorthand is supplied.',
+            properties: {
+              provider: { type: 'string', enum: ['github', 'gitlab', 'gitee', 'generic'] },
+              remote: { type: 'string', description: 'Git remote name. Defaults to origin.' },
+              slug: { type: 'string', description: 'Slash-delimited repository path such as OWNER/REPO. Optional for provider=generic.' },
+              default_base_branch: { type: 'string', description: 'Optional remote base ref such as origin/main.' },
+              review_system: { type: 'string', enum: ['pull_request', 'merge_request', 'none'] },
+            },
+          },
+          github_repo: { type: 'string', description: 'Legacy GitHub shorthand. Required only when topology is github_versioned. Use OWNER/REPO.' },
           normalize_existing: { type: 'boolean', description: 'When true, normalize an existing project directory/registry entry instead of failing closed.' },
         },
         required: ['name', 'topology'],
@@ -88,9 +99,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           description: { type: 'string', description: 'Optional description used only when creating a new project.' },
           path: { type: 'string', description: 'Optional absolute path used only when creating a new project, or checked against an existing project.' },
           project_kind: { type: 'string', enum: ['topic', 'project'], description: 'Optional internal routing kind. Defaults to project; external surfaces still say project.' },
-          topology: { type: 'string', enum: ['local_directory_only', 'github_versioned'], description: 'Optional source-control topology. Defaults to local_directory_only.' },
+          topology: { type: 'string', enum: ['local_directory_only', 'git_versioned', 'github_versioned'], description: 'Optional source-control topology. Defaults to local_directory_only.' },
           context_publication_policy: { type: 'string', enum: ['local_private', 'private_continuity', 'public_distilled'], description: 'Optional context publication policy. Defaults to local_private for local_directory_only.' },
-          github_repo: { type: 'string', description: 'Required when creating a github_versioned project. Use OWNER/REPO.' },
+          repository: {
+            type: 'object',
+            description: 'Git repository metadata for git_versioned projects.',
+            properties: {
+              provider: { type: 'string', enum: ['github', 'gitlab', 'gitee', 'generic'] },
+              remote: { type: 'string' },
+              slug: { type: 'string' },
+              default_base_branch: { type: 'string' },
+              review_system: { type: 'string', enum: ['pull_request', 'merge_request', 'none'] },
+            },
+          },
+          github_repo: { type: 'string', description: 'Legacy GitHub shorthand. Required when creating a github_versioned project. Use OWNER/REPO.' },
         },
         required: ['project'],
       },
@@ -310,7 +332,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
+          issue_id: { type: 'string', description: 'Git issue, task, or review identifier for the current task' },
           task_type: {
             type: 'string',
             enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bugfix', 'bootstrap'],
@@ -347,7 +369,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current edit.' },
+          issue_id: { type: 'string', description: 'Git issue, task, or review identifier for the current edit.' },
           task_type: {
             type: 'string',
             enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bugfix', 'bootstrap'],
@@ -370,7 +392,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task.' },
+          issue_id: { type: 'string', description: 'Git issue, task, or review identifier for the current task.' },
           issue_title: { type: 'string', description: 'Current issue title.' },
           issue_body: { type: 'string', description: 'Current issue body or synthesized summary.' },
           labels: { type: 'array', items: { type: 'string' }, description: 'Optional issue labels.' },
@@ -402,7 +424,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
+          issue_id: { type: 'string', description: 'Git issue, task, or review identifier for the current task' },
           branch_type: { type: 'string', description: 'Branch prefix such as feat, fix, or chore' },
           slug: { type: 'string', description: 'Short task slug used to derive branch and worktree names' },
           repo_path: { type: 'string', description: 'Absolute repository path where the branch should be created' },
@@ -419,7 +441,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          issue_id: { type: 'string', description: 'GitHub issue number or identifier for the current task' },
+          issue_id: { type: 'string', description: 'Git issue, task, or review identifier for the current task' },
           repo_path: { type: 'string', description: 'Absolute repository or worktree path to evaluate' },
           project_path: { type: 'string', description: 'Optional managed project root when repo_path is a larger checkout or worktree.' },
           remote_base_branch: { type: 'string', description: 'Remote base branch to compare against (default: origin/main)' },
@@ -598,7 +620,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_enforce_git_policy',
-      description: 'Enforce Git policy on a PR/MR: CI passing, not draft, minimum approvals. Works with GitHub (gh) and GitLab (glab).',
+      description: 'Enforce Git policy on a PR/MR: CI passing, not draft, minimum approvals. Supports GitHub and GitLab.',
       inputSchema: {
         type: 'object',
         properties: {

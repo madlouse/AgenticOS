@@ -158,10 +158,11 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
       if (result.target_project) {
         const gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
         const repoIdentity = validateGuardrailRepoIdentity({
-          projectId: result.target_project.id,
-          projectYamlPath: result.target_project.project_yaml_path,
-          declaredGithubRepo: projectResolution.targetProject?.githubRepo || null,
-          declaredSourceRepoRoots: result.target_project.declared_source_repo_roots,
+	          projectId: result.target_project.id,
+	          projectYamlPath: result.target_project.project_yaml_path,
+	          declaredGithubRepo: projectResolution.targetProject?.githubRepo || null,
+	          declaredRepository: projectResolution.targetProject?.repository || null,
+	          declaredSourceRepoRoots: result.target_project.declared_source_repo_roots,
           sourceRepoRootsDeclared: result.target_project.declared_source_repo_roots.length > 0,
           expectedWorktreeRoot: projectResolution.targetProject?.expectedWorktreeRoot || null,
           gitWorktreeRoot,

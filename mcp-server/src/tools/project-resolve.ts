@@ -5,11 +5,18 @@ import { initProject } from './init.js';
 import { loadRegistry, type Project, type Registry } from '../utils/registry.js';
 import {
   buildArchivedReferenceMessage,
+  defaultReviewSystemForProvider,
   isArchivedReferenceProject,
+  isValidGitRepositoryProvider,
+  isValidGitReviewSystem,
+  normalizeRepositorySlug,
+  resolveSourceControlRepository,
   validateContextPublicationPolicy,
   validateManagedProjectTopology,
   validateProjectKind,
   type ContextPublicationPolicy,
+  type GitRepositoryContract,
+  type GitRepositoryProvider,
   type ProjectKind,
   type ProjectTopology,
 } from '../utils/project-contract.js';
@@ -50,6 +57,7 @@ interface ProjectEnsureArgs {
   topology?: unknown;
   context_publication_policy?: unknown;
   github_repo?: unknown;
+  repository?: unknown;
 }
 
 interface ProjectPayload {
@@ -59,6 +67,7 @@ interface ProjectPayload {
   name: string;
   project_kind: ProjectKind;
   topology: ProjectTopology;
+  repository: GitRepositoryContract | null;
   context_publication_policy: ContextPublicationPolicy;
   path: string;
   explicit_workdir: string;
@@ -155,8 +164,8 @@ function normalizeTopology(value: unknown): ProjectTopology {
     return 'local_directory_only';
   }
   const topology = normalizeRequiredString(value, 'topology');
-  if (topology !== 'local_directory_only' && topology !== 'github_versioned') {
-    throw new ProjectResolveError('INVALID_INPUT', 'topology must be "local_directory_only" or "github_versioned".');
+  if (topology !== 'local_directory_only' && topology !== 'github_versioned' && topology !== 'git_versioned') {
+    throw new ProjectResolveError('INVALID_INPUT', 'topology must be "local_directory_only", "git_versioned", or legacy "github_versioned".');
   }
   return topology;
 }
@@ -175,9 +184,64 @@ function normalizePublicationPolicy(topology: ProjectTopology, value: unknown): 
 
   const policy = normalizeRequiredString(value, 'context_publication_policy');
   if (policy !== 'private_continuity' && policy !== 'public_distilled') {
-    throw new ProjectResolveError('INVALID_INPUT', 'context_publication_policy must be "private_continuity" or "public_distilled" when topology is "github_versioned".');
+    throw new ProjectResolveError('INVALID_INPUT', `context_publication_policy must be "private_continuity" or "public_distilled" when topology is "${topology}".`);
   }
   return policy;
+}
+
+function isValidRepositorySlug(value: string): boolean {
+  return /^[^/\s]+(?:\/[^/\s]+)+$/.test(value);
+}
+
+function normalizeRepositoryArg(topology: ProjectTopology, rawRepository: unknown, githubRepo?: string): GitRepositoryContract | undefined {
+  if (topology === 'local_directory_only') {
+    return undefined;
+  }
+  if (topology === 'github_versioned') {
+    return githubRepo
+      ? {
+          provider: 'github',
+          remote: 'origin',
+          slug: normalizeRepositorySlug(githubRepo),
+          default_base_branch: null,
+          review_system: 'pull_request',
+        }
+      : undefined;
+  }
+  if (!rawRepository && githubRepo) {
+    return {
+      provider: 'github',
+      remote: 'origin',
+      slug: normalizeRepositorySlug(githubRepo),
+      default_base_branch: null,
+      review_system: 'pull_request',
+    };
+  }
+  if (!rawRepository || typeof rawRepository !== 'object') {
+    throw new ProjectResolveError('INVALID_INPUT', 'repository is required when topology is "git_versioned".');
+  }
+  const repository = rawRepository as Record<string, unknown>;
+  const providerValue = normalizeRequiredString(repository.provider, 'repository.provider').toLowerCase();
+  if (!isValidGitRepositoryProvider(providerValue)) {
+    throw new ProjectResolveError('INVALID_INPUT', 'repository.provider must be "github", "gitlab", "gitee", or "generic".');
+  }
+  const provider = providerValue as GitRepositoryProvider;
+  const slugValue = normalizeOptionalString(repository.slug, 'repository.slug');
+  if (provider !== 'generic' && (!slugValue || !isValidRepositorySlug(slugValue))) {
+    throw new ProjectResolveError('INVALID_INPUT', 'repository.slug must use a slash-delimited repository path when provider is not "generic".');
+  }
+  const remote = normalizeOptionalString(repository.remote, 'repository.remote') || 'origin';
+  const reviewSystemValue = normalizeOptionalString(repository.review_system, 'repository.review_system');
+  const reviewSystem = isValidGitReviewSystem(reviewSystemValue)
+    ? reviewSystemValue
+    : defaultReviewSystemForProvider(provider);
+  return {
+    provider,
+    remote,
+    slug: slugValue ? normalizeRepositorySlug(slugValue) : null,
+    default_base_branch: normalizeOptionalString(repository.default_base_branch, 'repository.default_base_branch') || null,
+    review_system: reviewSystem,
+  };
 }
 
 function validateNewProjectName(name: string): void {
@@ -293,6 +357,7 @@ async function buildProjectPayload(args: {
     name: project.name,
     project_kind: projectKindValidation.project_kind,
     topology: topologyValidation.topology,
+    repository: resolveSourceControlRepository(projectYaml.source_control),
     context_publication_policy: policyValidation.policy,
     path: project.path,
     explicit_workdir: project.path,
@@ -374,6 +439,7 @@ export async function runProjectEnsure(args: ProjectEnsureArgs = {}): Promise<st
     const contextPublicationPolicy = normalizePublicationPolicy(topology, args.context_publication_policy);
     const projectKind = normalizeProjectKind(args.project_kind);
     const githubRepo = normalizeOptionalString(args.github_repo, 'github_repo');
+    const repository = normalizeRepositoryArg(topology, args.repository, githubRepo);
 
     await initProject({
       name,
@@ -383,6 +449,7 @@ export async function runProjectEnsure(args: ProjectEnsureArgs = {}): Promise<st
       context_publication_policy: contextPublicationPolicy,
       project_kind: projectKind,
       ...(githubRepo ? { github_repo: githubRepo } : {}),
+      ...(repository ? { repository } : {}),
     });
 
     const created = await resolveProjectPayload(requestedPath || name, 'CREATED', true);

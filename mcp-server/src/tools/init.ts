@@ -4,13 +4,32 @@ import yaml from 'yaml';
 import { loadRegistry, patchRegistry, getAgenticOSHome } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd } from '../utils/distill.js';
 import { renderCursorProjectRule, CURSOR_PROJECT_RULE_RELATIVE_PATH } from '../utils/cursor-project-rule.js';
-import { buildProjectTopologyInitializationMessage, hasDeclaredContextPublicationPolicy, validateContextPublicationPolicy, validateProjectKind, type ContextPublicationPolicy, type ProjectKind, type ProjectTopology } from '../utils/project-contract.js';
+import {
+  buildProjectTopologyInitializationMessage,
+  defaultReviewSystemForProvider,
+  hasDeclaredContextPublicationPolicy,
+  isGitBackedTopology,
+  isValidGitRepositoryProvider,
+  isValidGitReviewSystem,
+  normalizeRepositorySlug,
+  validateContextPublicationPolicy,
+  validateProjectKind,
+  type ContextPublicationPolicy,
+  type GitRepositoryContract,
+  type GitRepositoryProvider,
+  type ProjectKind,
+  type ProjectTopology,
+} from '../utils/project-contract.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from '../utils/agent-context-paths.js';
 import { ensureCaseKnowledgeDirectories } from '../utils/case-knowledge.js';
 import { validatePathSecurity } from '../utils/session-context.js';
 
 function isValidGithubRepo(value: string): boolean {
   return /^[^/\s]+\/[^/\s]+$/.test(value);
+}
+
+function isValidRepositorySlug(value: string): boolean {
+  return /^[^/\s]+(?:\/[^/\s]+)+$/.test(value);
 }
 
 function resolveContextPublicationPolicy(
@@ -33,13 +52,69 @@ function resolveContextPublicationPolicy(
   }
 
   if (resolvedPolicy !== 'private_continuity' && resolvedPolicy !== 'public_distilled') {
-    throw new Error('context_publication_policy is required when topology is "github_versioned" and must be "private_continuity" or "public_distilled".');
+    throw new Error(`context_publication_policy is required when topology is "${topology}" and must be "private_continuity" or "public_distilled".`);
   }
 
   return resolvedPolicy;
 }
 
-function resolveTopologyArgs(args: any): { topology: ProjectTopology; rawContextPublicationPolicy?: string; githubRepo?: string; normalizeExisting: boolean } {
+function resolveRepositoryArg(topology: ProjectTopology, args: any, githubRepo?: string): GitRepositoryContract | undefined {
+  if (topology === 'github_versioned') {
+    return {
+      provider: 'github',
+      remote: 'origin',
+      slug: normalizeRepositorySlug(githubRepo!),
+      default_base_branch: null,
+      review_system: 'pull_request',
+    };
+  }
+
+  const rawRepository = args.repository && typeof args.repository === 'object'
+    ? args.repository
+    : null;
+  if (!rawRepository && githubRepo) {
+    return {
+      provider: 'github',
+      remote: 'origin',
+      slug: normalizeRepositorySlug(githubRepo),
+      default_base_branch: null,
+      review_system: 'pull_request',
+    };
+  }
+  if (!rawRepository) {
+    throw new Error('repository is required when topology is "git_versioned". Pass repository={provider, slug} or the legacy github_repo shorthand for GitHub projects.');
+  }
+
+  const providerValue = typeof rawRepository.provider === 'string' ? rawRepository.provider.trim().toLowerCase() : '';
+  if (!isValidGitRepositoryProvider(providerValue)) {
+    throw new Error('repository.provider must be "github", "gitlab", "gitee", or "generic" when topology is "git_versioned".');
+  }
+  const provider = providerValue as GitRepositoryProvider;
+  const slugValue = typeof rawRepository.slug === 'string' ? rawRepository.slug.trim() : '';
+  if (provider !== 'generic' && !isValidRepositorySlug(slugValue)) {
+    throw new Error('repository.slug must use a slash-delimited repository path such as "OWNER/REPO" when provider is not "generic".');
+  }
+  const remoteValue = typeof rawRepository.remote === 'string' && rawRepository.remote.trim().length > 0
+    ? rawRepository.remote.trim()
+    : 'origin';
+  const reviewSystemValue = typeof rawRepository.review_system === 'string' ? rawRepository.review_system.trim() : '';
+  const reviewSystem = isValidGitReviewSystem(reviewSystemValue)
+    ? reviewSystemValue
+    : defaultReviewSystemForProvider(provider);
+  const defaultBaseBranch = typeof rawRepository.default_base_branch === 'string' && rawRepository.default_base_branch.trim().length > 0
+    ? rawRepository.default_base_branch.trim()
+    : null;
+
+  return {
+    provider,
+    remote: remoteValue,
+    slug: slugValue ? normalizeRepositorySlug(slugValue) : null,
+    default_base_branch: defaultBaseBranch,
+    review_system: reviewSystem,
+  };
+}
+
+function resolveTopologyArgs(args: any): { topology: ProjectTopology; rawContextPublicationPolicy?: string; githubRepo?: string; repository?: GitRepositoryContract; normalizeExisting: boolean } {
   const topology = typeof args.topology === 'string' ? args.topology.trim() : '';
   const githubRepo = typeof args.github_repo === 'string' ? args.github_repo.trim() : '';
   const normalizeExisting = args.normalize_existing === true;
@@ -47,8 +122,8 @@ function resolveTopologyArgs(args: any): { topology: ProjectTopology; rawContext
     ? args.context_publication_policy
     : undefined;
 
-  if (topology !== 'local_directory_only' && topology !== 'github_versioned') {
-    throw new Error('topology is required and must be "local_directory_only" or "github_versioned".');
+  if (topology !== 'local_directory_only' && topology !== 'github_versioned' && topology !== 'git_versioned') {
+    throw new Error('topology is required and must be "local_directory_only", "git_versioned", or legacy "github_versioned".');
   }
 
   if (topology === 'github_versioned') {
@@ -58,7 +133,17 @@ function resolveTopologyArgs(args: any): { topology: ProjectTopology; rawContext
     if (!isValidGithubRepo(githubRepo)) {
       throw new Error('github_repo must use the form "OWNER/REPO".');
     }
-    return { topology, rawContextPublicationPolicy, githubRepo, normalizeExisting };
+    return { topology, rawContextPublicationPolicy, githubRepo, repository: resolveRepositoryArg(topology, args, githubRepo), normalizeExisting };
+  }
+
+  if (topology === 'git_versioned') {
+    return {
+      topology,
+      rawContextPublicationPolicy,
+      githubRepo: githubRepo || undefined,
+      repository: resolveRepositoryArg(topology, args, githubRepo),
+      normalizeExisting,
+    };
   }
 
   return {
@@ -128,10 +213,20 @@ function buildProjectYaml(args: {
   contextPublicationPolicy: ContextPublicationPolicy;
   projectKind: ProjectKind;
   githubRepo?: string;
+  repository?: GitRepositoryContract;
 }): any {
-  const { name, id, description, existingProjectYaml = {}, topology, contextPublicationPolicy, projectKind, githubRepo } = args;
+  const { name, id, description, existingProjectYaml = {}, topology, contextPublicationPolicy, projectKind, githubRepo, repository } = args;
   const today = new Date().toISOString().split('T')[0];
   const meta = existingProjectYaml?.meta || {};
+  const repositoryYaml = repository
+    ? {
+        provider: repository.provider,
+        remote: repository.remote,
+        ...(repository.slug ? { slug: repository.slug } : {}),
+        ...(repository.default_base_branch ? { default_base_branch: repository.default_base_branch } : {}),
+        review_system: repository.review_system,
+      }
+    : undefined;
   const merged: any = {
     ...existingProjectYaml,
     meta: {
@@ -155,6 +250,12 @@ function buildProjectYaml(args: {
             branch_strategy: 'github_flow',
           }
         : {}),
+      ...(topology === 'git_versioned'
+        ? {
+            repository: repositoryYaml,
+            branch_strategy: 'issue_branch_review_merge',
+          }
+        : {}),
     },
     agent_context: {
       quick_start: existingProjectYaml?.agent_context?.quick_start || '.context/quick-start.md',
@@ -166,7 +267,7 @@ function buildProjectYaml(args: {
     },
   };
 
-  if (topology === 'github_versioned') {
+  if (isGitBackedTopology(topology)) {
     merged.execution = {
       ...(existingProjectYaml?.execution || {}),
       source_repo_roots: ['.'],
@@ -182,7 +283,7 @@ function buildProjectYaml(args: {
 export async function initProject(args: any): Promise<string> {
   const { name, path: customPath } = args;
   const description = typeof args.description === 'string' ? args.description : undefined;
-  const { topology, rawContextPublicationPolicy, githubRepo, normalizeExisting } = resolveTopologyArgs(args);
+  const { topology, rawContextPublicationPolicy, githubRepo, repository, normalizeExisting } = resolveTopologyArgs(args);
   const id = name.toLowerCase().replace(/\s+/g, '-');
 
   const projectPath = customPath || join(getAgenticOSHome(), 'projects', id);
@@ -252,6 +353,7 @@ export async function initProject(args: any): Promise<string> {
     contextPublicationPolicy,
     projectKind,
     githubRepo,
+    repository,
   });
   await mkdir(projectPath, { recursive: true });
   await writeFile(join(projectPath, '.project.yaml'), yaml.stringify(projectYaml), 'utf-8');
@@ -327,7 +429,9 @@ ${description ?? existingProjectYaml?.meta?.description ?? ''}
 
   const topologyLine = topology === 'github_versioned'
     ? `Topology: github_versioned (${githubRepo}, github_flow)`
-    : 'Topology: local_directory_only';
+    : topology === 'git_versioned'
+      ? `Topology: git_versioned (${repository?.provider}${repository?.slug ? `:${repository.slug}` : ''}, issue_branch_review_merge)`
+      : 'Topology: local_directory_only';
   const publicationLine = `Context Publication: ${contextPublicationPolicy}`;
   const projectKindLine = `Project Kind: ${projectKind}`;
   const prefix = pathExists ? 'Normalized' : 'Created';

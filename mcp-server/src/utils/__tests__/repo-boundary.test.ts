@@ -526,6 +526,21 @@ describe('resolveGuardrailProjectTarget', () => {
     expect(result.resolutionErrors[0]).toContain('target project could not be resolved from repo_path or session binding');
   });
 
+  it('returns a repo_path resolution error when repo_path cannot be normalized', async () => {
+    loadRegistryMock.mockResolvedValue({
+      active_project: null,
+      projects: [],
+    });
+
+    const result = await resolveGuardrailProjectTarget({
+      commandName: 'agenticos_preflight',
+      repoPath: 42 as unknown as string,
+    });
+
+    expect(result.targetProject).toBeNull();
+    expect(result.resolutionErrors[0]).toContain('path');
+  });
+
   it('uses registry fallback id/name and normalizes declared repo roots for session-bound github projects', async () => {
     bindSessionProject({
       projectId: 'theta',

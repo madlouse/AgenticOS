@@ -7,6 +7,7 @@ import { getAgenticOSHome } from '../utils/registry.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 import { resolveProjectWorktreeRoot } from '../utils/worktree-topology.js';
+import { isGitBackedTopology } from '../utils/project-contract.js';
 
 const execAsync = promisify(exec);
 
@@ -187,8 +188,8 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   let effectiveWorktreeRoot: string | null = rootResolution?.effectiveWorktreeRoot || null;
   let expectedWorktreeRoot: string | null = rootResolution?.expectedWorktreeRoot || null;
   let deprecatedOverrideUsed = rootResolution?.deprecatedOverrideUsed || false;
-  if (targetProject?.topology !== 'github_versioned') {
-    result.block_reasons.push('agenticos_branch_bootstrap requires a github_versioned managed project');
+  if (!isGitBackedTopology(targetProject?.topology)) {
+    result.block_reasons.push('agenticos_branch_bootstrap requires a git_versioned managed project (legacy github_versioned is accepted)');
   }
   if (targetProject && !effectiveWorktreeRoot) {
     result.block_reasons.push(`target project "${targetProject.id}" is missing a derived project-scoped worktree root`);
@@ -245,6 +246,7 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
       projectId: managedTargetProject.id,
       projectYamlPath: managedTargetProject.projectYamlPath,
       declaredGithubRepo: managedTargetProject.githubRepo,
+      declaredRepository: managedTargetProject.repository,
       declaredSourceRepoRoots: managedTargetProject.sourceRepoRoots,
       sourceRepoRootsDeclared: managedTargetProject.sourceRepoRootsDeclared,
       expectedWorktreeRoot: managedTargetProject.expectedWorktreeRoot,

@@ -1,7 +1,13 @@
 import { access, readFile } from 'fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import yaml from 'yaml';
-import { type ProjectTopology, validateManagedProjectTopology } from './project-contract.js';
+import {
+  isGitBackedTopology,
+  resolveSourceControlRepository,
+  type GitRepositoryContract,
+  type ProjectTopology,
+  validateManagedProjectTopology,
+} from './project-contract.js';
 import { getAgenticOSHome, loadRegistry } from './registry.js';
 import { getSessionProjectBinding } from './session-context.js';
 import { deriveExpectedWorktreeRoot, isPathWithinRoot } from './worktree-topology.js';
@@ -21,6 +27,7 @@ export interface GuardrailProjectTarget {
   projectYamlPath: string;
   topology: ProjectTopology;
   githubRepo: string | null;
+  repository: GitRepositoryContract | null;
   sourceRepoRoots: string[];
   sourceRepoRootsDeclared: boolean;
   expectedWorktreeRoot: string | null;
@@ -35,6 +42,10 @@ export interface GuardrailProjectResolution {
 
 function normalizePath(path: string): string {
   return resolve(path);
+}
+
+function resolutionErrorMessage(error: unknown): string {
+  return String(error);
 }
 
 function resolveProjectStatePath(projectPath: string, projectYaml: any): string {
@@ -119,6 +130,7 @@ async function loadProjectBoundaryMetadata(
       projectYamlPath,
       topology: 'local_directory_only' as ProjectTopology,
       githubRepo: null,
+      repository: null,
       sourceRepoRoots: [],
       sourceRepoRootsDeclared: false,
       expectedWorktreeRoot: null,
@@ -133,6 +145,10 @@ async function loadProjectBoundaryMetadata(
   const declaredTopology = projectYaml?.source_control?.topology;
   const topologyIsMissing = typeof declaredTopology === 'undefined';
   const topology = topologyValidation.ok ? topologyValidation.topology : null;
+  const sourceControlContract = projectYaml?.source_control && typeof projectYaml.source_control === 'object'
+    ? projectYaml.source_control
+    : null;
+  const repository = resolveSourceControlRepository(sourceControlContract);
   const declaredProjectId = typeof projectYaml?.meta?.id === 'string' ? projectYaml.meta.id.trim() : '';
   const projectId = declaredProjectId || fallbackId || basename(normalizedProjectPath);
 
@@ -146,9 +162,10 @@ async function loadProjectBoundaryMetadata(
     githubRepo: typeof projectYaml?.source_control?.github_repo === 'string' && projectYaml.source_control.github_repo.trim().length > 0
       ? projectYaml.source_control.github_repo.trim()
       : null,
+    repository,
     sourceRepoRoots: sourceRepoRoots.roots,
     sourceRepoRootsDeclared: sourceRepoRoots.declared,
-    expectedWorktreeRoot: topology === 'github_versioned' && declaredProjectId
+    expectedWorktreeRoot: isGitBackedTopology(topology) && declaredProjectId
       ? deriveExpectedWorktreeRoot(getAgenticOSHome(), projectId)
       : null,
     topologyValidationError: (topologyValidation.ok || topologyIsMissing) ? null : topologyValidation.message,
@@ -218,7 +235,7 @@ export async function resolveGuardrailProjectTarget(args: {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : `failed to resolve project_path: ${projectPath}`],
+        resolutionErrors: [resolutionErrorMessage(error)],
       };
     }
   }
@@ -310,6 +327,9 @@ export async function resolveGuardrailProjectTarget(args: {
               githubRepo: typeof projectYaml?.source_control?.github_repo === 'string'
                 && projectYaml.source_control.github_repo.trim().length > 0
                 ? projectYaml.source_control.github_repo.trim() : null,
+              repository: resolveSourceControlRepository(projectYaml?.source_control && typeof projectYaml.source_control === 'object'
+                ? projectYaml.source_control
+                : null),
               sourceRepoRoots: [],
               sourceRepoRootsDeclared: false,
               expectedWorktreeRoot: null,
@@ -332,7 +352,7 @@ export async function resolveGuardrailProjectTarget(args: {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : `failed to resolve repo_path: ${repoPath}`],
+        resolutionErrors: [resolutionErrorMessage(error)],
       };
     }
   }
@@ -358,7 +378,7 @@ export async function resolveGuardrailProjectTarget(args: {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : 'failed to resolve session project'],
+        resolutionErrors: [resolutionErrorMessage(error)],
       };
     }
   }
