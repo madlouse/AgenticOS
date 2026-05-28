@@ -20,6 +20,25 @@
 - Related issues/risks:
 - Files or docs reviewed:
 
+## Lifecycle Impact
+- Fresh install path:
+- Existing upgrade path:
+- Change surface:
+  - Source files:
+  - Generated templates/files:
+  - Runtime config/state:
+  - Local services / launch agents:
+  - External integrations:
+  - Operator-facing commands/workflows:
+- Data/config migration:
+  - Files or fields affected:
+  - Dry-run/apply model:
+  - Rollback guidance:
+  - Audit evidence:
+  - Verification command:
+- Compatibility aliases or repair actions:
+- Lifecycle test/evidence plan:
+
 ## Sub-Agent Inheritance Packet
 - Sub-agent needed:
 - Delegated scope:

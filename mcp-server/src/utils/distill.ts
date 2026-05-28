@@ -7,7 +7,7 @@ import { STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 15;
+export const CURRENT_TEMPLATE_VERSION = 16;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -84,6 +84,16 @@ export const PROJECT_SWITCH_ROUTING_CONTENT = `When the operator asks to switch,
 2. If \`agenticos_switch\` is available, call it before running shell commands to locate project directories.
 3. Use the returned project path / filesystem workdir as the explicit working directory for subsequent shell commands.
 4. Fall back to shell directory search only when AgenticOS MCP is unavailable or \`agenticos_switch\` cannot resolve the requested project.` as const;
+
+export const LIFECYCLE_IMPACT_GATE_TITLE = 'Lifecycle Impact Gate';
+export const LIFECYCLE_IMPACT_GATE_CONTENT = `For any change that touches setup, runtime config, storage, service wiring, generated templates, install scripts, local services, external integrations, or operator workflows, define lifecycle impact before implementation:
+
+1. Fresh install path: required prompts, flags, defaults, generated outputs, and validation commands.
+2. Existing upgrade path: whether this is code-only or requires migration, repair, aliases, compatibility handling, or operator review.
+3. Change surface: source files, generated files, runtime config, local services, launch agents, external systems, and commands affected.
+4. Data/config migration: exact files or fields, dry-run/apply model, rollback guidance, audit evidence, and verification command.
+
+Do not silently mutate runtime config during a normal code upgrade. Explicit migration or repair flows must be previewable, auditable, and reversible where practical.` as const;
 
 export const DESIGN_PHILOSOPHY_TITLE = 'Design Philosophy';
 
@@ -175,6 +185,10 @@ export function generateAgentsMd(
       content: `## ${PROJECT_SWITCH_ROUTING_TITLE}\n\n${PROJECT_SWITCH_ROUTING_CONTENT}`
     },
     {
+      name: 'lifecycle-impact-gate',
+      content: `## ${LIFECYCLE_IMPACT_GATE_TITLE}\n\n${LIFECYCLE_IMPACT_GATE_CONTENT}`
+    },
+    {
       name: 'guardrail-protocol',
       content: `## Guardrail Protocol (MANDATORY)
 
@@ -241,6 +255,7 @@ export const STANDARD_SECTION_NAMES = [
   'stop-hook',
   'task-intake-rule',
   'project-switch-routing',
+  'lifecycle-impact-gate',
   'guardrail-protocol',
   'recording-protocol',
   'session-start-protocol',
@@ -261,6 +276,7 @@ const SECTION_TITLES: Record<string, string> = {
   'stop-hook': 'Stop-Hook (Optional)',
   'task-intake-rule': 'Task Intake Rule',
   'project-switch-routing': 'Project Switch Routing',
+  'lifecycle-impact-gate': 'Lifecycle Impact Gate',
   'guardrail-protocol': 'Guardrail Protocol (MANDATORY)',
   'recording-protocol': 'MANDATORY: Recording Protocol',
   'session-start-protocol': 'Session Start Protocol',
@@ -330,6 +346,10 @@ export function generateClaudeMd(
     {
       name: 'project-switch-routing',
       content: `## ${PROJECT_SWITCH_ROUTING_TITLE}\n\n${PROJECT_SWITCH_ROUTING_CONTENT}`
+    },
+    {
+      name: 'lifecycle-impact-gate',
+      content: `## ${LIFECYCLE_IMPACT_GATE_TITLE}\n\n${LIFECYCLE_IMPACT_GATE_CONTENT}`
     },
     {
       name: 'guardrail-protocol',

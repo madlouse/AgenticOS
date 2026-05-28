@@ -1,5 +1,5 @@
 # <!-- agenticos-template: v1 -->
-version: 0.2
+version: 0.3
 name: agent-preflight-checklist
 purpose: Preflight gate before any issue-driven work proceeds to editing or submission.
 
@@ -54,6 +54,24 @@ classification:
   worktree_required: false
   main_workspace_allowed: false
   bootstrap_exception_used: false
+
+lifecycle_impact:
+  setup_or_config_affecting: false
+  touches_persisted_state: false
+  touches_generated_templates: false
+  touches_runtime_services: false
+  touches_external_integrations: false
+  fresh_install_path_defined: false
+  existing_upgrade_path_defined: false
+  change_surface_reviewed: false
+  migration_or_repair_required: false
+  migration_dry_run_defined: false
+  rollback_guidance_defined: false
+  audit_evidence_defined: false
+  verification_command_defined: false
+  legacy_upgrade_test_required: false
+  fresh_install_test_required: false
+  notes: ""
 
 scope_control:
   root_scoped_exceptions:

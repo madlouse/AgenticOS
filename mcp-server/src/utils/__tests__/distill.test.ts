@@ -5,6 +5,8 @@ import {
   CLAUDE_ADAPTER_LINES,
   CLAUDE_RUNTIME_GUIDANCE_TITLE,
   CURRENT_TEMPLATE_VERSION,
+  LIFECYCLE_IMPACT_GATE_CONTENT,
+  LIFECYCLE_IMPACT_GATE_TITLE,
   PROJECT_SWITCH_ROUTING_CONTENT,
   PROJECT_SWITCH_ROUTING_TITLE,
   SHARED_POLICY_BULLETS,
@@ -28,8 +30,8 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template version and minimal required sections', () => {
     const content = generateAgentsMd('Demo Project', 'Test project');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(15);
-    expect(content).toContain('<!-- agenticos-template: v15 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(16);
+    expect(content).toContain('<!-- agenticos-template: v16 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -53,6 +55,11 @@ describe('distill templates', () => {
     expect(content).toContain('进入项目');
     expect(content).toContain('continue project');
     expect(content).toContain('Fall back to shell directory search only when AgenticOS MCP is unavailable');
+    expect(content).toContain(`## ${LIFECYCLE_IMPACT_GATE_TITLE}`);
+    expect(content).toContain(LIFECYCLE_IMPACT_GATE_CONTENT);
+    expect(content).toContain('Fresh install path');
+    expect(content).toContain('Existing upgrade path');
+    expect(content).toContain('Do not silently mutate runtime config');
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('agenticos_preflight');
     expect(content).toContain('agenticos_status');
@@ -76,8 +83,8 @@ describe('distill templates', () => {
   it('generates CLAUDE.md with minimal required sections', () => {
     const content = generateClaudeMd('Demo Project', 'Test project');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(15);
-    expect(content).toContain('<!-- agenticos-template: v15 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(16);
+    expect(content).toContain('<!-- agenticos-template: v16 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(CLAUDE_ADAPTER_LINES[0]);
     expect(content).toContain(CLAUDE_ADAPTER_LINES[1]);
@@ -98,6 +105,10 @@ describe('distill templates', () => {
     expect(content).toContain('tool_search');
     expect(content).toContain('switch project');
     expect(content).toContain('继续项目');
+    expect(content).toContain(`## ${LIFECYCLE_IMPACT_GATE_TITLE}`);
+    expect(content).toContain('Fresh install path');
+    expect(content).toContain('Existing upgrade path');
+    expect(content).toContain('previewable, auditable');
     expect(content).toContain('## Guardrail Protocol (MANDATORY)');
     expect(content).toContain('## MANDATORY: Recording Protocol');
     expect(content).toContain('## Session Start Protocol');
@@ -138,11 +149,12 @@ describe('section markers', () => {
 
     // Should mark standard sections
     expect(content).toContain('<!-- agenticos-section: canonical-policy -->');
+    expect(content).toContain('<!-- agenticos-section: lifecycle-impact-gate -->');
     expect(content).toContain('<!-- agenticos-section: guardrail-protocol -->');
     expect(content).toContain('<!-- agenticos-section: recording-protocol -->');
 
     // All standard sections should be marked
-    expect(STANDARD_SECTION_NAMES.length).toBe(9);
+    expect(STANDARD_SECTION_NAMES.length).toBe(10);
   });
 
   it('mergeSections preserves project-specific content from existing file', () => {
@@ -221,8 +233,8 @@ Old guardrail text
       expect(result).toContain('用户入口保持小写');
       expect(result).toContain('1Password 是唯一事实源');
 
-      // Should have v15 marker
-      expect(result).toContain('v15');
+      // Should have the current template marker
+      expect(result).toContain('v16');
     } finally {
       await unlink(tempPath);
     }
@@ -372,7 +384,7 @@ describe('upgrade functions edge cases', () => {
     const result = upgradeClaudeMd(nonExistentPath, 'Test', 'Test desc');
 
     // Should generate template without errors
-    expect(result).toContain('<!-- agenticos-template: v15 -->');
+    expect(result).toContain('<!-- agenticos-template: v16 -->');
     expect(result).toContain('## Adapter Role');
   });
 
@@ -404,7 +416,7 @@ More custom content
       const result = upgradeClaudeMd(tempPath, 'Legacy Project', '');
 
       // Should have new template content
-      expect(result).toContain('v15');
+      expect(result).toContain('v16');
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
 
       // Should preserve custom sections
@@ -441,7 +453,7 @@ CLI adapter role
       const result = upgradeAgentsMd(tempPath, 'CLI Project', '');
 
       // Should have new template content
-      expect(result).toContain('v15');
+      expect(result).toContain('v16');
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
 
       // Should preserve project-specific sections
@@ -509,7 +521,7 @@ Second body
     const nonExistentPath = join(tmpdir(), 'non-existent-agents-' + Date.now() + '.md');
     const result = upgradeAgentsMd(nonExistentPath, 'Test', 'Test desc');
 
-    expect(result).toContain('<!-- agenticos-template: v15 -->');
+    expect(result).toContain('<!-- agenticos-template: v16 -->');
     expect(result).toContain('## Project Switch Routing');
   });
 
@@ -585,7 +597,7 @@ Old canonical
 
 describe('section markers format consistency', () => {
   it('extractTemplateVersion returns parsed version or zero when absent', () => {
-    expect(extractTemplateVersion('<!-- agenticos-template: v15 -->')).toBe(15);
+    expect(extractTemplateVersion('<!-- agenticos-template: v16 -->')).toBe(16);
     expect(extractTemplateVersion('# No marker')).toBe(0);
   });
 
@@ -625,6 +637,7 @@ describe('section markers format consistency', () => {
     expect(STANDARD_SECTION_NAMES).toContain('stop-hook');
     expect(STANDARD_SECTION_NAMES).toContain('task-intake-rule');
     expect(STANDARD_SECTION_NAMES).toContain('project-switch-routing');
+    expect(STANDARD_SECTION_NAMES).toContain('lifecycle-impact-gate');
   });
 
   it('updateClaudeMdState is a no-op because state lives in state.yaml', async () => {

@@ -13,6 +13,17 @@ What problem does this solve?
 
 How should this work?
 
+## Lifecycle Impact
+
+If this changes setup, runtime config, storage, service wiring, generated templates, local services, external integrations, or operator workflows:
+
+- Fresh install path:
+- Existing upgrade path:
+- Change surface:
+- Data/config migration:
+- Rollback or repair guidance:
+- Validation commands:
+
 ## Alternatives Considered
 
 Other approaches you thought about.

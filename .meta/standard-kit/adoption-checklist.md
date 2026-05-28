@@ -30,6 +30,8 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 - [ ] PR submission or merge runs `agenticos_pr_scope_check`
 - [ ] implementation work uses issue-first branch naming and isolated worktrees
 - [ ] delegated sub-agent work uses an explicit inheritance packet and verification echo
+- [ ] setup/config/storage/service/template changes define lifecycle impact before implementation
+- [ ] lifecycle impact distinguishes fresh install, existing upgrade, migration/repair, rollback, and validation evidence
 
 ## Repository Boundary
 
@@ -42,3 +44,4 @@ Use this checklist when adopting the AgenticOS workflow standard in a downstream
 - [ ] copied templates are treated as project-owned after adoption
 - [ ] generated files are allowed to upgrade through template version changes
 - [ ] any future standard-kit upgrade is reviewed against local customizations
+- [ ] migrations or repair actions are explicit, previewable, and auditable rather than hidden inside normal code upgrades
