@@ -36,6 +36,7 @@ Implication:
 - local project-specific content may exist, but upgrades must preserve the canonical guardrail protocol and template marker
 - generated adapter surfaces must preserve one canonical cross-agent execution contract even when runtime-specific guidance differs
 - generated adapter surfaces should carry only a compact operator-intent intake rule, not the full internal standards rationale
+- generated adapter surfaces must carry the lifecycle impact gate so agents evaluate install, upgrade, migration, and repair effects before setup/config/storage/service/template changes
 
 ### Copied templates
 
@@ -53,6 +54,7 @@ Implication:
 - later upgrades should be explicit and reviewable, not silently overwritten
 - the copied templates still carry the canonical memory-layer contract and should not be repurposed arbitrarily
 - intake-oriented templates may carry explicit fields for operator signals, inferred goals, and contradictions because those help agents collapse fragmented user input into a cleaner execution objective
+- copied design, preflight, and submission templates must preserve lifecycle impact fields unless a downstream project replaces them with an equivalent stricter gate
 
 ## Rule 2: Repository-Root Infrastructure Is Not Part Of The Project Kit
 
@@ -83,10 +85,12 @@ Generated files:
 - may be upgraded automatically when template markers change
 - must preserve user-extended sections where supported by the generator
 - must not drift into agent-specific policy forks
+- may introduce new lifecycle-impact checks through template marker upgrades when the canonical development standard changes
 
 Copied templates:
 - must not be silently replaced after project adoption
 - should be reviewed against canonical sources during explicit upgrade work
+- should be upgraded explicitly when new lifecycle fields materially affect project safety or migration handling
 
 ## Rule 5: Package Conflicts Resolve Toward The Kit
 

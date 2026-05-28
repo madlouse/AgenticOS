@@ -1,6 +1,6 @@
 version: 1
 kit_id: downstream-standard-kit
-kit_version: 0.2.0
+kit_version: 0.3.0
 status: active
 purpose: >
   Package the executable AgenticOS workflow standard for downstream projects.
@@ -100,8 +100,8 @@ layers:
 
 upgrade_rules:
   template_marker_version:
-    AGENTS.md: 14
-    CLAUDE.md: 14
+    AGENTS.md: 16
+    CLAUDE.md: 16
     .cursor/rules/agenticos.mdc: 1
   compatibility_rule: >
     Generated files may be upgraded in place by distill when the template marker version changes.
@@ -134,5 +134,6 @@ adoption:
     - isolated_worktree_execution
     - edit_boundary_enforcement
     - pr_scope_validation
+    - lifecycle_impact_analysis
     - official_agent_adapter_surfaces
     - sub_agent_context_inheritance

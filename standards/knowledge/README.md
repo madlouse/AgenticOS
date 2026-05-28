@@ -107,6 +107,7 @@ Files without explicit frontmatter are implicitly LIVE unless the filename or co
 | `canonical-sync-implementation-report-2026-03-25.md` | LIVE | Canonical sync implementation: contract applied and verified against real checkout |
 | `downstream-standard-kit-implementation-report-2026-03-23.md` | LIVE | Standard kit package landed at .meta/standard-kit/ with manifest, README, copied templates |
 | `downstream-standard-package-plan-2026-03-23.md` | LIVE | Downstream standard package plan: kit contents, canonical vs customizable, adopt commands |
+| `lifecycle-impact-analysis-standard-2026-05-28.md` | LIVE | Standard requiring fresh-install, upgrade, migration, repair, and operator workflow impact analysis |
 
 ---
 

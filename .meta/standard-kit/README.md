@@ -17,6 +17,7 @@ This kit covers:
 - context publication policy
 - generated project files
 - versioning and upgrade rules
+- lifecycle impact analysis for install, upgrade, migration, and operator workflow changes
 
 This kit does not include repository-root infrastructure such as:
 - `.github/`
@@ -120,6 +121,18 @@ The rule is intentionally compact in downstream runtime surfaces:
 - collapse the result into a clean execution objective before deeper autonomous work continues
 
 Downstream projects should inherit the intake rule, not the whole standards-history discussion by default.
+
+## Lifecycle Impact Protocol
+
+The kit carries a lifecycle impact gate for changes that touch setup, runtime config, storage, service wiring, generated templates, install scripts, local services, external integrations, or operator workflows.
+
+Downstream projects inherit this in three places:
+
+- generated adapter guidance in `AGENTS.md` and `CLAUDE.md`
+- planning fields inside `tasks/templates/issue-design-brief.md`
+- preflight and submission evidence fields in `tasks/templates/agent-preflight-checklist.yaml` and `tasks/templates/submission-evidence.md`
+
+The required analysis distinguishes a normal code upgrade from explicit migration or repair work. Normal upgrades must not silently mutate runtime config. Migration and repair flows must name the affected files or fields, provide dry-run/apply expectations when mutation is possible, include rollback guidance, and define verification evidence.
 
 ## Package Contents
 

@@ -92,12 +92,14 @@ Before any file edits, the agent must produce a pass/fail result for this checkl
 - task classified into one of the protocol types
 - target files identified
 - implementation impact assessed
+- lifecycle impact assessed for setup, config, storage, service wiring, generated templates, install scripts, local services, external integrations, and operator workflows
 - whether worktree is mandatory determined
 
 ### Execution checks
 
 - acceptance criteria drafted before implementation
 - verification method selected before implementation
+- fresh-install and legacy-upgrade verification selected when lifecycle impact touches persisted state or setup/config surfaces
 - record/update obligations identified
 
 If any required check fails, the agent must not proceed to implementation.
@@ -124,6 +126,7 @@ The agent must:
 
 The agent must not:
 - treat documentation edits as exempt if they change executable standards or downstream generated behavior without proper review
+- omit lifecycle impact analysis when documentation changes setup, upgrade, migration, generated template, or operator workflow expectations
 
 ### For `implementation`
 
@@ -133,6 +136,7 @@ The agent must:
 - work in an isolated worktree
 - perform at least two design passes with critique in between for non-trivial work
 - define executable acceptance criteria before editing
+- define lifecycle impact before editing when the change touches setup, runtime config, persisted state, service wiring, generated templates, install scripts, local services, external integrations, or operator workflows
 - verify before submission
 
 The agent must not:
@@ -183,9 +187,30 @@ High-risk includes:
 - workflow rules
 - standards and templates
 - persistence logic
+- install, upgrade, migration, or repair behavior
 - context loading behavior
 - branching or worktree rules
 - security or data integrity sensitive code
+
+## 5.1 Lifecycle Impact Requirements
+
+Lifecycle impact is mandatory for any issue or PR that changes:
+
+- setup, bootstrap, install, or upgrade instructions
+- runtime config, persisted state, storage, or generated project files
+- service wiring, local services, launch agents, or callback paths
+- external integrations or operator-facing commands/workflows
+- standard-kit templates or generated adapter surfaces
+
+The analysis must answer:
+
+- fresh install path: prompts, flags, defaults, generated outputs, and validation commands
+- existing upgrade path: code-only upgrade versus migration, repair, aliases, compatibility handling, or operator review
+- change surface: source files, generated files, runtime config, local services, external integrations, and commands affected
+- data/config migration: affected files or fields, dry-run/apply model, rollback guidance, audit evidence, and verification command
+- test evidence: fresh-install scenario and legacy-upgrade scenario when persisted state or setup/config behavior changes
+
+Normal code upgrades must not silently mutate runtime config. Explicit migration or repair actions must be previewable, auditable, and reversible where practical.
 
 ## 6. Acceptance Criteria Format
 
@@ -244,6 +269,7 @@ An agent may submit or claim completion only if:
 - preflight passed
 - required design loop completed
 - acceptance criteria existed before implementation
+- lifecycle impact is documented or explicitly not applicable with rationale
 - verification evidence exists
 - unresolved risks are disclosed
 

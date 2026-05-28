@@ -1,27 +1,44 @@
-<!-- agenticos-template: v15 -->
+<!-- agenticos-template: v16 -->
 # AGENTS.md — AgenticOS
 
+<!-- agenticos-section: adapter-role -->
 ## Adapter Role
 
 `AGENTS.md` is the Codex/generic adapter surface for this project.
 It must expose the same canonical policy as other agent adapters rather than defining a different workflow.
-
+<!-- /agenticos-section -->
+<!-- agenticos-section: canonical-policy -->
 ## Canonical Policy (Shared Across Agents)
 
 - This project has one canonical AgenticOS execution policy across Claude Code, Codex, and other supported agents.
 - Implementation work must stay issue-first, preflighted, and inside the guardrail-controlled branch/worktree flow.
 - PR creation or merge must not happen before executable scope validation passes.
 - Recording and save flow remain canonical project requirements rather than runtime-specific preferences.
+
+<!-- /agenticos-section -->
+<!-- agenticos-section: continuity-contract -->
+## Continuity Contract
+
+- The tracked continuity contract is publication-policy aware: local_private stays runtime-local, private_continuity persists the tracked continuity core, and public_distilled keeps a narrower tracked surface.
+- The configured conversations path is a context contract input, but raw transcript routing may differ by publication policy.
+- `CLAUDE.md` and `AGENTS.md` are mirrored adapter surfaces. They should stay aligned with project policy, but continuity correctness must not depend on them existing.
+
+<!-- /agenticos-section -->
+<!-- agenticos-section: runtime-notes -->
 ## Codex / Generic Runtime Notes
 
 - If natural-language routing is weak, use explicit `agenticos_*` tool calls before treating the issue as transport failure.
 - Bootstrap differences are runtime concerns rather than policy changes.
 - Optional local stop-hook reminders should call `agenticos-record-reminder`, not a source-checkout `tools/record-reminder.sh` path.
 - If migrating from a legacy source-checkout hook, replace `bash /path/to/tools/record-reminder.sh` with the installed `agenticos-record-reminder` command.
+
+<!-- /agenticos-section -->
+<!-- agenticos-section: stop-hook -->
 ## Stop-Hook (Optional)
 
 If your runtime supports local stop hooks, configure `agenticos-record-reminder` as a local reminder. This is optional, not a canonical guardrail.
-
+<!-- /agenticos-section -->
+<!-- agenticos-section: task-intake-rule -->
 ## Task Intake Rule
 
 **Before writing any code or plan, verify three things:**
@@ -33,7 +50,8 @@ If your runtime supports local stop hooks, configure `agenticos-record-reminder`
 If any of these cannot be answered clearly, **stop and ask**. Do not proceed with fuzzy assumptions.
 
 Once intent is resolved, collapse it into a clean execution objective. Do not carry the full intake rubric through every later step.
-
+<!-- /agenticos-section -->
+<!-- agenticos-section: project-switch-routing -->
 ## Project Switch Routing
 
 When the operator asks to switch, enter, or continue an AgenticOS project, including phrases such as "switch project", "enter project", "continue project", "切换项目", "进入项目", or "继续项目", route through AgenticOS MCP before filesystem discovery.
@@ -42,7 +60,20 @@ When the operator asks to switch, enter, or continue an AgenticOS project, inclu
 2. If `agenticos_switch` is available, call it before running shell commands to locate project directories.
 3. Use the returned project path / filesystem workdir as the explicit working directory for subsequent shell commands.
 4. Fall back to shell directory search only when AgenticOS MCP is unavailable or `agenticos_switch` cannot resolve the requested project.
+<!-- /agenticos-section -->
+<!-- agenticos-section: lifecycle-impact-gate -->
+## Lifecycle Impact Gate
 
+For any change that touches setup, runtime config, storage, service wiring, generated templates, install scripts, local services, external integrations, or operator workflows, define lifecycle impact before implementation:
+
+1. Fresh install path: required prompts, flags, defaults, generated outputs, and validation commands.
+2. Existing upgrade path: whether this is code-only or requires migration, repair, aliases, compatibility handling, or operator review.
+3. Change surface: source files, generated files, runtime config, local services, launch agents, external systems, and commands affected.
+4. Data/config migration: exact files or fields, dry-run/apply model, rollback guidance, audit evidence, and verification command.
+
+Do not silently mutate runtime config during a normal code upgrade. Explicit migration or repair flows must be previewable, auditable, and reversible where practical.
+<!-- /agenticos-section -->
+<!-- agenticos-section: guardrail-protocol -->
 ## Guardrail Protocol (MANDATORY)
 
 Before implementation edits, confirm session/project alignment with `agenticos_status`; if no session project is bound or the bound project is not the intended one, call `agenticos_switch`.
@@ -56,7 +87,8 @@ For implementation-affecting work:
 5. before PR creation or merge, call `agenticos_pr_scope_check`
 
 If any guardrail command returns `BLOCK`, stop and resolve the blocking reason before continuing.
-
+<!-- /agenticos-section -->
+<!-- agenticos-section: recording-protocol -->
 ## MANDATORY: Recording Protocol
 
 > All session activity MUST be recorded. If you skip this, context is lost forever.
@@ -64,7 +96,8 @@ If any guardrail command returns `BLOCK`, stop and resolve the blocking reason b
 **During session**: After completing any meaningful unit of work, call `agenticos_record` with summary, decisions, outcomes, pending, and current_task.
 
 **Before session ends**: Call `agenticos_record` with complete summary, then `agenticos_save` to commit to Git.
-
+<!-- /agenticos-section -->
+<!-- agenticos-section: session-start-protocol -->
 ## Session Start Protocol
 
 On session start:
@@ -74,3 +107,4 @@ On session start:
 3. Read `.project.yaml`, `standards/.context/quick-start.md`, and `standards/.context/state.yaml`
 4. If implementation work requested, enter Guardrail Protocol before editing
 5. Greet with: project name, last progress, pending items, suggested next step
+<!-- /agenticos-section -->

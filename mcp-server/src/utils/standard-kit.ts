@@ -1466,6 +1466,8 @@ export async function checkStandardKitConformance(args: { project_path?: string;
   const agentsMd = await readProjectFile(upgrade.project_path, 'AGENTS.md');
   const claudeMd = await readProjectFile(upgrade.project_path, 'CLAUDE.md');
   const designBrief = await readProjectFile(upgrade.project_path, 'tasks/templates/issue-design-brief.md');
+  const preflightChecklist = await readProjectFile(upgrade.project_path, 'tasks/templates/agent-preflight-checklist.yaml');
+  const submissionEvidence = await readProjectFile(upgrade.project_path, 'tasks/templates/submission-evidence.md');
   const bootstrapMatrixSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'agent-bootstrap-matrix.yaml'), 'utf-8');
   const adapterMatrixSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'agent-adapter-matrix.yaml'), 'utf-8');
   const crossAgentContractSource = readFileSync(resolveAgenticOSProductPath('.meta', 'bootstrap', 'cross-agent-execution-contract.yaml'), 'utf-8');
@@ -1691,6 +1693,51 @@ export async function checkStandardKitConformance(args: { project_path?: string;
             ? 'Both adapter surfaces require PR scope validation.'
             : 'One or more adapter surfaces are missing PR scope validation guidance.',
           evidence_paths: ['AGENTS.md', 'CLAUDE.md'],
+        });
+        break;
+      }
+      case 'lifecycle_impact_analysis': {
+        const adaptersPass = fileContainsAll(agentsMd, [
+          'Lifecycle Impact Gate',
+          'Fresh install path',
+          'Existing upgrade path',
+          'Do not silently mutate runtime config',
+        ]) && fileContainsAll(claudeMd, [
+          'Lifecycle Impact Gate',
+          'Fresh install path',
+          'Existing upgrade path',
+          'Do not silently mutate runtime config',
+        ]);
+        const templatesPass = fileContainsAll(designBrief, [
+          '## Lifecycle Impact',
+          'Fresh install path:',
+          'Existing upgrade path:',
+          'Data/config migration:',
+        ]) && fileContainsAll(preflightChecklist, [
+          'lifecycle_impact',
+          'fresh_install_path_defined',
+          'existing_upgrade_path_defined',
+          'migration_dry_run_defined',
+        ]) && fileContainsAll(submissionEvidence, [
+          '## Lifecycle Impact',
+          'Fresh install path reviewed:',
+          'Existing upgrade path reviewed:',
+          'Legacy-upgrade verification:',
+        ]);
+        const pass = adaptersPass && templatesPass;
+        behaviorChecks.push({
+          behavior,
+          status: pass ? 'PASS' : 'FAIL',
+          summary: pass
+            ? 'Adapter surfaces and execution templates preserve lifecycle impact analysis for install, upgrade, migration, and repair work.'
+            : 'Lifecycle impact guidance is missing from generated adapters or execution templates.',
+          evidence_paths: [
+            'AGENTS.md',
+            'CLAUDE.md',
+            'tasks/templates/issue-design-brief.md',
+            'tasks/templates/agent-preflight-checklist.yaml',
+            'tasks/templates/submission-evidence.md',
+          ],
         });
         break;
       }
