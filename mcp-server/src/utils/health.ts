@@ -7,7 +7,6 @@ import { analyzeCanonicalRepoSync, type CanonicalRepoSyncDetails } from './canon
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from './agent-context-paths.js';
 import { resolveGuardrailProjectTarget, type GuardrailProjectTarget } from './repo-boundary.js';
 import { validateGuardrailRepoIdentity } from './guardrail-repo-identity.js';
-import { isGitBackedTopology } from './project-contract.js';
 import { assessVersionedEntrySurfaceState } from './versioned-entry-surface-state.js';
 import { extractLatestIssueBootstrap, loadLatestGuardrailState } from './guardrail-evidence.js';
 import { getAgenticOSHome } from './registry.js';
@@ -152,7 +151,7 @@ function buildGuardrailGate(state: any | null): HealthGate {
 
 async function buildIssueBootstrapContinuityGate(args: HealthArgs, projectYaml: any | null, state: any | null): Promise<{ gate: HealthGate; continuity: IssueBootstrapContinuityAssessment } | null> {
   if (!args.project_path || state === null) return null;
-  if (!isGitBackedTopology(projectYaml?.source_control?.topology)) return null;
+  if (projectYaml?.source_control?.topology !== 'github_versioned') return null;
 
   const latestBootstrap = extractLatestIssueBootstrap(state);
   const continuity = await assessIssueBootstrapContinuity({
@@ -179,7 +178,7 @@ async function buildIssueBootstrapContinuityGate(args: HealthArgs, projectYaml: 
 
 async function buildWorktreeTopologyGate(args: HealthArgs, projectYaml: any | null): Promise<{ gate: HealthGate; topology: WorktreeTopologyInspection } | null> {
   if (!args.project_path) return null;
-  if (!isGitBackedTopology(projectYaml?.source_control?.topology)) return null;
+  if (projectYaml?.source_control?.topology !== 'github_versioned') return null;
 
   const projectId = String(projectYaml?.meta?.id || '').trim();
   if (!projectId) {
@@ -201,7 +200,7 @@ async function buildWorktreeTopologyGate(args: HealthArgs, projectYaml: any | nu
           misplaced_clean: 0,
           misplaced_dirty: 0,
         },
-        inspection_errors: ['missing meta.id for git-backed project'],
+        inspection_errors: ['missing meta.id for github_versioned project'],
       },
     };
   }
@@ -253,7 +252,7 @@ async function buildStandardKitGate(args: HealthArgs): Promise<HealthGate | null
 }
 
 async function buildVersionFreshnessGate(args: HealthArgs): Promise<HealthGate | null> {
-  // Gate is only meaningful for canonical checkout role on Git-backed projects.
+  // Gate is only meaningful for canonical checkout role on github_versioned projects
   if (args.checkout_role !== 'canonical') return null;
 
   const lookupPath = args.project_path || args.repo_path;
@@ -428,7 +427,7 @@ async function resolveTrustedProjectPath(args: {
   const { repoPath, explicitProjectPath, targetProject, resolutionSource } = args;
   const initialProjectPath = explicitProjectPath || targetProject?.path || null;
   const requiresRepoIdentityProof = resolutionSource === 'repo_path_match' || resolutionSource === 'session_project';
-  if (!targetProject || !isGitBackedTopology(targetProject.topology) || !requiresRepoIdentityProof) {
+  if (!targetProject || targetProject.topology !== 'github_versioned' || !requiresRepoIdentityProof) {
     return {
       effectiveProjectPath: initialProjectPath,
       repoIdentityError: null,
@@ -441,11 +440,10 @@ async function resolveTrustedProjectPath(args: {
     const gitCommonRepoRoot = dirname(gitCommonDir);
     const gitRemoteOrigin = await execCommand(`git -C "${repoPath}" config --get remote.origin.url`).catch(() => '');
     const repoIdentity = validateGuardrailRepoIdentity({
-	      projectId: targetProject.id,
-	      projectYamlPath: targetProject.projectYamlPath,
-	      declaredGithubRepo: targetProject.githubRepo,
-	      declaredRepository: targetProject.repository,
-	      declaredSourceRepoRoots: targetProject.sourceRepoRoots,
+      projectId: targetProject.id,
+      projectYamlPath: targetProject.projectYamlPath,
+      declaredGithubRepo: targetProject.githubRepo,
+      declaredSourceRepoRoots: targetProject.sourceRepoRoots,
       sourceRepoRootsDeclared: targetProject.sourceRepoRootsDeclared,
       expectedWorktreeRoot: targetProject.expectedWorktreeRoot,
       gitWorktreeRoot,

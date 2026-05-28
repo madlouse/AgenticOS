@@ -44,6 +44,10 @@ function normalizePath(path: string): string {
   return resolve(path);
 }
 
+function resolutionErrorMessage(error: unknown): string {
+  return String(error);
+}
+
 function resolveProjectStatePath(projectPath: string, projectYaml: any): string {
   const configuredStatePath = projectYaml?.agent_context?.current_state;
   if (typeof configuredStatePath === 'string' && configuredStatePath.trim().length > 0) {
@@ -231,7 +235,7 @@ export async function resolveGuardrailProjectTarget(args: {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : `failed to resolve project_path: ${projectPath}`],
+        resolutionErrors: [resolutionErrorMessage(error)],
       };
     }
   }
@@ -348,7 +352,7 @@ export async function resolveGuardrailProjectTarget(args: {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : `failed to resolve repo_path: ${repoPath}`],
+        resolutionErrors: [resolutionErrorMessage(error)],
       };
     }
   }
@@ -374,7 +378,7 @@ export async function resolveGuardrailProjectTarget(args: {
         activeProjectId,
         resolutionSource: null,
         targetProject: null,
-        resolutionErrors: [error instanceof Error ? error.message : 'failed to resolve session project'],
+        resolutionErrors: [resolutionErrorMessage(error)],
       };
     }
   }

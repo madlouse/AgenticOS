@@ -2036,6 +2036,151 @@ describe('save repo binding helpers', () => {
     expect(reasons).toEqual([]);
   });
 
+  it('validateGitBackedContinuityRepoBinding reports host-neutral repository remote mismatches', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(null, 'https://gitlab.com/group/actual.git\n', '');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'GitLab Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'gitlab',
+            slug: 'group/expected',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons.join('\n')).toContain('source_control.repository gitlab:group/expected');
+  });
+
+  it('validateGitBackedContinuityRepoBinding reports missing non-generic repository slugs', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(null, 'https://gitlab.com/group/repo.git\n', '');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'GitLab Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'gitlab',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons.join('\n')).toContain('source_control.repository gitlab:(no slug)');
+  });
+
+  it('validateGitBackedContinuityRepoBinding formats missing host-neutral remote details', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(new Error(''), '', '');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'Gitee Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'gitee',
+            slug: 'owner/repo',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons.join('\n')).toContain('git remote origin "missing"');
+    expect(reasons.join('\n')).toContain('source_control.repository gitee:owner/repo');
+  });
+
+  it('validateGitBackedContinuityRepoBinding treats a blank host-neutral remote as missing', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(null, '\n', '');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'Gitee Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'gitee',
+            slug: 'owner/repo',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons.join('\n')).toContain('git remote origin "missing"');
+  });
+
+  it('validateGitBackedContinuityRepoBinding formats missing remote details when repository slug is absent', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(new Error(''), '', '');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'GitLab Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'gitlab',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons.join('\n')).toContain('git remote origin "missing"');
+    expect(reasons.join('\n')).toContain('source_control.repository gitlab:(no slug)');
+  });
+
   it('validateGitBackedContinuityRepoBinding skips remote comparison for generic git repositories', async () => {
     childProcessMock.exec.mockClear();
 

@@ -620,14 +620,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_enforce_git_policy',
-      description: 'Enforce Git policy on a PR/MR: CI passing, not draft, minimum approvals. GitHub and GitLab have bundled CLI adapters; Gitee/generic report manual enforcement boundaries.',
+      description: 'Enforce Git policy on a PR/MR: CI passing, not draft, minimum approvals. Supports GitHub and GitLab.',
       inputSchema: {
         type: 'object',
         properties: {
           pr_url: { type: 'string', description: 'Full PR/MR URL.' },
           repo: { type: 'string', description: 'Repository in owner/repo format.' },
           pr_number: { type: 'number', description: 'PR/MR number.' },
-          provider: { type: 'string', enum: ['github', 'gitlab', 'gitee', 'generic'], description: 'Git host provider.' },
+          provider: { type: 'string', enum: ['github', 'gitlab'], description: 'Git host provider.' },
           required_approvals: { type: 'number', description: 'Minimum approvals (default: 1).' },
         },
       },

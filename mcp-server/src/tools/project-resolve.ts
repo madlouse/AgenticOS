@@ -357,9 +357,7 @@ async function buildProjectPayload(args: {
     name: project.name,
     project_kind: projectKindValidation.project_kind,
     topology: topologyValidation.topology,
-    repository: resolveSourceControlRepository(projectYaml?.source_control && typeof projectYaml.source_control === 'object'
-      ? projectYaml.source_control
-      : null),
+    repository: resolveSourceControlRepository(projectYaml.source_control),
     context_publication_policy: policyValidation.policy,
     path: project.path,
     explicit_workdir: project.path,

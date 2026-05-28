@@ -104,6 +104,47 @@ describe('initProject', () => {
     ).rejects.toThrow('repository is required');
   });
 
+  it('fails when git_versioned repository metadata is invalid', async () => {
+    await expect(
+      initProject({
+        name: 'Bad Provider',
+        description: 'A test project',
+        topology: 'git_versioned',
+        context_publication_policy: 'private_continuity',
+        repository: {
+          provider: 'bitbucket',
+          slug: 'owner/repo',
+        },
+      }),
+    ).rejects.toThrow('repository.provider');
+
+    await expect(
+      initProject({
+        name: 'Bad Slug',
+        description: 'A test project',
+        topology: 'git_versioned',
+        context_publication_policy: 'private_continuity',
+        repository: {
+          provider: 'gitee',
+          slug: 'not-a-repo',
+        },
+      }),
+    ).rejects.toThrow('repository.slug');
+
+    await expect(
+      initProject({
+        name: 'Missing Provider',
+        description: 'A test project',
+        topology: 'git_versioned',
+        context_publication_policy: 'private_continuity',
+        repository: {
+          provider: 7,
+          slug: 'owner/repo',
+        },
+      }),
+    ).rejects.toThrow('repository.provider');
+  });
+
   it('fails when github_repo is not OWNER/REPO', async () => {
     await expect(
       initProject({ name: 'Test Project', description: 'A test project', topology: 'github_versioned', context_publication_policy: 'private_continuity', github_repo: 'not-a-repo' }),
@@ -272,6 +313,53 @@ describe('initProject', () => {
     });
     expect(parsed.source_control.branch_strategy).toBe('issue_branch_review_merge');
     expect(parsed.execution.source_repo_roots).toEqual(['.']);
+  });
+
+  it('preserves explicit git_versioned repository remote and review system metadata', async () => {
+    await initProject({
+      name: 'Gitee Project',
+      description: 'A Gitee project',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+      repository: {
+        provider: 'gitee',
+        remote: 'upstream',
+        slug: 'owner/gitee-project',
+        review_system: 'merge_request',
+      },
+    });
+
+    const projectYamlCall = fsPromisesMock.writeFile.mock.calls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.source_control.repository).toEqual({
+      provider: 'gitee',
+      remote: 'upstream',
+      slug: 'owner/gitee-project',
+      review_system: 'merge_request',
+    });
+  });
+
+  it('writes generic git_versioned repository metadata without a slug', async () => {
+    await initProject({
+      name: 'Generic Git Project',
+      description: 'A generic Git project',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+      repository: {
+        provider: 'generic',
+        remote: 'upstream',
+      },
+    });
+
+    const projectYamlCall = fsPromisesMock.writeFile.mock.calls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.source_control.repository).toEqual({
+      provider: 'generic',
+      remote: 'upstream',
+      review_system: 'none',
+    });
   });
 
   it('creates a private transcript sidecar directory for public_distilled github_versioned projects', async () => {

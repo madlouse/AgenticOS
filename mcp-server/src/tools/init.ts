@@ -59,20 +59,14 @@ function resolveContextPublicationPolicy(
 }
 
 function resolveRepositoryArg(topology: ProjectTopology, args: any, githubRepo?: string): GitRepositoryContract | undefined {
-  if (topology === 'local_directory_only') {
-    return undefined;
-  }
-
   if (topology === 'github_versioned') {
-    return githubRepo
-      ? {
-          provider: 'github',
-          remote: 'origin',
-          slug: normalizeRepositorySlug(githubRepo),
-          default_base_branch: null,
-          review_system: 'pull_request',
-        }
-      : undefined;
+    return {
+      provider: 'github',
+      remote: 'origin',
+      slug: normalizeRepositorySlug(githubRepo!),
+      default_base_branch: null,
+      review_system: 'pull_request',
+    };
   }
 
   const rawRepository = args.repository && typeof args.repository === 'object'

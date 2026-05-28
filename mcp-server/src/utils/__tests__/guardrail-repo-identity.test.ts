@@ -210,6 +210,66 @@ describe('validateGuardrailRepoIdentity', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('passes local root proof when no repository metadata is declared', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'local-project',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'file:///tmp/repo.git',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.matchedBy).toBe('git_common_repo_root');
+  });
+
+  it('fails provider-specific repository validation when the declared slug is missing', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'gitlab-project',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitlab',
+        remote: 'origin',
+        slug: null,
+        default_base_branch: null,
+        review_system: 'merge_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'https://gitlab.com/group/repo.git',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('source_control.repository gitlab:(no slug)');
+  });
+
+  it('formats missing remotes for provider-specific repository mismatches', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'gitee-project',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitee',
+        remote: 'origin',
+        slug: 'owner/repo',
+        default_base_branch: null,
+        review_system: 'pull_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: '',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('git remote origin "missing"');
+    expect(result.message).toContain('source_control.repository gitee:owner/repo');
+  });
+
   it('fails when the common repo root matches but the remote origin is missing', () => {
     const result = validateGuardrailRepoIdentity({
       projectId: 'agenticos',

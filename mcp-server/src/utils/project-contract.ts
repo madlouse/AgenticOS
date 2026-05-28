@@ -129,24 +129,10 @@ function validateSourceControlRepository(projectName: string, contract: SourceCo
     };
   }
 
-  if (!isValidGitRepositoryProvider(repository.provider)) {
-    return {
-      ok: false,
-      message: `Project "${projectName}" declares unsupported source_control.repository.provider "${String(repository.provider)}". Supported values are "github", "gitlab", "gitee", and "generic".`,
-    };
-  }
-
   if (repository.provider !== 'generic' && !repository.slug) {
     return {
       ok: false,
       message: `Project "${projectName}" is marked git_versioned with provider="${repository.provider}" but missing source_control.repository.slug.`,
-    };
-  }
-
-  if (!repository.remote) {
-    return {
-      ok: false,
-      message: `Project "${projectName}" is marked git_versioned but missing source_control.repository.remote.`,
     };
   }
 

@@ -11,12 +11,11 @@ export interface EnforceGitPolicyArgs {
   /** PR/MR number (required if pr_url not provided). */
   pr_number?: number;
   /** Git host provider (auto-detected from pr_url if omitted). */
-  provider?: GitPolicyProvider;
+  provider?: 'github' | 'gitlab';
   /** Minimum number of approvals required (default: 1). */
   required_approvals?: number;
 }
 
-export type GitPolicyProvider = 'github' | 'gitlab' | 'gitee' | 'generic';
 type CheckStatus = 'PASS' | 'FAIL' | 'SKIP';
 
 interface Check {
@@ -36,12 +35,11 @@ interface EnforceResult {
   url: string;
 }
 
-export function detectProvider(prUrl?: string, explicit?: GitPolicyProvider): GitPolicyProvider {
+export function detectProvider(prUrl?: string, explicit?: 'github' | 'gitlab'): 'github' | 'gitlab' {
   if (explicit) return explicit;
-  if (prUrl?.includes('gitee.com')) return 'gitee';
   if (prUrl?.includes('gitlab.com')) return 'gitlab';
   if (prUrl?.includes('github.com')) return 'github';
-  return 'github';
+  return 'github'; // default
 }
 
 function sanitize(value: string): string {
@@ -52,23 +50,17 @@ function sanitize(value: string): string {
 export function parsePrUrl(prUrl: string): { repo: string; number: number } | null {
   // GitHub: https://github.com/owner/repo/pull/123
   // GitLab: https://gitlab.com/owner/repo/-/merge_requests/123
-  // Gitee: https://gitee.com/owner/repo/pulls/123
   const ghMatch = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
   if (ghMatch) return { repo: ghMatch[1], number: parseInt(ghMatch[2], 10) };
 
   const glMatch = prUrl.match(/gitlab\.com\/(.+?)\/-\/merge_requests\/(\d+)/);
   if (glMatch) return { repo: glMatch[1], number: parseInt(glMatch[2], 10) };
 
-  const giteeMatch = prUrl.match(/gitee\.com\/([^/]+\/[^/]+)\/pulls\/(\d+)/);
-  if (giteeMatch) return { repo: giteeMatch[1], number: parseInt(giteeMatch[2], 10) };
-
   return null;
 }
 
 export function buildPrUrl(provider: string, repo: string, prNumber: number): string {
   if (provider === 'gitlab') return `https://gitlab.com/${repo}/-/merge_requests/${prNumber}`;
-  if (provider === 'gitee') return `https://gitee.com/${repo}/pulls/${prNumber}`;
-  if (provider === 'generic') return `(generic git review ${repo}#${prNumber})`;
   return `https://github.com/${repo}/pull/${prNumber}`;
 }
 
@@ -314,27 +306,6 @@ async function checkGlGitPolicy(repo: string, mrIid: number, requiredApprovals: 
   };
 }
 
-async function checkManualAdapterPolicy(provider: 'gitee' | 'generic', repo: string, reviewNumber: number): Promise<EnforceResult> {
-  const checkName = provider === 'gitee' ? 'Gitee Adapter' : 'Generic Git Adapter';
-  const detail = provider === 'gitee'
-    ? 'No bundled Gitee CLI adapter is available; require host branch protection or manual merge evidence.'
-    : 'Generic Git has no portable PR/MR API; require repository-level branch protection or manual merge evidence.';
-  return {
-    status: 'BLOCK',
-    provider,
-    repo,
-    pr_number: reviewNumber,
-    branch: '(host-specific)',
-    checks: [{
-      name: checkName,
-      status: 'FAIL',
-      detail,
-    }],
-    blocked_reasons: [`${checkName}: ${detail}`],
-    url: buildPrUrl(provider, repo, reviewNumber),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -367,7 +338,6 @@ export async function runEnforceGitPolicy(args: EnforceGitPolicyArgs): Promise<s
         'Expected formats:',
         '- GitHub: `https://github.com/owner/repo/pull/123`',
         '- GitLab: `https://gitlab.com/owner/repo/-/merge_requests/123`',
-        '- Gitee: `https://gitee.com/owner/repo/pulls/123`',
       ].join('\n');
     }
     repo = parsed.repo;
@@ -395,11 +365,6 @@ export async function runEnforceGitPolicy(args: EnforceGitPolicyArgs): Promise<s
       ].join('\n');
     }
     const result = await checkGlGitPolicy(repo, prNumber, required_approvals);
-    return formatResult(result);
-  }
-
-  if (provider === 'gitee' || provider === 'generic') {
-    const result = await checkManualAdapterPolicy(provider, repo, prNumber);
     return formatResult(result);
   }
 
