@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.32] — 2026-05-28
+
+### Added
+- source-control: `git_versioned` is now the canonical topology for Git-backed projects, with a provider-aware `source_control.repository` contract for GitHub, GitLab, Gitee, and generic Git remotes (#490).
+- standards: documented the host-neutral AgenticOS Git-backed development workflow, including issue-first worktrees, preflight/edit-guard gates, PR/MR evidence, merge-commit rollback, and current host-provider limits (#490).
+
+### Changed
+- compatibility: legacy `github_versioned`, `github_repo`, and `github_flow` metadata continue to resolve while new project initialization and normalization can emit the generic Git-backed contract (#490).
+- guardrails: branch bootstrap, preflight, edit guard, save validation, project resolution, and standard-kit templates now use Git-backed project semantics instead of assuming GitHub-only metadata (#490).
+- standards: design and review documentation now require install, upgrade, migration, compatibility, rollback, and operator runbook analysis before implementation (#489).
+
 ## [0.4.31] — 2026-05-24
 
 ### Added
