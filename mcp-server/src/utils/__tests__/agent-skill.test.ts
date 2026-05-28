@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'crypto';
 import {
+  AGENTICOS_SKILL_TEMPLATE_VERSION,
   installAgentSkill,
   inspectAgentSkill,
   isAgentSkillOkForVerify,
@@ -111,9 +112,15 @@ describe('agent skill bootstrap', () => {
     expect(content).toMatch(/^---\n/);
     expect(content).toMatch(/\n---\n<!-- agenticos-skill-managed-sha256: [a-f0-9]{64} -->\n\n# AgenticOS Activation/);
     expect(content).toContain('name: agenticos');
+    expect(content).toContain(`template_version: ${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
+    expect(content).toContain('description: |');
     expect(content).toContain('agenticos_switch');
     expect(content).toContain('切换到');
-    expect(content).toContain('tool discovery for AgenticOS MCP tools');
+    expect(content).toContain('Agentic OS 项目');
+    expect(content).toContain('switch to Agentic OS project');
+    expect(content).toContain('trigger: "AgenticOS MCP project switching');
+    expect(content).toContain('tool_search');
+    expect(content).toContain('Shell directory search before MCP discovery is a routing bug.');
   });
 
   it('installs and verifies a missing managed Skill', () => {
@@ -153,14 +160,37 @@ describe('agent skill bootstrap', () => {
     installAgentSkill('codex', '/Users/tester', harness.deps);
     const staleWithoutHash = (harness.files.get(path) || '')
       .replace(HASH_MARKER_RE, '')
-      .replace('template_version: 1', 'template_version: 99');
+      .replace(`template_version: ${AGENTICOS_SKILL_TEMPLATE_VERSION}`, 'template_version: 99');
     const staleHash = createHash('sha256').update(staleWithoutHash, 'utf-8').digest('hex');
     harness.files.set(path, `<!-- agenticos-skill-managed-sha256: ${staleHash} -->\n${staleWithoutHash}`);
 
     const inspection = inspectAgentSkill('codex', '/Users/tester', harness.deps.readFile);
 
     expect(inspection.status).toBe('stale-managed');
-    expect(inspection.detail).toContain('is v99; expected v1');
+    expect(inspection.detail).toContain(`is v99; expected v${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
+  });
+
+  it('upgrades the previous v1 managed Skill template without force', () => {
+    const harness = createDeps();
+    const path = '/Users/tester/.codex/skills/agenticos/SKILL.md';
+    installAgentSkill('codex', '/Users/tester', harness.deps);
+    const v1WithoutHash = (harness.files.get(path) || '')
+      .replace(HASH_MARKER_RE, '')
+      .replace(`template_version: ${AGENTICOS_SKILL_TEMPLATE_VERSION}`, 'template_version: 1')
+      .replace('AgenticOS / Agentic OS project or topic', 'AgenticOS project');
+    const v1Hash = createHash('sha256').update(v1WithoutHash, 'utf-8').digest('hex');
+    harness.files.set(path, `<!-- agenticos-skill-managed-sha256: ${v1Hash} -->\n${v1WithoutHash}`);
+
+    const inspection = inspectAgentSkill('codex', '/Users/tester', harness.deps.readFile);
+
+    expect(inspection.status).toBe('stale-managed');
+    expect(inspection.detail).toContain(`is v1; expected v${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
+
+    const result = installAgentSkill('codex', '/Users/tester', harness.deps);
+
+    expect(result.status).toBe('current');
+    expect(result.wrote).toBe(true);
+    expect(harness.files.get(path)).toContain('Agentic OS 项目');
   });
 
   it('repairs legacy managed content that put comments before frontmatter', () => {
