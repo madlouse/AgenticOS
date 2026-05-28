@@ -45,10 +45,17 @@ export interface ProjectYamlMeta {
 }
 
 export interface ProjectYamlSourceControl {
-  topology?: 'local_directory_only' | 'github_versioned';
+  topology?: 'local_directory_only' | 'github_versioned' | 'git_versioned';
   context_publication_policy?: 'local_private' | 'private_continuity' | 'public_distilled';
   github_repo?: string;
   branch_strategy?: string;
+  repository?: {
+    provider?: 'github' | 'gitlab' | 'gitee' | 'generic';
+    remote?: string;
+    slug?: string;
+    default_base_branch?: string;
+    review_system?: 'pull_request' | 'merge_request' | 'none';
+  };
 }
 
 export interface ProjectYamlAgentContext {

@@ -244,10 +244,11 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
 
     if (projectResolution.targetProject) {
       const repoIdentity = validateGuardrailRepoIdentity({
-        projectId: projectResolution.targetProject.id,
-        projectYamlPath: projectResolution.targetProject.projectYamlPath,
-        declaredGithubRepo: projectResolution.targetProject.githubRepo,
-        declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
+	        projectId: projectResolution.targetProject.id,
+	        projectYamlPath: projectResolution.targetProject.projectYamlPath,
+	        declaredGithubRepo: projectResolution.targetProject.githubRepo,
+	        declaredRepository: projectResolution.targetProject.repository,
+	        declaredSourceRepoRoots: projectResolution.targetProject.sourceRepoRoots,
         sourceRepoRootsDeclared: projectResolution.targetProject.sourceRepoRootsDeclared,
         expectedWorktreeRoot: projectResolution.targetProject.expectedWorktreeRoot,
         gitWorktreeRoot,

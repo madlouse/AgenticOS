@@ -1,6 +1,6 @@
 version: 1
 kit_id: downstream-standard-kit
-kit_version: 0.3.0
+kit_version: 0.4.0
 status: active
 purpose: >
   Package the executable AgenticOS workflow standard for downstream projects.

@@ -10,7 +10,7 @@ interface SeedProjectArgs {
   id: string;
   name: string;
   projectKind?: 'topic' | 'project' | null;
-  topology?: 'local_directory_only' | 'github_versioned';
+  topology?: 'local_directory_only' | 'github_versioned' | 'git_versioned';
   contextPublicationPolicy?: 'local_private' | 'private_continuity' | 'public_distilled';
   path?: string;
   status?: 'active' | 'archived';
@@ -83,6 +83,16 @@ async function seedProject(project: SeedProjectArgs): Promise<string> {
   if (project.topology === 'github_versioned') {
     projectYaml.source_control.github_repo = 'madlouse/sample';
     projectYaml.source_control.branch_strategy = 'github_flow';
+    projectYaml.execution = { source_repo_roots: ['.'] };
+  }
+  if (project.topology === 'git_versioned') {
+    projectYaml.source_control.repository = {
+      provider: 'gitlab',
+      remote: 'origin',
+      slug: 'group/sample',
+      review_system: 'merge_request',
+    };
+    projectYaml.source_control.branch_strategy = 'issue_branch_review_merge';
     projectYaml.execution = { source_repo_roots: ['.'] };
   }
 
@@ -248,6 +258,26 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(github.topology).toBe('github_versioned');
     expect(github.context_publication_policy).toBe('private_continuity');
     expect(yaml.parse(await readFile(join(github.path, '.project.yaml'), 'utf-8')).source_control.github_repo).toBe('madlouse/github-project');
+
+    const gitlab = parseResult(await runProjectEnsure({
+      project: 'GitLab Project',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+      repository: {
+        provider: 'gitlab',
+        slug: 'group/subgroup/gitlab-project',
+      },
+    }));
+    expect(gitlab.status).toBe('CREATED');
+    expect(gitlab.topology).toBe('git_versioned');
+    expect(gitlab.repository).toEqual({
+      provider: 'gitlab',
+      remote: 'origin',
+      slug: 'group/subgroup/gitlab-project',
+      default_base_branch: null,
+      review_system: 'merge_request',
+    });
+    expect(yaml.parse(await readFile(join(gitlab.path, '.project.yaml'), 'utf-8')).source_control.branch_strategy).toBe('issue_branch_review_merge');
   });
 
   it('supports name-only ensure calls for router-created projects', async () => {
@@ -347,6 +377,15 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(missingGithubRepo.status).toBe('ERROR');
     expect(missingGithubRepo.code).toBe('UNKNOWN');
     expect(missingGithubRepo.error).toContain('github_repo is required');
+
+    const missingRepository = parseResult(await runProjectEnsure({
+      project: 'Missing Repository',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+    }));
+    expect(missingRepository.status).toBe('ERROR');
+    expect(missingRepository.code).toBe('INVALID_INPUT');
+    expect(missingRepository.error).toContain('repository is required');
   });
 
   it('fails closed for ambiguous registry identities', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateGuardrailRepoIdentity } from '../guardrail-repo-identity.js';
+import { extractRepositorySlugFromRemoteOrigin, validateGuardrailRepoIdentity } from '../guardrail-repo-identity.js';
 
 describe('validateGuardrailRepoIdentity', () => {
   it('passes when the git worktree root is declared directly', () => {
@@ -145,6 +145,71 @@ describe('validateGuardrailRepoIdentity', () => {
     expect(result.matchedBy).toBe('git_common_repo_root');
   });
 
+  it('passes when a gitlab repository slug matches an https remote', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'gitlab-project',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitlab',
+        remote: 'origin',
+        slug: 'group/subgroup/repo',
+        default_base_branch: 'origin/main',
+        review_system: 'merge_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source/worktrees/issue-490',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'https://gitlab.com/group/subgroup/repo.git',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.matchedBy).toBe('git_common_repo_root');
+  });
+
+  it('fails when a gitee repository slug does not match the remote', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'gitee-project',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitee',
+        remote: 'origin',
+        slug: 'owner/expected',
+        default_base_branch: null,
+        review_system: 'pull_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source/worktrees/issue-490',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'git@gitee.com:owner/actual.git',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('source_control.repository gitee:owner/expected');
+  });
+
+  it('passes generic repositories using local git root proof only', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'generic-project',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'generic',
+        remote: 'origin',
+        slug: null,
+        default_base_branch: null,
+        review_system: 'none',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source/worktrees/issue-490',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'file:///tmp/repo.git',
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it('fails when the common repo root matches but the remote origin is missing', () => {
     const result = validateGuardrailRepoIdentity({
       projectId: 'agenticos',
@@ -175,5 +240,12 @@ describe('validateGuardrailRepoIdentity', () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain('does not match declared source_control.github_repo');
+  });
+
+  it('extracts provider-specific repository slugs from common remote URL formats', () => {
+    expect(extractRepositorySlugFromRemoteOrigin('git@gitlab.com:group/sub/repo.git', 'gitlab')).toBe('group/sub/repo');
+    expect(extractRepositorySlugFromRemoteOrigin('https://gitee.com/owner/repo.git', 'gitee')).toBe('owner/repo');
+    expect(extractRepositorySlugFromRemoteOrigin('ssh://git@github.com/owner/repo.git', 'github')).toBe('owner/repo');
+    expect(extractRepositorySlugFromRemoteOrigin('file:///tmp/repo.git', 'generic')).toBeNull();
   });
 });

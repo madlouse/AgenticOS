@@ -6,7 +6,7 @@ import { getAgenticOSHome, loadRegistry, patchProjectMetadata } from '../utils/r
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { adoptStandardKit, checkStandardKitUpgrade } from '../utils/standard-kit.js';
 import { writeFile } from 'fs/promises';
-import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology, validateProjectKind, type ProjectKind } from '../utils/project-contract.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject, isGitBackedTopology, validateManagedProjectTopology, validateProjectKind, type ProjectKind } from '../utils/project-contract.js';
 import { resolveManagedProjectContextPaths, resolveManagedProjectTarget } from '../utils/project-target.js';
 import { loadLatestGuardrailState, type IssueBootstrapRecord, type IssueBootstrapState } from '../utils/guardrail-evidence.js';
 import { resolveManagedProjectContextDisplayPaths } from '../utils/agent-context-paths.js';
@@ -225,7 +225,7 @@ function buildIssueBootstrapSummaryLines(input: IssueBootstrapSummaryInput): str
 }
 
 async function buildWorktreeTopologySummaryLines(projectPath: string, projectYaml: any): Promise<string[]> {
-  if (projectYaml?.source_control?.topology !== 'github_versioned') {
+  if (!isGitBackedTopology(projectYaml?.source_control?.topology)) {
     return [];
   }
 

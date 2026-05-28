@@ -548,7 +548,7 @@ describe('runBranchBootstrap', () => {
     expect(result.block_reasons.join(' ')).toContain('neither git worktree root');
   });
 
-  it('fails closed when the resolved managed project is not github_versioned', async () => {
+  it('fails closed when the resolved managed project is not git-backed', async () => {
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'notes',
       resolutionSource: 'repo_path_match',
@@ -590,8 +590,67 @@ describe('runBranchBootstrap', () => {
     })) as { status: string; block_reasons: string[] };
 
     expect(result.status).toBe('BLOCK');
-    expect(result.block_reasons).toContain('agenticos_branch_bootstrap requires a github_versioned managed project');
+    expect(result.block_reasons).toContain('agenticos_branch_bootstrap requires a git_versioned managed project (legacy github_versioned is accepted)');
     expect(mkdirMock).not.toHaveBeenCalled();
+  });
+
+  it('creates a branch worktree for canonical git_versioned projects', async () => {
+    resolveGuardrailProjectTargetMock.mockResolvedValue({
+      activeProjectId: 'gitlab-project',
+      resolutionSource: 'repo_path_match',
+      resolutionErrors: [],
+      targetProject: {
+        id: 'gitlab-project',
+        name: 'GitLab Project',
+        path: '/workspace/projects/gitlab-project',
+        statePath: '/workspace/projects/gitlab-project/.context/state.yaml',
+        projectYamlPath: '/workspace/projects/gitlab-project/.project.yaml',
+        topology: 'git_versioned',
+        githubRepo: null,
+        repository: {
+          provider: 'gitlab',
+          remote: 'origin',
+          slug: 'group/repo',
+          default_base_branch: 'origin/main',
+          review_system: 'merge_request',
+        },
+        sourceRepoRoots: ['/repo'],
+        sourceRepoRootsDeclared: true,
+        expectedWorktreeRoot: '/workspace/worktrees/gitlab-project',
+      },
+    });
+    execAsyncMock.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('rev-parse origin/main')) {
+        return { stdout: 'base123\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --show-toplevel')) {
+        return { stdout: '/repo\n', stderr: '' };
+      }
+      if (cmd.includes('rev-parse --git-common-dir')) {
+        return { stdout: '/repo/.git\n', stderr: '' };
+      }
+      if (cmd.includes('config --get remote.origin.url')) {
+        return { stdout: 'https://gitlab.com/group/repo.git\n', stderr: '' };
+      }
+      if (cmd.includes('show-ref --verify --quiet refs/heads/feat/490-gitlab-flow')) {
+        throw new Error('branch missing');
+      }
+      if (cmd.includes('worktree add "/workspace/worktrees/gitlab-project/repo-490-gitlab-flow" -b feat/490-gitlab-flow base123')) {
+        return { stdout: 'Preparing worktree\n', stderr: '' };
+      }
+      throw new Error(`Unexpected command: ${cmd}`);
+    });
+
+    const result = JSON.parse(await runBranchBootstrap({
+      issue_id: '490',
+      branch_type: 'feat',
+      slug: 'gitlab flow',
+      repo_path: '/repo',
+    })) as { status: string; branch_name: string; worktree_path: string };
+
+    expect(result.status).toBe('CREATED');
+    expect(result.branch_name).toBe('feat/490-gitlab-flow');
+    expect(result.worktree_path).toBe('/workspace/worktrees/gitlab-project/repo-490-gitlab-flow');
   });
 
   it('fails closed when a github_versioned project is missing a declared meta.id-derived worktree root', async () => {

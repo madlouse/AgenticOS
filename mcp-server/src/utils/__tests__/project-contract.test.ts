@@ -51,17 +51,26 @@ describe('validateContextPublicationPolicy', () => {
     })).toEqual({ ok: true, policy: 'private_continuity' });
   });
 
-  it('rejects local_private for github_versioned projects', () => {
+  it('accepts private_continuity for git_versioned projects', () => {
+    expect(validateContextPublicationPolicy('Git Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        context_publication_policy: 'private_continuity',
+      },
+    })).toEqual({ ok: true, policy: 'private_continuity' });
+  });
+
+  it('rejects local_private for git-backed projects', () => {
     const result = validateContextPublicationPolicy('Public Repo', {
       source_control: {
-        topology: 'github_versioned',
+        topology: 'git_versioned',
         context_publication_policy: 'local_private',
       },
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain('github_versioned');
+      expect(result.message).toContain('git_versioned');
       expect(result.message).toContain('private_continuity');
     }
   });
@@ -247,6 +256,58 @@ describe('managed project topology contract', () => {
         source_repo_roots: [' ', 7, '.'],
       },
     })).toEqual({ ok: true, topology: 'github_versioned' });
+  });
+
+  it('accepts canonical git_versioned topology for GitLab repositories', () => {
+    expect(validateManagedProjectTopology('GitLab Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        repository: {
+          provider: 'gitlab',
+          remote: 'origin',
+          slug: 'group/subgroup/repo',
+          review_system: 'merge_request',
+        },
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    })).toEqual({ ok: true, topology: 'git_versioned' });
+  });
+
+  it('accepts generic git_versioned topology without a repository slug', () => {
+    expect(validateManagedProjectTopology('Generic Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        repository: {
+          provider: 'generic',
+          remote: 'origin',
+          review_system: 'none',
+        },
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    })).toEqual({ ok: true, topology: 'git_versioned' });
+  });
+
+  it('rejects git_versioned topology without repository metadata', () => {
+    const result = validateManagedProjectTopology('Missing Repository', {
+      source_control: {
+        topology: 'git_versioned',
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('source_control.repository.provider');
+    }
   });
 
   it('rejects unsupported topology values', () => {

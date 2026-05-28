@@ -15,6 +15,8 @@ import {
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
 import { type ProjectYamlSchema } from '../utils/yaml-schemas.js';
+import { normalizeRepositorySlug, resolveSourceControlRepository, type GitRepositoryContract } from '../utils/project-contract.js';
+import { extractRepositorySlugFromRemoteOrigin } from '../utils/guardrail-repo-identity.js';
 
 async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
@@ -86,32 +88,20 @@ export function resolveDeclaredSourceRepoRoots(projectPath: string, projectYaml:
   ));
 }
 
-function normalizeGitHubRepo(value: string): string {
-  return value.trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '').toLowerCase();
+export function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
+  return extractRepositorySlugFromRemoteOrigin(value, 'github');
 }
 
-export function extractGitHubRepoFromRemoteOrigin(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
+function buildRepositoryMismatchMessage(args: {
+  projectName: string;
+  remoteOrigin: string;
+  declaredGithubRepo: string;
+  repository: GitRepositoryContract;
+}): string {
+  if (args.declaredGithubRepo) {
+    return `git remote origin "${args.remoteOrigin || 'missing'}" does not match declared source_control.github_repo "${args.declaredGithubRepo}" for "${args.projectName}"`;
   }
-
-  const sshMatch = trimmed.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i);
-  if (sshMatch) {
-    return normalizeGitHubRepo(sshMatch[1]);
-  }
-
-  const httpsMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i);
-  if (httpsMatch) {
-    return normalizeGitHubRepo(httpsMatch[1]);
-  }
-
-  const sshUrlMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i);
-  if (sshUrlMatch) {
-    return normalizeGitHubRepo(sshUrlMatch[1]);
-  }
-
-  return null;
+  return `git remote origin "${args.remoteOrigin || 'missing'}" does not match declared source_control.repository ${args.repository.provider}:${args.repository.slug || '(no slug)'} for "${args.projectName}"`;
 }
 
 export async function validateGitBackedContinuityRepoBinding(args: {
@@ -132,7 +122,7 @@ export async function validateGitBackedContinuityRepoBinding(args: {
 
   const declaredSourceRepoRoots = resolveDeclaredSourceRepoRoots(projectPath, projectYaml);
   if (declaredSourceRepoRoots.length === 0) {
-    reasons.push(`Project "${projectName}" is marked github_versioned but missing execution.source_repo_roots.`);
+    reasons.push(`Project "${projectName}" is marked git-backed but missing execution.source_repo_roots.`);
     return reasons;
   }
 
@@ -143,23 +133,36 @@ export async function validateGitBackedContinuityRepoBinding(args: {
     );
   }
 
+  const repository = resolveSourceControlRepository(projectYaml?.source_control && typeof projectYaml.source_control === 'object'
+    ? projectYaml.source_control
+    : null);
   const declaredGithubRepo = typeof projectYaml?.source_control?.github_repo === 'string'
     ? projectYaml.source_control.github_repo.trim()
     : '';
-  if (declaredGithubRepo.length > 0) {
+  if (repository && repository.provider !== 'generic') {
     try {
       const { stdout } = await execCommand(`git -C "${gitWorktreeRoot}" remote get-url origin`);
-      const actualGithubRepo = extractGitHubRepoFromRemoteOrigin(stdout);
-      const expectedGithubRepo = normalizeGitHubRepo(declaredGithubRepo);
-      if (actualGithubRepo !== expectedGithubRepo) {
+      const actualRepo = extractRepositorySlugFromRemoteOrigin(stdout, repository.provider);
+      const expectedRepo = repository.slug ? normalizeRepositorySlug(repository.slug) : null;
+      if (!expectedRepo || actualRepo !== expectedRepo) {
         reasons.push(
-          `git remote origin "${stdout.trim() || 'missing'}" does not match declared source_control.github_repo "${declaredGithubRepo}" for "${projectName}"`,
+          buildRepositoryMismatchMessage({
+            projectName,
+            remoteOrigin: stdout.trim(),
+            declaredGithubRepo,
+            repository,
+          }),
         );
       }
     } catch (error: any) {
       const detail = (error?.stderr || error?.stdout || error?.message || '').toString().trim() || 'missing';
       reasons.push(
-        `git remote origin "${detail}" does not match declared source_control.github_repo "${declaredGithubRepo}" for "${projectName}"`,
+        buildRepositoryMismatchMessage({
+          projectName,
+          remoteOrigin: detail,
+          declaredGithubRepo,
+          repository,
+        }),
       );
     }
   }

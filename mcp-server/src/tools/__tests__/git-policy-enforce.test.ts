@@ -27,6 +27,11 @@ describe('URL parsing', () => {
     expect(result).toEqual({ repo: 'org/subgroup/project', number: 7 });
   });
 
+  it('parses Gitee pull request URL', () => {
+    const result = parsePrUrl('https://gitee.com/org/project/pulls/9');
+    expect(result).toEqual({ repo: 'org/project', number: 9 });
+  });
+
   it('returns null for invalid URL', () => {
     expect(parsePrUrl('https://bitbucket.org/org/repo/pull/1')).toBeNull();
     expect(parsePrUrl('https://github.com/org/repo')).toBeNull();
@@ -43,9 +48,14 @@ describe('Provider detection', () => {
     expect(detectProvider('https://gitlab.com/org/repo/-/merge_requests/1')).toBe('gitlab');
   });
 
+  it('detects gitee from URL', () => {
+    expect(detectProvider('https://gitee.com/org/repo/pulls/1')).toBe('gitee');
+  });
+
   it('respects explicit provider', () => {
     expect(detectProvider('https://gitlab.com/org/repo/pull/1', 'github')).toBe('github');
     expect(detectProvider(undefined, 'gitlab')).toBe('gitlab');
+    expect(detectProvider(undefined, 'generic')).toBe('generic');
   });
 
   it('defaults to github', () => {
@@ -60,5 +70,10 @@ describe('PR URL building', () => {
 
   it('builds GitLab MR URL', () => {
     expect(buildPrUrl('gitlab', 'owner/repo', 42)).toBe('https://gitlab.com/owner/repo/-/merge_requests/42');
+  });
+
+  it('builds Gitee and generic review URLs', () => {
+    expect(buildPrUrl('gitee', 'owner/repo', 42)).toBe('https://gitee.com/owner/repo/pulls/42');
+    expect(buildPrUrl('generic', 'owner/repo', 42)).toBe('(generic git review owner/repo#42)');
   });
 });

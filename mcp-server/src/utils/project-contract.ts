@@ -6,15 +6,33 @@ interface ArchiveContract {
   replacement_project?: string;
 }
 
-export type ProjectTopology = 'local_directory_only' | 'github_versioned';
+export type ProjectTopology = 'local_directory_only' | 'github_versioned' | 'git_versioned';
+export type GitBackedProjectTopology = 'github_versioned' | 'git_versioned';
 export type ContextPublicationPolicy = 'local_private' | 'private_continuity' | 'public_distilled';
 export type ProjectKind = 'topic' | 'project';
+export type GitRepositoryProvider = 'github' | 'gitlab' | 'gitee' | 'generic';
+export type GitReviewSystem = 'pull_request' | 'merge_request' | 'none';
+
+export interface GitRepositoryContract {
+  provider: GitRepositoryProvider;
+  remote: string;
+  slug: string | null;
+  default_base_branch: string | null;
+  review_system: GitReviewSystem;
+}
 
 interface SourceControlContract {
   topology?: ProjectTopology;
   context_publication_policy?: ContextPublicationPolicy;
   github_repo?: string;
   branch_strategy?: string;
+  repository?: {
+    provider?: string;
+    remote?: string;
+    slug?: string;
+    default_base_branch?: string;
+    review_system?: string;
+  };
 }
 
 interface AgenticOSProjectContract {
@@ -27,6 +45,112 @@ export function isValidContextPublicationPolicy(value: unknown): value is Contex
 
 export function isValidProjectKind(value: unknown): value is ProjectKind {
   return value === 'topic' || value === 'project';
+}
+
+export function isGitBackedTopology(value: unknown): value is GitBackedProjectTopology {
+  return value === 'github_versioned' || value === 'git_versioned';
+}
+
+export function normalizeRepositorySlug(value: string): string {
+  return value.trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '').toLowerCase();
+}
+
+export function isValidGitRepositoryProvider(value: unknown): value is GitRepositoryProvider {
+  return value === 'github' || value === 'gitlab' || value === 'gitee' || value === 'generic';
+}
+
+export function isValidGitReviewSystem(value: unknown): value is GitReviewSystem {
+  return value === 'pull_request' || value === 'merge_request' || value === 'none';
+}
+
+export function defaultReviewSystemForProvider(provider: GitRepositoryProvider): GitReviewSystem {
+  if (provider === 'gitlab') return 'merge_request';
+  if (provider === 'generic') return 'none';
+  return 'pull_request';
+}
+
+export function isSupportedGitBranchStrategy(value: unknown): boolean {
+  return value === 'issue_branch_review_merge' || value === 'github_flow';
+}
+
+function normalizeOptionalRepositoryField(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function repositoryFromLegacyGithubRepo(githubRepo: string): GitRepositoryContract {
+  return {
+    provider: 'github',
+    remote: 'origin',
+    slug: normalizeRepositorySlug(githubRepo),
+    default_base_branch: null,
+    review_system: 'pull_request',
+  };
+}
+
+export function resolveSourceControlRepository(contract: SourceControlContract | null): GitRepositoryContract | null {
+  if (!contract) return null;
+
+  const rawRepository = contract.repository && typeof contract.repository === 'object'
+    ? contract.repository
+    : null;
+  const providerValue = normalizeOptionalRepositoryField(rawRepository?.provider)?.toLowerCase() || null;
+  if (providerValue && isValidGitRepositoryProvider(providerValue)) {
+    const remote = normalizeOptionalRepositoryField(rawRepository?.remote) || 'origin';
+    const rawSlug = normalizeOptionalRepositoryField(rawRepository?.slug);
+    const reviewSystem = normalizeOptionalRepositoryField(rawRepository?.review_system)?.toLowerCase() || null;
+    const provider = providerValue;
+    return {
+      provider,
+      remote,
+      slug: rawSlug ? normalizeRepositorySlug(rawSlug) : null,
+      default_base_branch: normalizeOptionalRepositoryField(rawRepository?.default_base_branch),
+      review_system: isValidGitReviewSystem(reviewSystem)
+        ? reviewSystem
+        : defaultReviewSystemForProvider(provider),
+    };
+  }
+
+  const githubRepo = normalizeOptionalRepositoryField(contract.github_repo);
+  if (githubRepo) {
+    return repositoryFromLegacyGithubRepo(githubRepo);
+  }
+
+  return null;
+}
+
+function validateSourceControlRepository(projectName: string, contract: SourceControlContract): { ok: true; repository: GitRepositoryContract } | { ok: false; message: string } {
+  const repository = resolveSourceControlRepository(contract);
+  if (!repository) {
+    return {
+      ok: false,
+      message: `Project "${projectName}" is marked git_versioned but missing source_control.repository.provider. Use provider="github", "gitlab", "gitee", or "generic".`,
+    };
+  }
+
+  if (!isValidGitRepositoryProvider(repository.provider)) {
+    return {
+      ok: false,
+      message: `Project "${projectName}" declares unsupported source_control.repository.provider "${String(repository.provider)}". Supported values are "github", "gitlab", "gitee", and "generic".`,
+    };
+  }
+
+  if (repository.provider !== 'generic' && !repository.slug) {
+    return {
+      ok: false,
+      message: `Project "${projectName}" is marked git_versioned with provider="${repository.provider}" but missing source_control.repository.slug.`,
+    };
+  }
+
+  if (!repository.remote) {
+    return {
+      ok: false,
+      message: `Project "${projectName}" is marked git_versioned but missing source_control.repository.remote.`,
+    };
+  }
+
+  return { ok: true, repository };
 }
 
 function getAgenticOSProjectContract(projectYaml: any): AgenticOSProjectContract | null {
@@ -66,7 +190,7 @@ export function validateContextPublicationPolicy(projectName: string, projectYam
   const topology = contract?.topology;
   const policy = contract?.context_publication_policy;
 
-  if (topology !== 'local_directory_only' && topology !== 'github_versioned') {
+  if (topology !== 'local_directory_only' && !isGitBackedTopology(topology)) {
     return {
       ok: false,
       message: `Project "${projectName}" must declare source_control.topology before validating source_control.context_publication_policy.`,
@@ -91,10 +215,10 @@ export function validateContextPublicationPolicy(projectName: string, projectYam
     };
   }
 
-  if (topology === 'github_versioned' && policy === 'local_private') {
+  if (isGitBackedTopology(topology) && policy === 'local_private') {
     return {
       ok: false,
-      message: `Project "${projectName}" uses topology="github_versioned" and must use source_control.context_publication_policy="private_continuity" or "public_distilled".`,
+      message: `Project "${projectName}" uses topology="${topology}" and must use source_control.context_publication_policy="private_continuity" or "public_distilled".`,
     };
   }
 
@@ -149,7 +273,7 @@ function getDeclaredSourceRepoRoots(projectYaml: any): string[] {
 }
 
 export function buildProjectTopologyInitializationMessage(projectName: string): string {
-  return `Project "${projectName}" has not completed source-control topology initialization. Re-run agenticos_init for this project with normalize_existing=true and topology="local_directory_only", or normalize_existing=true, topology="github_versioned", and github_repo="OWNER/REPO".`;
+  return `Project "${projectName}" has not completed source-control topology initialization. Re-run agenticos_init for this project with normalize_existing=true and topology="local_directory_only", or normalize_existing=true, topology="git_versioned", and repository={provider, slug}. Existing GitHub-only projects may continue to use topology="github_versioned" and github_repo="OWNER/REPO".`;
 }
 
 export function validateManagedProjectTopology(projectName: string, projectYaml: any): { ok: true; topology: ProjectTopology } | { ok: false; message: string } {
@@ -167,25 +291,30 @@ export function validateManagedProjectTopology(projectName: string, projectYaml:
     return { ok: true, topology };
   }
 
-  if (topology === 'github_versioned') {
-    if (!contract?.github_repo || contract.github_repo.trim().length === 0) {
+  if (isGitBackedTopology(topology)) {
+    if (topology === 'github_versioned' && (!contract?.github_repo || contract.github_repo.trim().length === 0)) {
       return {
         ok: false,
         message: `Project "${projectName}" is marked github_versioned but missing source_control.github_repo. Re-run agenticos_init with normalize_existing=true, topology="github_versioned", and github_repo="OWNER/REPO".`,
       };
     }
 
-    if (contract.branch_strategy !== 'github_flow') {
+    const repositoryValidation = validateSourceControlRepository(projectName, contract);
+    if (!repositoryValidation.ok) {
+      return repositoryValidation;
+    }
+
+    if (!isSupportedGitBranchStrategy(contract.branch_strategy)) {
       return {
         ok: false,
-        message: `Project "${projectName}" is marked github_versioned but missing source_control.branch_strategy="github_flow". Re-run agenticos_init with normalize_existing=true and topology="github_versioned" to normalize the project for GitHub Flow.`,
+        message: `Project "${projectName}" is marked ${topology} but missing source_control.branch_strategy="issue_branch_review_merge". Existing GitHub-only projects may keep "github_flow" as a readable compatibility alias.`,
       };
     }
 
     if (getDeclaredSourceRepoRoots(projectYaml).length === 0) {
       return {
         ok: false,
-        message: `Project "${projectName}" is marked github_versioned but missing execution.source_repo_roots. Re-run agenticos_init with normalize_existing=true and topology="github_versioned" to write the required repo binding.`,
+        message: `Project "${projectName}" is marked ${topology} but missing execution.source_repo_roots. Re-run agenticos_init with normalize_existing=true and topology="${topology}" to write the required repo binding.`,
       };
     }
 
@@ -194,6 +323,6 @@ export function validateManagedProjectTopology(projectName: string, projectYaml:
 
   return {
     ok: false,
-    message: `Project "${projectName}" declares unsupported source_control.topology "${String(topology)}". Supported values are "local_directory_only" and "github_versioned".`,
+    message: `Project "${projectName}" declares unsupported source_control.topology "${String(topology)}". Supported values are "local_directory_only", "git_versioned", and legacy "github_versioned".`,
   };
 }

@@ -186,10 +186,11 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
 
     const repoIdentity = validateGuardrailRepoIdentity({
-      projectId: projectResolution.targetProject!.id,
-      projectYamlPath: projectResolution.targetProject!.projectYamlPath,
-      declaredGithubRepo: projectResolution.targetProject!.githubRepo,
-      declaredSourceRepoRoots: projectResolution.targetProject!.sourceRepoRoots,
+	      projectId: projectResolution.targetProject!.id,
+	      projectYamlPath: projectResolution.targetProject!.projectYamlPath,
+	      declaredGithubRepo: projectResolution.targetProject!.githubRepo,
+	      declaredRepository: projectResolution.targetProject!.repository,
+	      declaredSourceRepoRoots: projectResolution.targetProject!.sourceRepoRoots,
       sourceRepoRootsDeclared: projectResolution.targetProject!.sourceRepoRootsDeclared,
       expectedWorktreeRoot: projectResolution.targetProject!.expectedWorktreeRoot,
       gitWorktreeRoot,

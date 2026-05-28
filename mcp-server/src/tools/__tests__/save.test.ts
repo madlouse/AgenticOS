@@ -1989,7 +1989,7 @@ describe('save repo binding helpers', () => {
       gitCommonRepoRoot: '/test/path',
     });
 
-    expect(reasons).toContain('Project "Test Project" is marked github_versioned but missing execution.source_repo_roots.');
+    expect(reasons).toContain('Project "Test Project" is marked git-backed but missing execution.source_repo_roots.');
   });
 
   it('validateGitBackedContinuityRepoBinding skips github_repo comparison when repo is undeclared', async () => {
@@ -2005,6 +2005,60 @@ describe('save repo binding helpers', () => {
     });
 
     expect(reasons).toEqual([]);
+  });
+
+  it('validateGitBackedContinuityRepoBinding validates gitlab repository metadata', async () => {
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('remote get-url')) {
+        cb(null, 'https://gitlab.com/group/repo.git\n', '');
+        return;
+      }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'GitLab Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'gitlab',
+            slug: 'group/repo',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons).toEqual([]);
+  });
+
+  it('validateGitBackedContinuityRepoBinding skips remote comparison for generic git repositories', async () => {
+    childProcessMock.exec.mockClear();
+
+    const reasons = await validateGitBackedContinuityRepoBinding({
+      projectName: 'Generic Project',
+      policy: 'private_continuity',
+      projectPath: '/test/path',
+      projectYaml: {
+        source_control: {
+          repository: {
+            provider: 'generic',
+            remote: 'origin',
+            review_system: 'none',
+          },
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      gitWorktreeRoot: '/test/path',
+      gitCommonRepoRoot: '/test/path',
+    });
+
+    expect(reasons).toEqual([]);
+    expect(childProcessMock.exec).not.toHaveBeenCalledWith(expect.stringContaining('remote get-url'), expect.any(Function));
   });
 
   it('validateGitBackedContinuityRepoBinding reports remote lookup failures', async () => {

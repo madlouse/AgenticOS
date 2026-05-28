@@ -98,6 +98,12 @@ describe('initProject', () => {
     ).rejects.toThrow('github_repo is required');
   });
 
+  it('fails when git_versioned is missing repository metadata', async () => {
+    await expect(
+      initProject({ name: 'Test Project', description: 'A test project', topology: 'git_versioned', context_publication_policy: 'private_continuity' }),
+    ).rejects.toThrow('repository is required');
+  });
+
   it('fails when github_repo is not OWNER/REPO', async () => {
     await expect(
       initProject({ name: 'Test Project', description: 'A test project', topology: 'github_versioned', context_publication_policy: 'private_continuity', github_repo: 'not-a-repo' }),
@@ -234,6 +240,37 @@ describe('initProject', () => {
     expect(parsed.source_control.context_publication_policy).toBe('private_continuity');
     expect(parsed.source_control.github_repo).toBe('madlouse/test-project');
     expect(parsed.source_control.branch_strategy).toBe('github_flow');
+    expect(parsed.execution.source_repo_roots).toEqual(['.']);
+  });
+
+  it('writes host-neutral git versioned source control metadata and repo root binding', async () => {
+    await initProject({
+      name: 'GitLab Project',
+      description: 'A GitLab project',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+      repository: {
+        provider: 'gitlab',
+        slug: 'group/subgroup/gitlab-project',
+        default_base_branch: 'origin/main',
+      },
+    });
+
+    const writeCalls = fsPromisesMock.writeFile.mock.calls;
+    const projectYamlCall = writeCalls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.source_control.topology).toBe('git_versioned');
+    expect(parsed.source_control.context_publication_policy).toBe('private_continuity');
+    expect(parsed.source_control.repository).toEqual({
+      provider: 'gitlab',
+      remote: 'origin',
+      slug: 'group/subgroup/gitlab-project',
+      default_base_branch: 'origin/main',
+      review_system: 'merge_request',
+    });
+    expect(parsed.source_control.branch_strategy).toBe('issue_branch_review_merge');
     expect(parsed.execution.source_repo_roots).toEqual(['.']);
   });
 
@@ -445,6 +482,69 @@ describe('initProject', () => {
 
     const parsed = JSON.parse(projectYamlCall![1] as string);
     expect(parsed.source_control.context_publication_policy).toBe('public_distilled');
+  });
+
+  it('explicitly normalizes legacy github_repo metadata into git_versioned repository metadata', async () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsPromisesMock.access.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockImplementation(async (path: any) => {
+      const normalizedPath = String(path);
+      if (normalizedPath.endsWith('registry.yaml')) {
+        return JSON.stringify({
+          version: '1.0.0',
+          last_updated: '2025-01-01T00:00:00.000Z',
+          active_project: 'test-project',
+          projects: [
+            {
+              id: 'test-project',
+              name: 'Test Project',
+              path: '/home/testuser/AgenticOS/projects/test-project',
+              status: 'active',
+              created: '2025-01-01',
+              last_accessed: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        });
+      }
+
+      if (normalizedPath.endsWith('.project.yaml')) {
+        return JSON.stringify({
+          meta: { name: 'Test Project', id: 'test-project' },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'public_distilled',
+            github_repo: 'madlouse/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['.'],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected readFile path: ${normalizedPath}`);
+    });
+
+    await initProject({
+      name: 'Test Project',
+      topology: 'git_versioned',
+      github_repo: 'madlouse/test-project',
+      context_publication_policy: 'public_distilled',
+      normalize_existing: true,
+    });
+
+    const projectYamlCall = fsPromisesMock.writeFile.mock.calls.find((c) => c[0].endsWith('.project.yaml'));
+    expect(projectYamlCall).toBeDefined();
+    const parsed = JSON.parse(projectYamlCall![1] as string);
+    expect(parsed.source_control.topology).toBe('git_versioned');
+    expect(parsed.source_control.repository).toEqual({
+      provider: 'github',
+      remote: 'origin',
+      slug: 'madlouse/test-project',
+      review_system: 'pull_request',
+    });
+    expect(parsed.source_control.github_repo).toBeUndefined();
+    expect(parsed.source_control.branch_strategy).toBe('issue_branch_review_merge');
   });
 
   it('returns success message with project path and ID', async () => {
