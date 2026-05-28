@@ -37,7 +37,7 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
 
   const manifest = {
     kit_id: 'downstream-standard-kit',
-    kit_version: '0.1.0',
+    kit_version: '0.3.0',
     layers: {
       generated_files: {
         entries: [
@@ -96,12 +96,12 @@ async function setupKitHome(): Promise<{ home: string; projectRoot: string }> {
   await writeFile(join(templateRoot, '.project.yaml'), `meta:\n  name: "Project Name"\n  id: "project-id"\n  version: "1.0.0"\n  created: "YYYY-MM-DD"\n  description: "Project description"\nsource_control:\n  topology: "local_directory_only"\n  context_publication_policy: "local_private"\nagent_context:\n  quick_start: ".context/quick-start.md"\n  current_state: ".context/state.yaml"\n  conversations: ".context/conversations/"\n  knowledge: "knowledge/"\n  tasks: "tasks/"\n  artifacts: "artifacts/"\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\n  artifacts_role: "deliverables"\nstatus:\n  phase: "planning"\n  last_updated: "YYYY-MM-DD"\n`, 'utf-8');
   await writeFile(join(templateRoot, 'quick-start.md'), '# Quick Start\n\n> Contract: concise project-level orientation for fast resume.\n> Do not store full session history, exhaustive decision logs, or issue-by-issue execution details here.\n\n## Project Snapshot\n- **Project**: [Project Name]\n- **Goal**: [Main objective]\n- **Status**: [Current phase]\n- **Last Action**: [What was done last]\n- **Current Focus**: [What to do next]\n- **Resume Here**: [What to do next]\n\n## Key Facts\n- [Important fact 1]\n- [Important fact 2]\n\n## Canonical Layers\n- Operational state: `.context/state.yaml`\n- Conversation history surface: `.context/conversations/` (tracked/display contract path; raw transcript routing may vary by publication policy)\n- Durable knowledge: `knowledge/`\n- Execution plans: `tasks/`\n- Deliverables: `artifacts/`\n', 'utf-8');
   await writeFile(join(templateRoot, 'state.yaml'), '# Contract:\n# - Mutable operational working state only\n# - Keep current task, working memory, and latest guardrail evidence here\n# - Do not append raw conversation transcripts here\n# - Durable synthesis belongs in knowledge/\nsession:\n  id: "session-001"\n  started: "YYYY-MM-DDTHH:MM:SSZ"\n  agent: "claude-sonnet-4.6"\ncurrent_task:\n  id: null\n  title: null\n  status: "pending"\n  next_step: null\nworking_memory:\n  facts: []\n  decisions: []\n  pending: []\nmemory_contract:\n  version: 1\n  quick_start_role: "project_orientation"\n  state_role: "operational_working_state"\n  conversations_role: "append_only_session_history"\n  knowledge_role: "durable_synthesis"\n  tasks_role: "execution_artifacts"\nloaded_context:\n  - ".project.yaml"\n', 'utf-8');
-  await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.2\n', 'utf-8');
-  await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n\n## Objective Synthesis\n- User-stated request:\n- Inferred end goal:\n- Operator signals / partial methods:\n- Constraints:\n- Contradictions or weak assumptions to resolve:\n- Non-goals:\n', 'utf-8');
+  await writeFile(join(templateRoot, 'agent-preflight-checklist.yaml'), 'version: 0.3\nlifecycle_impact:\n  fresh_install_path_defined: false\n  existing_upgrade_path_defined: false\n  migration_dry_run_defined: false\n', 'utf-8');
+  await writeFile(join(templateRoot, 'issue-design-brief.md'), '# Issue Design Brief\n\n## Objective Synthesis\n- User-stated request:\n- Inferred end goal:\n- Operator signals / partial methods:\n- Constraints:\n- Contradictions or weak assumptions to resolve:\n- Non-goals:\n\n## Lifecycle Impact\n- Fresh install path:\n- Existing upgrade path:\n- Data/config migration:\n', 'utf-8');
   await writeFile(join(templateRoot, 'global-review-log.md'), '# <!-- agenticos-template: v1 -->\n# Global Review Log\n\n<!-- agenticos:global-review-log:v2 -->\n\n<table>\n<thead><tr><th>PR</th><th>Agents</th><th>Recommendation</th><th>Findings</th><th>Date</th></tr></thead>\n<tbody>\n', 'utf-8');
   await writeFile(join(templateRoot, 'non-code-evaluation-rubric.yaml'), 'version: 0.1\nname: non-code-evaluation-rubric\n', 'utf-8');
   await writeFile(join(templateRoot, 'sub-agent-handoff.md'), '# Sub-Agent Handoff\n', 'utf-8');
-  await writeFile(join(templateRoot, 'submission-evidence.md'), '# Submission Evidence\n', 'utf-8');
+  await writeFile(join(templateRoot, 'submission-evidence.md'), '# Submission Evidence\n\n## Lifecycle Impact\n- Fresh install path reviewed:\n- Existing upgrade path reviewed:\n- Legacy-upgrade verification:\n', 'utf-8');
   await writeFile(join(canonicalServerRoot, 'index.ts'), "name: 'agenticos_edit_guard'\n", 'utf-8');
   await writeFile(
     join(bootstrapRoot, 'agent-bootstrap-matrix.yaml'),
@@ -296,6 +296,20 @@ describe('standard kit commands', () => {
     expect(claudeMd).toContain(`agenticos-template: v${CURRENT_TEMPLATE_VERSION}`);
     expect(agentsMd).toContain('## Task Intake Rule');
     expect(claudeMd).toContain('## Task Intake Rule');
+    expect(agentsMd).toContain('## Lifecycle Impact Gate');
+    expect(claudeMd).toContain('## Lifecycle Impact Gate');
+    expect(agentsMd).toContain('Fresh install path');
+    expect(claudeMd).toContain('Existing upgrade path');
+
+    const designBrief = await readFile(join(projectRoot, 'tasks', 'templates', 'issue-design-brief.md'), 'utf-8');
+    const preflightTemplate = await readFile(join(projectRoot, 'tasks', 'templates', 'agent-preflight-checklist.yaml'), 'utf-8');
+    const submissionEvidence = await readFile(join(projectRoot, 'tasks', 'templates', 'submission-evidence.md'), 'utf-8');
+    expect(designBrief).toContain('## Lifecycle Impact');
+    expect(designBrief).toContain('Data/config migration');
+    expect(preflightTemplate).toContain('lifecycle_impact');
+    expect(preflightTemplate).toContain('fresh_install_path_defined');
+    expect(submissionEvidence).toContain('## Lifecycle Impact');
+    expect(submissionEvidence).toContain('Legacy-upgrade verification');
   });
 
   it('upgrade check reports missing, stale, matching, and diverged files', async () => {

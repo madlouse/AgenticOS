@@ -16,6 +16,17 @@
 - Critique completed:
 - Acceptance defined before edit:
 
+## Lifecycle Impact
+- Fresh install path reviewed:
+- Existing upgrade path reviewed:
+- Change surface reviewed:
+- Migration or repair required:
+- Migration dry-run/apply evidence:
+- Rollback guidance:
+- Fresh-install verification:
+- Legacy-upgrade verification:
+- Reviewer lifecycle finding required if missing:
+
 ## Sub-Agent Verification
 - Sub-agents used:
 - Inheritance packet defined:
