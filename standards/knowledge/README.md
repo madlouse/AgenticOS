@@ -103,6 +103,7 @@ Files without explicit frontmatter are implicitly LIVE unless the filename or co
 | `homebrew-post-install-implementation-report-2026-03-25.md` | LIVE | Homebrew surface alignment: README, tap README, formula post_install, caveats |
 | `standard-kit-command-design-v1-2026-03-23.md` | LIVE | Standard-kit command design: agenticos_standard_kit_adopt, agenticos_standard_kit_upgrade_check |
 | `standard-kit-command-implementation-report-2026-03-23.md` | LIVE | Standard-kit command implementation report |
+| `agentic-feature-design-and-runtime-integration-standard-2026-05-30.md` | LIVE | Layered standard separating feature design, runtime integration, and Git-backed implementation flow |
 | `health-command-design-2026-03-25.md` | LIVE | Health command design: bounded pre-work health surface (repo_sync, entry_surface, guardrail) |
 | `health-command-implementation-report-2026-03-25.md` | LIVE | Health command implementation: agenticos_health with compact structured output |
 | `canonical-sync-contract-2026-03-25.md` | LIVE | Canonical sync contract: when local checkout is trustworthy, source-of-truth ordering |
