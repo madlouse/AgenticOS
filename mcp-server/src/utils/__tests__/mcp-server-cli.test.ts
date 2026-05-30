@@ -9,7 +9,8 @@ describe('mcp server cli helpers', () => {
     expect(output).toContain('agenticos-mcp — AgenticOS MCP Server v0.4.3');
     expect(output).toContain('AGENTICOS_HOME  Workspace root (required)');
     expect(output).toContain('agenticos-bootstrap --help');
-    expect(output).toContain('Claude Code: claude mcp add --transport stdio --scope user');
+    expect(output).toContain('Claude Code: claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp');
+    expect(output).not.toContain('Claude Code: claude mcp add --transport stdio --scope user');
     expect(output).toContain('~/.cursor/mcp.json');
     expect(output).not.toContain('Configure in your AI tool\'s mcp.json');
   });

@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+- bootstrap/docs: Claude Code MCP registration examples and recovery commands
+  now place the `agenticos` server name before options, matching Claude Code
+  CLI 2.1.x argument parsing and avoiding `missing required argument
+  'commandOrUrl'` during install or repair (#493, #494).
 
 ## [0.4.32] — 2026-05-28
 

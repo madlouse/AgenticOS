@@ -61,7 +61,7 @@ export function buildHelpLines(version: string): string[] {
     '  agenticos-bootstrap --help',
     '',
     'Manual registration examples:',
-    '  Claude Code: claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp',
+    '  Claude Code: claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp',
     '  Codex:       codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp',
     '  Cursor:      add `agenticos` to ~/.cursor/mcp.json with env.AGENTICOS_HOME',
     '  Gemini CLI:  gemini mcp add -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos agenticos-mcp',

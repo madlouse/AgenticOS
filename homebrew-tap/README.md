@@ -34,7 +34,7 @@ export AGENTICOS_HOME="$(brew --prefix)/var/agenticos"
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 
 # Claude Code
-claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 
 # Codex
 codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
@@ -107,7 +107,7 @@ If a previous registration still points at a source checkout instead of `agentic
 # Claude Code
 claude mcp get agenticos
 claude mcp remove agenticos -s user
-claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 
 # Codex
 codex mcp list

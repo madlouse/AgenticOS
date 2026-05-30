@@ -8,6 +8,7 @@ import {
   mergeCursorMcpConfig,
   parseAgentSelection,
   renderBootstrapCommand,
+  renderRepairRemoveCommand,
   upsertAgenticOSEnvExport,
 } from '../bootstrap-helper.js';
 
@@ -47,10 +48,56 @@ describe('bootstrap helper', () => {
     ]);
   });
 
+  it('deduplicates blank and repeated workspace candidates', () => {
+    const candidates = detectWorkspaceCandidates(
+      (path) => path === '/opt/homebrew/var/agenticos',
+      '/Users/tester',
+      ' /opt/homebrew/var/agenticos ',
+    );
+
+    expect(candidates).toEqual([
+      '/opt/homebrew/var/agenticos',
+      '/Users/tester/AgenticOS-workspace',
+    ]);
+  });
+
   it('renders explicit AGENTICOS_HOME bootstrap commands', () => {
     const command = renderBootstrapCommand('codex', '/tmp/workspace');
     expect(formatCommand(command)).toContain('AGENTICOS_HOME=/tmp/workspace');
     expect(command.command).toBe('codex');
+  });
+
+  it('renders Claude Code bootstrap with server name before options', () => {
+    const command = renderBootstrapCommand('claude-code', '/tmp/workspace');
+    expect(command.command).toBe('claude');
+    expect(command.args).toEqual([
+      'mcp',
+      'add',
+      'agenticos',
+      '-s',
+      'user',
+      '-e',
+      'AGENTICOS_HOME=/tmp/workspace',
+      '--',
+      'agenticos-mcp',
+    ]);
+    expect(formatCommand(command)).toBe('claude mcp add agenticos -s user -e AGENTICOS_HOME=/tmp/workspace -- agenticos-mcp');
+  });
+
+  it('renders Gemini bootstrap and repair commands', () => {
+    expect(formatCommand(renderBootstrapCommand('gemini-cli', '/tmp/workspace'))).toBe(
+      'gemini mcp add -s user -e AGENTICOS_HOME=/tmp/workspace agenticos agenticos-mcp',
+    );
+    expect(formatCommand(renderRepairRemoveCommand('gemini-cli')!)).toBe(
+      'gemini mcp remove -s user agenticos',
+    );
+  });
+
+  it('reports Cursor bootstrap as config-only', () => {
+    expect(() => renderBootstrapCommand('cursor', '/tmp/workspace')).toThrow(
+      'Cursor bootstrap uses JSON config mutation',
+    );
+    expect(renderRepairRemoveCommand('cursor')).toBeNull();
   });
 
   it('merges cursor MCP config without dropping other servers', () => {
@@ -80,8 +127,15 @@ describe('bootstrap helper', () => {
   });
 
   it('upserts AGENTICOS_HOME export idempotently', () => {
+    expect(upsertAgenticOSEnvExport(null, '/tmp/workspace')).toBe(
+      'export AGENTICOS_HOME="/tmp/workspace"\n',
+    );
+
     const inserted = upsertAgenticOSEnvExport('# existing\n', '/tmp/workspace');
     expect(inserted).toContain('export AGENTICOS_HOME="/tmp/workspace"');
+
+    const insertedAfterNonBlank = upsertAgenticOSEnvExport('# existing', '/tmp/workspace');
+    expect(insertedAfterNonBlank).toBe('# existing\n\nexport AGENTICOS_HOME="/tmp/workspace"\n');
 
     const updated = upsertAgenticOSEnvExport(
       '# existing\nexport AGENTICOS_HOME="/old"\n',
@@ -101,5 +155,12 @@ describe('bootstrap helper', () => {
     expect(detected.find((agent) => agent.id === 'codex')?.installed).toBe(true);
     expect(detected.find((agent) => agent.id === 'cursor')?.installed).toBe(true);
     expect(detected.find((agent) => agent.id === 'claude-code')?.installed).toBe(false);
+  });
+
+  it('quotes shell segments only when needed', () => {
+    expect(formatCommand({
+      command: 'agenticos-bootstrap',
+      args: ['--workspace', '/tmp/Agentic OS', "--label=Bob's"],
+    })).toBe('agenticos-bootstrap --workspace \'/tmp/Agentic OS\' \'--label=Bob\'"\'"\'s\'');
   });
 });
