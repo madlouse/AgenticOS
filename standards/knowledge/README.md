@@ -78,6 +78,7 @@ Files without explicit frontmatter are implicitly LIVE unless the filename or co
 | `claude-codex-adapter-parity-2026-03-29.md` | LIVE | Claude/Codex adapter parity: canonical policy block vs runtime-specific guidance blocks |
 | `per-agent-bootstrap-standard-2026-03-25.md` | LIVE | Per-agent bootstrap standard with MCP transport availability vs project-intent routing split |
 | `per-agent-bootstrap-standard-implementation-report-2026-03-25.md` | LIVE | Bootstrap matrix, canonical human-facing docs, parser and verification harness |
+| `user-derived-agent-execution-standards-2026-05-30.md` | LIVE | Distilled operator-derived standards from Codex, Claude Code, Hermes, and AgenticOS sessions |
 
 ---
 
