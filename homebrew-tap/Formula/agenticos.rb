@@ -74,7 +74,7 @@ class Agenticos < Formula
            files are not overwritten unless you rerun with --force-skills.
 
          Claude Code
-           claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+           claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 
          Codex
            codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
@@ -110,7 +110,7 @@ class Agenticos < Formula
          Claude Code
            claude mcp get agenticos
            claude mcp remove agenticos -s user
-           claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+           claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 
          Codex
            codex mcp list

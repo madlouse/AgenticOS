@@ -33,7 +33,7 @@ async function setupBootstrapHome(): Promise<string> {
           transport: 'stdio',
           canonical_bootstrap_method: 'cli-command',
           canonical_config_location: 'managed',
-          bootstrap_command: 'claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp',
+          bootstrap_command: 'claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp',
           verification: ['claude mcp list'],
           transport_debug: ['transport'],
           routing_debug: ['routing'],

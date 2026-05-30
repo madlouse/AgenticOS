@@ -141,7 +141,7 @@ If you prefer to register the MCP server manually for each tool:
 export AGENTICOS_HOME=/absolute/path/to/your/workspace
 
 # Claude Code
-claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 
 # Codex
 codex mcp add --env AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
@@ -175,7 +175,7 @@ If a previous registration still points at a source checkout instead of
 ```bash
 claude mcp get agenticos
 claude mcp remove agenticos -s user
-claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 
 codex mcp get agenticos
 codex mcp remove agenticos

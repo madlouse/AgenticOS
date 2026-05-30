@@ -66,6 +66,8 @@ describe('homebrew bootstrap docs', () => {
       expect(doc).not.toMatch(/\/home\/[^/\s]+/);
       expect(doc).toContain('claude mcp get agenticos');
       expect(doc).toContain('claude mcp remove agenticos');
+      expect(doc).toContain('claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp');
+      expect(doc).not.toContain('claude mcp add --transport stdio --scope user');
       expect(doc).toContain('codex mcp get agenticos');
       expect(doc).toContain('codex mcp remove agenticos');
     }

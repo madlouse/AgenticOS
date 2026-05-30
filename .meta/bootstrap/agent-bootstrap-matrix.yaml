@@ -29,7 +29,7 @@ supported_agents:
     transport: stdio
     canonical_bootstrap_method: cli-command
     canonical_config_location: claude-managed user MCP config via `claude mcp add --scope user`
-    bootstrap_command: claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+    bootstrap_command: claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
     activation_skill:
       support: official
       path: ~/.claude/skills/agenticos/SKILL.md
@@ -55,7 +55,7 @@ supported_agents:
       - run `claude mcp get agenticos`
       - if the command is not `agenticos-mcp`, run `claude mcp remove agenticos -s user`
       - if the stored environment does not include `AGENTICOS_HOME`, run `claude mcp remove agenticos -s user`
-      - re-register with `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
+      - re-register with `claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp`
       - restart Claude Code and verify with `claude mcp list`, `/mcp`, and `agenticos_list`
   - id: codex
     label: Codex

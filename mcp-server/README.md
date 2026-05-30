@@ -144,7 +144,7 @@ want to replace a local edit.
 
 ### Claude Code
 
-- canonical bootstrap: `claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp`
+- canonical bootstrap: `claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp`
 - canonical config location: `~/.claude/settings.json`
 - activation Skill: `~/.claude/skills/agenticos/SKILL.md`
 - verify:
@@ -241,7 +241,7 @@ Claude Code repair flow:
 ```bash
 claude mcp get agenticos
 claude mcp remove agenticos -s user
-claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 ```
 
 Codex repair flow:
@@ -638,7 +638,7 @@ Get complete context for the current session project.
 2. If `agenticos` is missing, re-register it:
    ```bash
    claude mcp remove agenticos -s user
-   claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+   claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
    ```
 3. Restart the AI tool completely (not just the current session)
 4. Try `agenticos_list` again
@@ -685,7 +685,7 @@ instead of `agenticos-mcp`, remove the stale entry and re-register:
 ```bash
 claude mcp get agenticos
 claude mcp remove agenticos -s user
-claude mcp add --transport stdio --scope user -e AGENTICOS_HOME="$AGENTICOS_HOME" agenticos -- agenticos-mcp
+claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp
 ```
 
 ### Runtime version mismatch

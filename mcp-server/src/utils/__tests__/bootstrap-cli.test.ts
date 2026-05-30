@@ -973,7 +973,7 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(1);
     expect(harness.stdout.some((line) => line.includes('FAIL claude-code'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('Recovery: claude mcp add'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Recovery: claude mcp add agenticos -s user -e AGENTICOS_HOME="$AGENTICOS_HOME" -- agenticos-mcp'))).toBe(true);
   });
 
   it('verifies the Claude cwd guidance hook when claude-code is selected', () => {
