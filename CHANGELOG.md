@@ -8,7 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+- mcp-server: add `agenticos_switch_out` with origin-workdir restore guidance so
+  agents can leave a project context and continue subsequent filesystem work
+  from the original entry directory (#500).
+
+### Changed
+- bootstrap: managed AgenticOS activation Skills now route "切出/退出项目/回到初始目录"
+  through `agenticos_switch_out` and require agents to apply the returned
+  `target_workdir` explicitly (#500).
 
 ## [0.4.33] — 2026-05-30
 

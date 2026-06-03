@@ -10,6 +10,29 @@ export interface SessionProjectBinding {
   boundAt: string;
 }
 
+export interface SessionOriginContext {
+  cwd: string | null;
+  source: 'agent-input' | 'mcp-process' | 'unknown';
+  capturedAt: string;
+  warning: string | null;
+}
+
+export interface SessionContextState {
+  activeProject: SessionProjectBinding | null;
+  previousProject: SessionProjectBinding | null;
+  origin: SessionOriginContext | null;
+  expectedWorkdir: string | null;
+  switchedOutAt: string | null;
+}
+
+export interface SwitchOutSessionResult {
+  hadActiveProject: boolean;
+  exitedProject: SessionProjectBinding | null;
+  previousProject: SessionProjectBinding | null;
+  origin: SessionOriginContext | null;
+  targetWorkdir: string | null;
+}
+
 export interface PwdAlignmentResult {
   success: boolean;
   agentType: 'claude-code' | 'codex' | 'other';
@@ -20,16 +43,42 @@ export interface PwdAlignmentResult {
 }
 
 let currentSessionProject: SessionProjectBinding | null = null;
+let previousSessionProject: SessionProjectBinding | null = null;
+let sessionOriginContext: SessionOriginContext | null = null;
+let expectedSessionWorkdir: string | null = null;
+let sessionSwitchedOutAt: string | null = null;
+
+function captureOriginContext(originCwd?: string | null): SessionOriginContext {
+  const capturedAt = new Date().toISOString();
+  const trimmedOrigin = typeof originCwd === 'string' ? originCwd.trim() : '';
+  const candidate = trimmedOrigin || process.cwd();
+  const source: SessionOriginContext['source'] = trimmedOrigin ? 'agent-input' : 'mcp-process';
+  const validation = validatePathSecurity(candidate);
+
+  return {
+    cwd: validation.valid ? candidate : null,
+    source: validation.valid ? source : 'unknown',
+    capturedAt,
+    warning: validation.valid ? null : validation.error!,
+  };
+}
 
 export function bindSessionProject(
-  binding: Omit<SessionProjectBinding, 'boundAt'> & { boundAt?: string }
+  binding: Omit<SessionProjectBinding, 'boundAt'> & { boundAt?: string },
+  options: { originCwd?: string | null } = {},
 ): SessionProjectBinding {
   const fullBinding: SessionProjectBinding = {
     ...binding,
     boundAt: binding.boundAt || new Date().toISOString(),
   };
 
+  if (!sessionOriginContext) {
+    sessionOriginContext = captureOriginContext(options.originCwd);
+  }
+  previousSessionProject = currentSessionProject;
   currentSessionProject = fullBinding;
+  expectedSessionWorkdir = fullBinding.projectPath;
+  sessionSwitchedOutAt = null;
   return fullBinding;
 }
 
@@ -37,8 +86,39 @@ export function getSessionProjectBinding(): SessionProjectBinding | null {
   return currentSessionProject;
 }
 
+export function getSessionContextState(): SessionContextState {
+  return {
+    activeProject: currentSessionProject,
+    previousProject: previousSessionProject,
+    origin: sessionOriginContext,
+    expectedWorkdir: expectedSessionWorkdir,
+    switchedOutAt: sessionSwitchedOutAt,
+  };
+}
+
+export function switchOutSessionProject(): SwitchOutSessionResult {
+  const exitedProject = currentSessionProject;
+  const result: SwitchOutSessionResult = {
+    hadActiveProject: currentSessionProject !== null,
+    exitedProject,
+    previousProject: previousSessionProject,
+    origin: sessionOriginContext,
+    targetWorkdir: sessionOriginContext?.cwd || null,
+  };
+
+  currentSessionProject = null;
+  previousSessionProject = null;
+  expectedSessionWorkdir = result.targetWorkdir;
+  sessionSwitchedOutAt = new Date().toISOString();
+  return result;
+}
+
 export function clearSessionProjectBinding(): void {
   currentSessionProject = null;
+  previousSessionProject = null;
+  sessionOriginContext = null;
+  expectedSessionWorkdir = null;
+  sessionSwitchedOutAt = null;
 }
 
 export function containsControlCharacters(value: string): boolean {

@@ -83,7 +83,7 @@ vi.mock('../../utils/canonical-main-guard.js', () => ({
   detectCanonicalMainWriteProtection: vi.fn(() => ({ blocked: false })),
 }));
 
-import { switchProject, listProjects, getStatus } from '../project.js';
+import { switchOutProject, switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as distill from '../../utils/distill.js';
@@ -2113,6 +2113,54 @@ describe('getStatus', () => {
     expect(result).toContain('No project provided and no session project is bound');
   });
 
+  it('shows no active project and expected workdir after switch-out', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    }, {
+      originCwd: '/entry/start',
+    });
+    await switchOutProject();
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [],
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('# Status: No active AgenticOS project');
+    expect(result).toContain('Active project: none');
+    expect(result).toContain('Expected workdir: /entry/start');
+    expect(result).toContain('Origin cwd: /entry/start');
+    expect(result).toContain('Use agenticos_switch to enter a project again');
+  });
+
+  it('shows unknown expected workdir and origin warning after switch-out with invalid origin cwd', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    }, {
+      originCwd: 'relative/path',
+    });
+    await switchOutProject();
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [],
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('Expected workdir: unknown');
+    expect(result).toContain('Origin cwd: unknown');
+    expect(result).toContain('Origin warning: Path must be absolute');
+  });
+
   it('returns status for the resolved session project', async () => {
     bindSessionProject({
       projectId: 'test-project',
@@ -2162,6 +2210,45 @@ describe('getStatus', () => {
     expect(result).toContain('in_progress');
     expect(result).toContain('task 1');
     expect(result).toContain('decision 1');
+  });
+
+  it('shows unknown origin cwd for an active project when the captured origin was invalid', async () => {
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/test/path',
+    }, {
+      originCwd: 'relative/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'test-project',
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    mockStatusReads(
+      {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
+        working_memory: { pending: [], decisions: [] },
+      },
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('Origin cwd: unknown');
   });
 
   it('fails closed when status reads an invalid project kind', async () => {

@@ -10,6 +10,8 @@ const worktreeTopologyMock = vi.hoisted(() => ({
   deriveExpectedWorktreeRoot: vi.fn(() => '/home/testuser/AgenticOS/worktrees/project-1'),
   inspectProjectWorktreeTopology: vi.fn(),
 }));
+const execFileMock = vi.hoisted(() => vi.fn());
+const execMock = vi.hoisted(() => vi.fn());
 
 // Mock modules
 vi.mock('fs/promises', () => ({
@@ -25,6 +27,11 @@ vi.mock('fs/promises', () => ({
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
   default: {},
+}));
+
+vi.mock('child_process', () => ({
+  exec: execMock,
+  execFile: execFileMock,
 }));
 
 vi.mock('os', () => ({
@@ -61,7 +68,7 @@ vi.mock('../../utils/worktree-topology.js', () => ({
   inspectProjectWorktreeTopology: worktreeTopologyMock.inspectProjectWorktreeTopology,
 }));
 
-import { switchProject } from '../project.js';
+import { switchOutProject, switchProject } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
 import * as distill from '../../utils/distill.js';
@@ -137,6 +144,12 @@ describe('switchProject — agenticos_switch tests', () => {
       source: null,
       state: {},
       state_path: null,
+    });
+    execFileMock.mockImplementation((_command: string, _args: string[], callback: (error: Error | null, stdout: string) => void) => {
+      callback(null, '');
+    });
+    execMock.mockImplementation((_command: string, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+      callback(null, '', '');
     });
     worktreeTopologyMock.inspectProjectWorktreeTopology.mockResolvedValue({
       applies: true,
@@ -307,6 +320,224 @@ describe('switchProject — agenticos_switch tests', () => {
         'test-project',
         expect.objectContaining({ last_accessed: expect.any(String) }),
       );
+    });
+
+    it('switches out to the first origin cwd after a single project switch', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => path === '/test/path' || path === '/entry/start');
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('✅ Exited AgenticOS project context "Test Project"');
+      expect(result).toContain('origin_cwd: /entry/start');
+      expect(result).toContain('target_workdir: /entry/start');
+      expect(result).toContain('Recommended explicit workdir for tool calls: /entry/start');
+      expect(result).toContain('MCP cannot mutate the parent process cwd');
+      expect(getSessionProjectBinding()).toBeNull();
+    });
+
+    it('keeps the first origin cwd when switching A to B before switch-out', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => (
+        path === '/entry/start' ||
+        path === '/projects/a' ||
+        path === '/projects/b'
+      ));
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [
+          {
+            id: 'project-a',
+            name: 'Project A',
+            path: '/projects/a',
+            status: 'active' as const,
+            created: '2025-01-01',
+          },
+          {
+            id: 'project-b',
+            name: 'Project B',
+            path: '/projects/b',
+            status: 'active' as const,
+            created: '2025-01-01',
+          },
+        ],
+      }));
+      mockDefaultReads();
+
+      await switchProject({ project: 'project-a', origin_cwd: '/entry/start' });
+      await switchProject({ project: 'project-b', origin_cwd: '/should/not/use' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('✅ Exited AgenticOS project context "Project B"');
+      expect(result).toContain('Previous project before last switch: Project A (project-a)');
+      expect(result).toContain('target_workdir: /entry/start');
+      expect(result).not.toContain('target_workdir: /projects/a');
+    });
+
+    it('returns neutral guidance when switch-out has no active project or origin', async () => {
+      const result = await switchOutProject();
+
+      expect(result).toContain('No active AgenticOS project context');
+      expect(result).toContain('origin_cwd: unknown');
+      expect(result).toContain('Choose a neutral non-project workdir');
+    });
+
+    it('clears binding but warns when origin cwd is invalid or unknown', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: 'relative/path' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('Origin cwd was not usable');
+      expect(result).toContain('target_workdir: unknown');
+      expect(result).toContain('active project binding was cleared');
+      expect(getSessionProjectBinding()).toBeNull();
+    });
+
+    it('clears binding but warns when captured origin cwd no longer exists', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => path === '/test/path');
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/missing/origin' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('origin_cwd: /missing/origin');
+      expect(result).toContain('Restore workdir is not currently usable');
+      expect(result).toContain('target directory does not exist');
+      expect(getSessionProjectBinding()).toBeNull();
+    });
+
+    it('uses Codex-specific target_workdir guidance after switch-out', async () => {
+      const previousCodex = process.env.CODEX;
+      process.env.CODEX = '1';
+      try {
+        fsMock.existsSync.mockImplementation((path: string) => path === '/test/path' || path === '/entry/start');
+        registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+        mockDefaultReads();
+
+        await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+        const result = await switchOutProject();
+
+        expect(result).toContain('Codex current-session cwd cannot be changed by MCP output');
+        expect(result).toContain('Use target_workdir as explicit workdir');
+        expect(result).toContain("codex -C '/entry/start'");
+      } finally {
+        if (previousCodex === undefined) delete process.env.CODEX;
+        else process.env.CODEX = previousCodex;
+      }
+    });
+
+    it('uses current-session alignment hints for Claude Code after switch-out', async () => {
+      const previousClaudeCode = process.env.CLAUDE_CODE;
+      process.env.CLAUDE_CODE = '1';
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/entry/start');
+      try {
+        fsMock.existsSync.mockImplementation((path: string) => path === '/test/path' || path === '/entry/start');
+        registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+        mockDefaultReads();
+
+        await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+        const result = await switchOutProject();
+
+        expect(result).toContain('Observed MCP process PWD: /entry/start (matches target workdir)');
+        expect(result).toContain('Client alignment hint:');
+        expect(result).toContain("cd '/entry/start'");
+      } finally {
+        cwdSpy.mockRestore();
+        if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;
+        else process.env.CLAUDE_CODE = previousClaudeCode;
+      }
+    });
+
+    it('warns when git status cannot inspect the exited project before switch-out', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => (
+        path === '/entry/start' ||
+        path === '/test/path' ||
+        path === '/test/path/.git'
+      ));
+      execFileMock.mockImplementation((_command: string, _args: string[], callback: (error: Error | null, stdout: string) => void) => {
+        callback(new Error('git unavailable'), '');
+      });
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('Project pollution check: git status could not be inspected');
+    });
+
+    it('warns when the exited project has uncommitted changes', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => (
+        path === '/entry/start' ||
+        path === '/test/path' ||
+        path === '/test/path/.git'
+      ));
+      execFileMock.mockImplementation((_command: string, _args: string[], callback: (error: Error | null, stdout: string) => void) => {
+        callback(null, ' M changed.ts\n');
+      });
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('Project pollution risk: current project worktree has uncommitted changes');
+    });
+
+    it('does not emit a dirty warning when the exited project git status is clean', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => (
+        path === '/entry/start' ||
+        path === '/test/path' ||
+        path === '/test/path/.git'
+      ));
+      execFileMock.mockImplementation((_command: string, _args: string[], callback: (error: Error | null, stdout: string) => void) => {
+        callback(null, '');
+      });
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+      const result = await switchOutProject();
+
+      expect(result).not.toContain('Project pollution risk');
+      expect(result).toContain('target_workdir: /entry/start');
+    });
+
+    it('keeps target workdir guidance when switch-out is repeated after active context was cleared', async () => {
+      fsMock.existsSync.mockImplementation((path: string) => path === '/entry/start' || path === '/test/path');
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+      await switchOutProject();
+      const result = await switchOutProject();
+
+      expect(result).toContain('No active AgenticOS project context');
+      expect(result).toContain('target_workdir: /entry/start');
+    });
+
+    it('adds an issue worktree warning when leaving a worktree path', async () => {
+      const worktreePath = '/home/testuser/AgenticOS/worktrees/test-project/issue-500';
+      fsMock.existsSync.mockImplementation((path: string) => path === '/entry/start' || path === worktreePath);
+      registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+        projects: [{
+          id: 'test-project',
+          name: 'Test Project',
+          path: worktreePath,
+          status: 'active' as const,
+          created: '2025-01-01',
+        }],
+      }));
+      mockDefaultReads();
+
+      await switchProject({ project: 'test-project', origin_cwd: '/entry/start' });
+      const result = await switchOutProject();
+
+      expect(result).toContain('exited project path looks like an issue worktree');
     });
   });
 

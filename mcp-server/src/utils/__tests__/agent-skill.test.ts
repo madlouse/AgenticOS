@@ -115,9 +115,15 @@ describe('agent skill bootstrap', () => {
     expect(content).toContain(`template_version: ${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
     expect(content).toContain('description: |');
     expect(content).toContain('agenticos_switch');
+    expect(content).toContain('agenticos_switch_out');
     expect(content).toContain('切换到');
+    expect(content).toContain('切出');
+    expect(content).toContain('退出项目');
+    expect(content).toContain('target_workdir');
+    expect(content).toContain('origin_cwd');
     expect(content).toContain('Agentic OS 项目');
     expect(content).toContain('switch to Agentic OS project');
+    expect(content).toContain('switch out project');
     expect(content).toContain('trigger: "AgenticOS MCP project switching');
     expect(content).toContain('tool_search');
     expect(content).toContain('Shell directory search before MCP discovery is a routing bug.');
