@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { execFile } from 'child_process';
 import yaml from 'yaml';
 import { getAgenticOSHome, loadRegistry, patchProjectMetadata } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
@@ -16,7 +17,15 @@ import {
   detectLegacyTrackedTranscriptStatus,
   resolveConversationRoutingPlan,
 } from '../utils/conversation-routing.js';
-import { bindSessionProject, getSessionProjectBinding, alignPwd, type PwdAlignmentResult } from '../utils/session-context.js';
+import {
+  bindSessionProject,
+  getSessionContextState,
+  getSessionProjectBinding,
+  alignPwd,
+  switchOutSessionProject,
+  type PwdAlignmentResult,
+  type SwitchOutSessionResult,
+} from '../utils/session-context.js';
 import {
   assessVersionedEntrySurfaceState,
   type VersionedEntrySurfaceAssessment,
@@ -376,6 +385,71 @@ function buildFilesystemAlignmentLines(
   return lines;
 }
 
+function buildTargetWorkdirAlignmentLines(
+  targetWorkdir: string,
+  pwdResult: PwdAlignmentResult,
+): string[] {
+  const lines = [
+    `target_workdir: ${targetWorkdir}`,
+    `🧰 Recommended explicit workdir for tool calls: ${targetWorkdir}`,
+  ];
+
+  const relation = pwdResult.observedMcpProcessPwd === targetWorkdir ? 'matches target workdir' : 'differs from target workdir';
+  lines.push(`🧭 Observed MCP process PWD: ${pwdResult.observedMcpProcessPwd} (${relation})`);
+  lines.push('⚠️ Client shell PWD: unavailable to MCP; switch-out is complete only when the agent uses target_workdir for subsequent filesystem and shell calls.');
+
+  if (pwdResult.warning) {
+    lines.push(`⚠️ ${pwdResult.warning}`);
+  }
+
+  if (pwdResult.agentType === 'codex') {
+    lines.push('⚠️ Codex current-session cwd cannot be changed by MCP output.');
+    lines.push('   Use target_workdir as explicit workdir for every filesystem operation after switch-out.');
+    if (pwdResult.instruction) {
+      lines.push('   To start a new Codex session at the restored workdir, run:');
+      lines.push(`   ${pwdResult.instruction}`);
+    }
+  } else {
+    lines.push('📍 Client alignment hint:');
+    lines.push(`   ${pwdResult.instruction}`);
+    lines.push('   Treat this as a hint; verify the client shell PWD before using relative paths.');
+  }
+
+  return lines;
+}
+
+async function inspectDirtyWorktree(projectPath: string): Promise<string | null> {
+  const gitMarker = join(projectPath, '.git');
+  if (!existsSync(gitMarker)) return null;
+
+  return new Promise((resolve) => {
+    execFile('git', ['-C', projectPath, 'status', '--short'], (error, stdout) => {
+      if (error) {
+        resolve('⚠️ Project pollution check: git status could not be inspected before switch-out.');
+        return;
+      }
+      if (stdout.trim().length > 0) {
+        resolve('⚠️ Project pollution risk: current project worktree has uncommitted changes.');
+        return;
+      }
+      resolve(null);
+    });
+  });
+}
+
+async function buildSwitchOutPollutionLines(result: SwitchOutSessionResult): Promise<string[]> {
+  const lines: string[] = [];
+  if (!result.exitedProject) return lines;
+
+  const dirtyLine = await inspectDirtyWorktree(result.exitedProject.projectPath);
+  if (dirtyLine) lines.push(dirtyLine);
+  if (result.exitedProject.projectPath.includes('/worktrees/')) {
+    lines.push('⚠️ Project pollution check: exited project path looks like an issue worktree; confirm task/PR state before deleting it.');
+  }
+
+  return lines;
+}
+
 function stripPwdWarningPrefix(warning: string | null): string {
   /* c8 ignore next -- alignPwd failure results currently always include a warning string */
   return warning?.replace(/^\[WARN\] PWD alignment skipped:\s*/, '') || 'project path is not usable';
@@ -473,6 +547,8 @@ export async function switchProject(args: any): Promise<string> {
     projectId: found.id,
     projectName: found.name,
     projectPath: sessionPath,
+  }, {
+    originCwd: typeof args.origin_cwd === 'string' ? args.origin_cwd : null,
   });
 
   // Check if entry surface writes are allowed in this checkout
@@ -626,6 +702,57 @@ export async function switchProject(args: any): Promise<string> {
   return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
+export async function switchOutProject(_args: any = {}): Promise<string> {
+  const result = switchOutSessionProject();
+  const lines: string[] = [];
+
+  if (!result.hadActiveProject) {
+    lines.push('ℹ️ No active AgenticOS project context is currently bound.');
+  } else {
+    lines.push(`✅ Exited AgenticOS project context "${result.exitedProject!.projectName}"`);
+  }
+
+  if (result.previousProject) {
+    lines.push(`Previous project before last switch: ${result.previousProject.projectName} (${result.previousProject.projectId})`);
+    lines.push(`To return there, explicitly run agenticos_switch with project "${result.previousProject.projectId}".`);
+  }
+
+  if (result.origin?.warning) {
+    lines.push(`⚠️ Origin cwd was not usable when captured: ${result.origin.warning}`);
+  }
+
+  if (!result.origin) {
+    lines.push('⚠️ origin_cwd: unknown');
+    lines.push('No origin workdir has been captured yet. Choose a neutral non-project workdir before continuing.');
+    return lines.join('\n');
+  }
+
+  if (!result.targetWorkdir) {
+    lines.push('⚠️ target_workdir: unknown');
+    lines.push('The active project binding was cleared, but AgenticOS cannot prove a restore directory.');
+    lines.push('Do not continue with the previous project path unless the user explicitly switches back into it.');
+    return lines.join('\n');
+  }
+
+  lines.push(`origin_cwd: ${result.targetWorkdir}`);
+  lines.push(`origin_source: ${result.origin.source}`);
+
+  const pollutionLines = await buildSwitchOutPollutionLines(result);
+  lines.push(...pollutionLines);
+
+  const pwdResult = await alignPwd(result.targetWorkdir);
+  if (!pwdResult.success) {
+    lines.push(`⚠️ target_workdir: ${result.targetWorkdir}`);
+    lines.push(`⚠️ Restore workdir is not currently usable: ${stripPwdWarningPrefix(pwdResult.warning)}`);
+    lines.push('The active project binding was cleared, but the agent must choose a safe non-project workdir before continuing.');
+    return lines.join('\n');
+  }
+
+  lines.push(...buildTargetWorkdirAlignmentLines(result.targetWorkdir, pwdResult));
+  lines.push('Contract: MCP cannot mutate the parent process cwd by itself; the agent must apply target_workdir explicitly.');
+  return lines.join('\n');
+}
+
 export async function listProjects(): Promise<string> {
   const registry = await loadRegistry();
   const sessionProject = getSessionProjectBinding();
@@ -661,6 +788,7 @@ export async function listProjects(): Promise<string> {
 }
 
 export async function getStatus(args: any = {}): Promise<string> {
+  const sessionStateBeforeResolve = getSessionContextState();
   let resolved;
   try {
     resolved = await resolveManagedProjectTarget({
@@ -668,6 +796,26 @@ export async function getStatus(args: any = {}): Promise<string> {
       commandName: 'agenticos_status',
     });
   } catch (error: any) {
+    if (!args?.project && !sessionStateBeforeResolve.activeProject && (
+      sessionStateBeforeResolve.origin ||
+      sessionStateBeforeResolve.expectedWorkdir ||
+      sessionStateBeforeResolve.switchedOutAt
+    )) {
+      const lines = ['# Status: No active AgenticOS project\n'];
+      lines.push('🧭 Active project: none');
+      lines.push(`🧰 Expected workdir: ${sessionStateBeforeResolve.expectedWorkdir || 'unknown'}`);
+      if (sessionStateBeforeResolve.origin) {
+        lines.push(`📍 Origin cwd: ${sessionStateBeforeResolve.origin.cwd || 'unknown'} (${sessionStateBeforeResolve.origin.source})`);
+        if (sessionStateBeforeResolve.origin.warning) {
+          lines.push(`⚠️ Origin warning: ${sessionStateBeforeResolve.origin.warning}`);
+        }
+      }
+      if (sessionStateBeforeResolve.switchedOutAt) {
+        lines.push(`📤 Switched out at: ${sessionStateBeforeResolve.switchedOutAt}`);
+      }
+      lines.push('Use agenticos_switch to enter a project again.');
+      return lines.join('\n');
+    }
     return `❌ ${error.message}`;
   }
 
@@ -699,6 +847,14 @@ export async function getStatus(args: any = {}): Promise<string> {
   const lines: string[] = [];
   lines.push(`# Status: ${project.name}\n`);
   lines.push(`🧭 Project kind: ${projectKind}`);
+  const sessionState = getSessionContextState();
+  if (sessionState.activeProject) {
+    lines.push(`🧭 Active project: ${sessionState.activeProject.projectName} (${sessionState.activeProject.projectId})`);
+    lines.push(`🧰 Expected workdir: ${sessionState.expectedWorkdir || sessionState.activeProject.projectPath}`);
+  }
+  if (sessionState.origin) {
+    lines.push(`📍 Origin cwd: ${sessionState.origin.cwd || 'unknown'} (${sessionState.origin.source})`);
+  }
 
   if (project.last_recorded) {
     const recordedDate = new Date(project.last_recorded).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });

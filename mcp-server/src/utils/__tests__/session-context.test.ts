@@ -2,7 +2,18 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { alignPwd, bindSessionProject, checkIsGitRepo, clearSessionProjectBinding, getSessionProjectBinding, shellQuote, validatePathSecurity, validatePathInAgenticosHome } from '../session-context.js';
+import {
+  alignPwd,
+  bindSessionProject,
+  checkIsGitRepo,
+  clearSessionProjectBinding,
+  getSessionContextState,
+  getSessionProjectBinding,
+  shellQuote,
+  switchOutSessionProject,
+  validatePathSecurity,
+  validatePathInAgenticosHome,
+} from '../session-context.js';
 
 const execFileMock = vi.hoisted(() => vi.fn());
 const agenticosHomeMock = vi.hoisted(() => ({ value: '/test/home' }));
@@ -92,6 +103,62 @@ describe('session-context', () => {
       });
       expect(binding.boundAt).toBe('2026-01-01T00:00:00.000Z');
     });
+
+    it('captures origin cwd only on the first switch and preserves it across project switches', () => {
+      bindSessionProject({
+        projectId: 'a',
+        projectName: 'Project A',
+        projectPath: '/projects/a',
+      }, {
+        originCwd: '/entry/start',
+      });
+
+      bindSessionProject({
+        projectId: 'b',
+        projectName: 'Project B',
+        projectPath: '/projects/b',
+      }, {
+        originCwd: '/should/not/replace',
+      });
+
+      const state = getSessionContextState();
+      expect(state.origin?.cwd).toBe('/entry/start');
+      expect(state.origin?.source).toBe('agent-input');
+      expect(state.activeProject?.projectId).toBe('b');
+      expect(state.previousProject?.projectId).toBe('a');
+      expect(state.expectedWorkdir).toBe('/projects/b');
+    });
+
+    it('falls back to MCP process cwd when origin cwd is not provided', () => {
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/mcp/process/cwd');
+
+      bindSessionProject({
+        projectId: 'p1',
+        projectName: 'Test Project',
+        projectPath: '/test/path',
+      });
+
+      expect(getSessionContextState().origin).toMatchObject({
+        cwd: '/mcp/process/cwd',
+        source: 'mcp-process',
+      });
+      cwdSpy.mockRestore();
+    });
+
+    it('records unknown origin when provided origin cwd is invalid', () => {
+      bindSessionProject({
+        projectId: 'p1',
+        projectName: 'Test Project',
+        projectPath: '/test/path',
+      }, {
+        originCwd: 'relative/path',
+      });
+
+      const origin = getSessionContextState().origin;
+      expect(origin?.cwd).toBeNull();
+      expect(origin?.source).toBe('unknown');
+      expect(origin?.warning).toContain('absolute');
+    });
   });
 
   describe('getSessionProjectBinding', () => {
@@ -119,6 +186,41 @@ describe('session-context', () => {
       });
       clearSessionProjectBinding();
       expect(getSessionProjectBinding()).toBeNull();
+      expect(getSessionContextState().origin).toBeNull();
+    });
+  });
+
+  describe('switchOutSessionProject', () => {
+    it('clears active binding and restores expected workdir to the first origin cwd', () => {
+      bindSessionProject({
+        projectId: 'a',
+        projectName: 'Project A',
+        projectPath: '/projects/a',
+      }, {
+        originCwd: '/entry/start',
+      });
+      bindSessionProject({
+        projectId: 'b',
+        projectName: 'Project B',
+        projectPath: '/projects/b',
+      });
+
+      const result = switchOutSessionProject();
+
+      expect(result.hadActiveProject).toBe(true);
+      expect(result.exitedProject?.projectId).toBe('b');
+      expect(result.previousProject?.projectId).toBe('a');
+      expect(result.targetWorkdir).toBe('/entry/start');
+      expect(getSessionProjectBinding()).toBeNull();
+      expect(getSessionContextState().expectedWorkdir).toBe('/entry/start');
+    });
+
+    it('reports no active project when switching out before any switch', () => {
+      const result = switchOutSessionProject();
+
+      expect(result.hadActiveProject).toBe(false);
+      expect(result.targetWorkdir).toBeNull();
+      expect(getSessionContextState().switchedOutAt).toBeTruthy();
     });
   });
 

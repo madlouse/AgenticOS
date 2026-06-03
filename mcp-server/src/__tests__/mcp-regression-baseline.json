@@ -1,9 +1,9 @@
 {
   "capturedAt": "2026-05-28T08:50:54.185Z",
-  "version": "0.4.32",
+  "version": "0.4.33",
   "serverInfo": {
     "name": "agenticos-mcp",
-    "version": "0.4.32"
+    "version": "0.4.33"
   },
   "protocolVersion": "2025-11-25",
   "capabilities": {
@@ -13,6 +13,7 @@
   "toolNames": [
     "agenticos_init",
     "agenticos_switch",
+    "agenticos_switch_out",
     "agenticos_project_resolve",
     "agenticos_project_ensure",
     "agenticos_external_thread_bind",
@@ -48,5 +49,5 @@
     "agenticos_enforce_git_policy",
     "agenticos_worktree_cleanup"
   ],
-  "toolCount": 36
+  "toolCount": 37
 }

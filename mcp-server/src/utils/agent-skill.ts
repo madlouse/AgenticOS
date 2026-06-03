@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { dirname, join } from 'path';
 import type { SupportedAgentId } from './bootstrap-helper.js';
 
-export const AGENTICOS_SKILL_TEMPLATE_VERSION = 2;
+export const AGENTICOS_SKILL_TEMPLATE_VERSION = 3;
 export const AGENTICOS_SKILL_NAME = 'agenticos';
 
 const HASH_MARKER_RE = /^<!-- agenticos-skill-managed-sha256: ([a-f0-9]{64}) -->\n?/m;
@@ -213,10 +213,10 @@ name: agenticos
 description: |
   Use when the user asks to switch, enter, continue, inspect, or verify an
   AgenticOS / Agentic OS project or topic; asks pwd/current project/project
-  status/worktree status; says 切换到/进入/继续项目; or uses aliases such as
+  status/worktree status; says 切换到/进入/继续项目/退出项目/切出; or uses aliases such as
   "Agentic OS 项目" or "AgenticOS 项目". Discover AgenticOS MCP with tool_search
   when needed, then call AgenticOS MCP before shell directory search.
-version: 1.1.0
+version: 1.2.0
 triggers:
   - "switch project"
   - "switch to project"
@@ -224,6 +224,10 @@ triggers:
   - "switch to Agentic OS project"
   - "enter project"
   - "continue project"
+  - "switch out project"
+  - "exit project"
+  - "leave project"
+  - "return to original directory"
   - "current project"
   - "current AgenticOS project"
   - "current Agentic OS project"
@@ -244,10 +248,15 @@ triggers:
   - "进入 AgenticOS 项目"
   - "进入 Agentic OS 项目"
   - "继续项目"
+  - "切出"
+  - "切出项目"
+  - "退出项目"
+  - "离开项目"
+  - "回到初始目录"
   - "当前项目"
   - "项目状态"
 metadata:
-  trigger: "AgenticOS MCP project switching, Agentic OS project, 切换到 Agentic OS 项目, pwd, current project, project status"
+  trigger: "AgenticOS MCP project switching, switch out project, Agentic OS project, 切换到 Agentic OS 项目, 退出项目, 切出, pwd, current project, project status"
   aliases:
     - "AgenticOS"
     - "Agentic OS"
@@ -262,7 +271,7 @@ metadata:
 
 ## When To Use
 
-Use this Skill whenever the user asks to switch, enter, continue, inspect, or verify an AgenticOS-managed project, topic, or worktree. This includes natural-language requests like "switch to 360Teams", "切换到 Agentic OS 项目", "切换到 360Teams 项目", "pwd", "current project", or "what project am I in?".
+Use this Skill whenever the user asks to switch, enter, continue, exit, inspect, or verify an AgenticOS-managed project, topic, or worktree. This includes natural-language requests like "switch to 360Teams", "切换到 Agentic OS 项目", "切换到 360Teams 项目", "退出项目", "切出", "回到初始目录", "pwd", "current project", or "what project am I in?".
 
 ## Contract
 
@@ -270,10 +279,12 @@ AgenticOS MCP is the source of truth for project identity, project path, session
 
 Before using shell directory search, raw cd behavior, git branch inspection, or guessed repository paths:
 
-1. Use AgenticOS MCP project tools if they are visible. Prefer \`agenticos_status\` for current state and \`agenticos_switch\` for project switching.
+1. Use AgenticOS MCP project tools if they are visible. Prefer \`agenticos_status\` for current state, \`agenticos_switch\` for project switching, and \`agenticos_switch_out\` for "切出/退出项目/回到初始目录" requests.
 2. In Codex-like runtimes where tools may be deferred, call tool discovery for AgenticOS MCP tools before any shell-only behavior. If \`tool_search\` is available and \`mcp__agenticos__\` tools are not visible, search for "AgenticOS MCP project switch status" first.
-3. After \`agenticos_switch\` succeeds, treat its returned project path and recommended explicit workdir as authoritative for subsequent tool calls.
-4. If AgenticOS MCP tools are unavailable, say that the switch was not completed through AgenticOS. Provide recovery: run \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify\`, repair MCP registration if needed, and restart or reload the agent.
+3. Before the first \`agenticos_switch\` in a session, pass the best known absolute client cwd as \`origin_cwd\` when available so \`agenticos_switch_out\` can restore the original entry workdir.
+4. After \`agenticos_switch\` succeeds, treat its returned project path and recommended explicit workdir as authoritative for subsequent tool calls.
+5. After \`agenticos_switch_out\` succeeds, treat its returned \`target_workdir\` as authoritative for every subsequent filesystem and shell tool call. MCP cannot mutate the parent process cwd by itself; if you cannot apply \`target_workdir\`, say the switch-out effect is not complete.
+6. If AgenticOS MCP tools are unavailable, say that the switch was not completed through AgenticOS. Provide recovery: run \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify\`, repair MCP registration if needed, and restart or reload the agent.
 
 For project switch/status prompts, the first observable action should be AgenticOS MCP or AgenticOS MCP tool discovery. Shell directory search before MCP discovery is a routing bug.
 
@@ -281,7 +292,9 @@ For project switch/status prompts, the first observable action should be Agentic
 
 - Do not claim that a project was switched only because a directory was found.
 - Do not substitute \`cd\`, raw filesystem search, \`find\`, \`pwd\`, \`ls\`, or git branch detection for \`agenticos_switch\`.
+- Do not substitute \`cd\` for \`agenticos_switch_out\` when the user asks to leave or exit a project context.
 - Do not ignore AgenticOS output when it differs from the client shell PWD.
+- Do not continue using the previous project path after \`agenticos_switch_out\`; use \`target_workdir\` explicitly.
 - Do not continue implementation work until AgenticOS project/session alignment is clear.
 `;
 }

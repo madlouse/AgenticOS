@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
+import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, switchOutProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 
@@ -73,8 +73,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           project: { type: 'string', description: 'Project ID or name' },
           repo_path: { type: 'string', description: 'Optional absolute checkout path (e.g. issue worktree) to bind the session to instead of the registry path.' },
+          origin_cwd: { type: 'string', description: 'Optional absolute client/agent cwd captured before the first switch; used by agenticos_switch_out to restore subsequent workdir.' },
         },
         required: ['project'],
+      },
+    },
+    {
+      name: 'agenticos_switch_out',
+      description: 'Exit the current AgenticOS project context and return the original target workdir captured before the first project switch. Agents must apply target_workdir explicitly because MCP cannot mutate a parent cwd.',
+      inputSchema: {
+        type: 'object',
+        properties: {},
       },
     },
     {
@@ -658,6 +667,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await initProject(args) }] };
     case 'agenticos_switch':
       return { content: [{ type: 'text', text: await switchProject(args) }] };
+    case 'agenticos_switch_out':
+      return { content: [{ type: 'text', text: await switchOutProject(args ?? {}) }] };
     case 'agenticos_project_resolve':
       return { content: [{ type: 'text', text: await runProjectResolve(args ?? {}) }] };
     case 'agenticos_project_ensure':
