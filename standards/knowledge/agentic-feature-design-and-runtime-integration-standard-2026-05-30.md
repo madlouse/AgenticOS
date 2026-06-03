@@ -10,10 +10,11 @@ scope: feature/product design, runtime integration, and MCP/Skills activation va
 ## Purpose
 
 AgenticOS has one Git-backed development workflow, but not every product
-requirement is a Git workflow requirement. Hermes routing, Discord project
-threads, topic/project language, Skills activation, Homebrew upgrade behavior,
-and MCP availability are feature and runtime-integration concerns first. They
-inherit Git-backed execution rules only when implementation begins.
+requirement is a Git workflow requirement. Hermes Agent activation,
+Hermes-side routing, Discord channel project threads, topic/project language,
+Skills activation, Homebrew upgrade behavior, and MCP availability are feature
+and runtime-integration concerns first. They inherit Git-backed execution rules
+only when implementation begins.
 
 This standard defines that separation so agents do not flatten product design
 requirements into code-development rules, while still preserving strict
@@ -24,7 +25,7 @@ AgenticOS execution discipline.
 | Layer | Owns | Examples | Enforced by |
 | --- | --- | --- | --- |
 | Universal agent execution | Intent, source, scope, project alignment, recording | MCP-first project switch, no raw transcript publication, issue-first work | Agent adapter surfaces, AgenticOS MCP guardrails |
-| Feature/product design | User-facing behavior and product semantics | Hermes as router, Discord thread cockpit, topic/project wording | Design docs, lifecycle impact review, sub-agent review |
+| Feature/product design | User-facing behavior and product semantics | Hermes as router, optional Discord thread cockpit, topic/project wording | Design docs, lifecycle impact review, sub-agent review |
 | Runtime integration | How the feature actually activates on a machine | MCP registration, Skills install, Homebrew caveats, agent restart/reload | Bootstrap, config validation, smoke tests |
 | Git-backed implementation | Code change workflow for Git projects | branch/worktree, tests, PR/MR, CI, merge, cleanup | `preflight`, `branch_bootstrap`, `edit_guard`, `pr_scope_check`, Git host policy |
 
@@ -53,19 +54,22 @@ The following are feature/runtime design requirements, not pure Git Flow
 requirements:
 
 - Hermes is a lightweight personal/work assistant and router.
+- Hermes Agent activation is MCP availability plus the AgenticOS activation
+  Skill. It is independent from Discord channel routing.
 - Heavy project work should be delegated to Codex or Claude Code workers under
   AgenticOS guardrails.
-- Discord is the MVP threaded surface for project-oriented Hermes routing.
+- Discord is the MVP threaded channel surface for project-oriented routing when
+  that optional channel integration is configured.
 - Feishu thread routing is out of scope unless a separate integration reopens
   it.
-- In user-facing Hermes/Discord language, topics and projects may both be
+- In user-facing assistant/channel language, topics and projects may both be
   called projects.
 - Internally, AgenticOS may still track `project_kind=topic|project` or other
   routing metadata.
 - Default worker backend is Codex unless the operator explicitly asks for
   Claude Code or another backend.
 - Machines without Hermes or Discord must keep the normal AgenticOS MCP
-  workflow.
+  workflow; lack of Discord only disables Discord thread routing.
 
 These rules affect product behavior, routing, optional dependencies, and
 operator experience. If code changes are required to implement them, that code
@@ -131,7 +135,14 @@ Minimum validation chain:
    agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
    ```
 
-3. If Hermes/Discord routing is in scope, run the Hermes-specific verification
+3. If Hermes Agent activation is in scope, verify the Skill separately from any
+   channel integration:
+
+   ```bash
+   agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify
+   ```
+
+4. If Discord channel routing is in scope, run the Discord-specific verification
    flag documented by the release or rollout:
 
    ```bash
@@ -148,8 +159,11 @@ Minimum validation chain:
      trigger MCP/tool discovery before shell directory search.
    - Claude Code: AgenticOS MCP server is registered in the Claude runtime, and
      `CLAUDE.md`/Skills guidance reflects the current standard-kit version.
-   - Hermes: optional; if configured, Hermes can resolve a project through
-     AgenticOS MCP before creating or reusing any Discord thread.
+   - Hermes Agent: if configured, Hermes can call AgenticOS MCP and its
+     activation Skill routes project-intent prompts to MCP before `cd`.
+   - Discord channel routing: if configured, the channel integration resolves a
+     project through AgenticOS MCP before creating or reusing any Discord
+     thread.
 
 6. Run a project-switch smoke:
 
@@ -174,9 +188,9 @@ Feature and runtime integration work must preserve installed machines:
   practical.
 - Secrets and PATs are represented as platform secret-store setup and
   verification, not as chat input or repository content.
-- Missing optional systems degrade clearly. For example, no Hermes/Discord
-  setup means no Discord thread routing, but normal AgenticOS MCP project
-  switching still works.
+- Missing optional systems degrade clearly. For example, no Discord setup means
+  no Discord thread routing, but normal AgenticOS MCP project switching still
+  works.
 
 ## Relationship To Git-Backed Development
 
@@ -207,7 +221,8 @@ check:
 
 ## Outcome
 
-Agents should now treat Hermes routing, topic/project user-facing semantics,
-and MCP/Skills activation as feature/runtime integration design topics. They
-still use the Git-backed execution flow when code changes begin, but their
-requirements are specified and reviewed at the correct layer first.
+Agents should now treat Hermes Agent activation, Hermes-side routing,
+topic/project user-facing semantics, optional channel routing, and MCP/Skills
+activation as feature/runtime integration design topics. They still use the
+Git-backed execution flow when code changes begin, but their requirements are
+specified and reviewed at the correct layer first.

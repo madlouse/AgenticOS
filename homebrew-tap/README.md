@@ -73,12 +73,8 @@ For Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent, `--first-run` impl
 For Claude Code PWD guidance after `agenticos_switch`, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply` or include `--auto-configure-hooks` with `--first-run`. The hook reads Claude's PostToolUse stdin payload and feeds the switched project path back into Claude; it does not mutate a parent shell process.
 Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` with the same flags to audit the current machine state without mutating it.
 
-Hermes + Discord project threads are optional. Homebrew does not install
-Hermes, create a Discord application, store bot credentials, or enable a
-gateway. If those pieces are absent, AgenticOS still supports normal MCP
-project resolution and switching.
-
-Hermes Agent Skill routing can be installed independently of Discord:
+Hermes Agent Skill routing can be installed independently of any Discord
+channel integration:
 
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
@@ -86,9 +82,15 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install
 
 This writes `~/.hermes/skills/work/agenticos/SKILL.md`. It helps Hermes route
 project-entry, `pwd`, and switch-out prompts through AgenticOS MCP, but it does
-not prove that a Hermes gateway or Discord bot is ready.
+not install Hermes or prove that Hermes runtime MCP tools are available.
 
-For the Discord MVP, configure Hermes and Discord separately, then verify:
+Discord project threads are optional channel integration. Homebrew does not
+install Hermes, create a Discord application, store bot credentials, or enable a
+gateway. If those pieces are absent, AgenticOS still supports normal MCP project
+resolution and switching.
+
+For the Discord MVP, configure the Hermes-side gateway and Discord separately,
+then verify:
 
 ```bash
 agenticos-config --validate

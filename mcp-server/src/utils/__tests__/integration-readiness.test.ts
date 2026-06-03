@@ -26,7 +26,7 @@ function createDeps() {
   };
 }
 
-describe('Hermes/Discord optional readiness', () => {
+describe('optional Discord channel readiness', () => {
   it('skips Hermes and Discord checks without failing core readiness when Hermes is absent', () => {
     const harness = createDeps();
 
@@ -87,7 +87,7 @@ describe('Hermes/Discord optional readiness', () => {
     expect(rendered).not.toContain('secret-token');
   });
 
-  it('fails only when the Hermes+Discord workflow is explicitly required', () => {
+  it('fails only when Discord channel routing is explicitly required', () => {
     const harness = createDeps();
     harness.commands.add('hermes-agent');
     harness.env.DISCORD_PUBLIC_KEY = 'public-key-only';

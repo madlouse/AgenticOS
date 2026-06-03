@@ -74,11 +74,11 @@ export function inspectHermesDiscordReadiness(
       marker: hermesDetected ? 'OK' : required ? 'FAIL' : 'SKIP',
       detail: hermesDetected
         ? `Hermes detected via ${hermesCommands.length > 0 ? hermesCommands.join(', ') : hermesConfig}.`
-        : 'Hermes is not detected; optional Hermes/Discord routing is skipped and core AgenticOS verification is unaffected.',
+        : 'Hermes is not detected; optional Discord channel routing is skipped and core AgenticOS verification is unaffected.',
       location: [...HERMES_COMMANDS.map((command) => `PATH:${command}`), ...HERMES_CONFIG_PATHS.map((path) => join(deps.homeDir, path))].join(', '),
       recovery: hermesDetected
         ? undefined
-        : 'Install or start Hermes only if you want Hermes-side Discord project routing.',
+        : 'Install or start Hermes only if you want Hermes-side Discord channel project routing.',
     },
     {
       id: 'hermes_gateway',
@@ -131,16 +131,16 @@ export function inspectHermesDiscordReadiness(
     ok: blocking.length === 0,
     summary: required
       ? blocking.length > 0
-        ? 'Hermes+Discord project routing is requested but required prerequisites are missing.'
-        : 'Hermes+Discord project routing prerequisites are ready.'
-      : 'Hermes/Discord project routing is optional; readiness is reported without blocking core AgenticOS verification.',
+        ? 'Discord channel project routing is requested but required prerequisites are missing.'
+        : 'Discord channel project routing prerequisites are ready.'
+      : 'Discord channel project routing is optional; readiness is reported without blocking core AgenticOS verification.',
     checks,
   };
 }
 
 export function renderHermesDiscordReadinessLines(readiness: HermesDiscordReadiness): string[] {
   const lines = [
-    'Optional Hermes/Discord readiness:',
+    'Optional Discord channel readiness:',
     readiness.summary,
   ];
   for (const check of readiness.checks) {

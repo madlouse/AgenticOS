@@ -88,7 +88,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'agenticos_project_resolve',
-      description: 'Resolve a registered AgenticOS project by id/name/path without binding session state or writing adapter/context files. Topics are surfaced as projects for Hermes/Discord routing.',
+      description: 'Resolve a registered AgenticOS project by id/name/path without binding session state or writing adapter/context files. Topics are surfaced as projects for assistant and optional channel routing.',
       inputSchema: {
         type: 'object',
         properties: {
