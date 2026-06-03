@@ -13,13 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agents can leave a project context and continue subsequent filesystem work
   from the original entry directory (#500).
 - bootstrap: add Hermes Agent activation Skill support at
-  `~/.hermes/skills/work/agenticos/SKILL.md`, keeping Hermes/Discord gateway
+  `~/.hermes/skills/work/agenticos/SKILL.md`, keeping Discord channel gateway
   readiness optional unless explicitly verified (#502).
 
 ### Changed
 - bootstrap: managed AgenticOS activation Skills now route "切出/退出项目/回到初始目录"
   through `agenticos_switch_out` and require agents to apply the returned
   `target_workdir` explicitly (#500).
+- docs/bootstrap: separate Hermes Agent activation from optional Discord channel
+  project-thread routing. Normal Hermes Agent Skill verification and
+  `agenticos-config` output no longer imply Discord readiness, while
+  `--verify-hermes-discord` remains available for the explicit channel
+  integration gate (#504).
 
 ## [0.4.33] — 2026-05-30
 

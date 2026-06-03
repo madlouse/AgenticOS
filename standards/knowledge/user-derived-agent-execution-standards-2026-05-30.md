@@ -139,12 +139,15 @@ operator intent.
 - Hermes is primarily a lightweight personal/work assistant and router. Heavy
   project work should be delegated to Codex or Claude Code workers under
   AgenticOS guardrails.
-- In the external language exposed to Hermes/Discord, topics and projects may
-  both be called projects. Internally, AgenticOS may still distinguish kind or
-  routing metadata.
-- Discord is the preferred threaded surface for project-oriented Hermes routing
-  in the current design. Feishu thread routing is out of scope unless reopened
-  as a separate integration.
+- Hermes Agent support is peer-agent support: MCP availability plus an
+  AgenticOS activation Skill. It does not imply Discord, a gateway, or thread
+  routing.
+- In external assistant/channel language, topics and projects may both be
+  called projects. Internally, AgenticOS may still distinguish kind or routing
+  metadata.
+- Discord is the current optional threaded channel surface for
+  project-oriented routing. Feishu thread routing is out of scope unless
+  reopened as a separate integration.
 - A project command in a Discord job channel should create or reuse a project
   cockpit thread and route subsequent messages in that thread to the same
   project context.
@@ -152,8 +155,9 @@ operator intent.
   Code or another backend.
 - Worker progress should be observable inside the project/job thread. The
   origin channel should receive a thread link or clear routing status.
-- Hermes/Discord integration is optional. Machines without Hermes or Discord
-  must keep the normal AgenticOS MCP workflow.
+- Hermes Agent activation and Discord channel routing are independently
+  optional. Machines without Hermes or Discord must keep the normal AgenticOS
+  MCP workflow.
 
 ### Durable Topics, Knowledge, And State
 
@@ -207,7 +211,7 @@ operator intent.
 | Release includes Homebrew and local verification | `homebrew-distribution-standard.md`, Homebrew post-install docs | Partially covered | Add release checklist enforcement that distinguishes merge, tag, tap bump, and local install verification |
 | Secret/PAT handling | Homebrew distribution standard, lifecycle impact standard | Covered | Keep secrets out of chat/repo; represent setup as checklist and verification |
 | Installed-machine compatibility | `lifecycle-impact-analysis-standard-2026-05-28.md` | Covered | Treat missing lifecycle section as a review finding for affected changes |
-| Hermes Discord routing | `hermes-discord-project-thread-rollout-2026-05-22.md`, Hermes routing scenario coverage | Covered for MVP | Keep Feishu thread routing explicitly out of MVP unless reopened |
+| Discord channel project-thread routing | `hermes-discord-project-thread-rollout-2026-05-22.md`, Hermes routing scenario coverage | Covered for MVP | Keep Feishu thread routing explicitly out of MVP unless reopened |
 | Topic/project unification in user-facing language | topic task contract, Hermes durable topic integration model | Partially covered | Update user-facing adapter wording when future project-kind metadata changes |
 | Durable topic task/state/knowledge continuity | topic task contract, knowledge evolution audit, GBrain reference convention | Covered conceptually | Continue implementing health/ledger/task APIs and freshness warnings |
 | Browser/OpenCLI active-profile rule | Project-specific OpenCLI skills and wrappers | Partial/missing at AgenticOS standard layer | Add a host-neutral browser automation credential/profile standard if this recurs across projects |

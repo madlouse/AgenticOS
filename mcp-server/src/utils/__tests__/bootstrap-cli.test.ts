@@ -214,10 +214,10 @@ describe('bootstrap cli', () => {
     expect(text).toContain('hermes-agent: no MCP registration is written');
     expect(text).toContain('hermes-agent-skill: install/update /Users/tester/.hermes/skills/work/agenticos/SKILL.md');
     expect(text).toContain('overwrite user-modified managed Skill files');
-    expect(text).toContain('hermes-discord: enforce Hermes+Discord');
+    expect(text).toContain('hermes-discord: enforce optional Discord channel project routing');
   });
 
-  it('applies Hermes Agent Skill-only bootstrap without requiring Hermes Discord readiness', () => {
+  it('applies Hermes Agent Skill-only bootstrap without requiring Discord channel readiness', () => {
     const harness = createDeps();
 
     const exitCode = runBootstrapCli(
@@ -232,7 +232,7 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v3'))).toBe(true);
   });
 
-  it('verifies Hermes Agent activation Skill state independently of optional Discord readiness', () => {
+  it('verifies Hermes Agent activation Skill state independently of optional Discord channel readiness', () => {
     const harness = createDeps();
     runBootstrapCli(
       ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--install-skills', '--apply'],
@@ -248,7 +248,7 @@ describe('bootstrap cli', () => {
     expect(exitCode).toBe(0);
     expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes Agent uses Skill-only activation'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: Skill state: current'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('Optional Hermes/Discord readiness'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Discord'))).toBe(false);
   });
 
   it('reports non-Error thrown failures', () => {
@@ -804,7 +804,7 @@ describe('bootstrap cli', () => {
     expect(harness.files.has('/tmp/workspace/.agent-workspace/bootstrap-state.yaml')).toBe(false);
   });
 
-  it('reports optional Hermes and Discord readiness during verification without blocking normal AgenticOS checks', () => {
+  it('keeps normal verification free of optional Discord channel readiness output', () => {
     const harness = createDeps();
     harness.deps.commandExists = (command: string) => command === 'codex';
 
@@ -815,13 +815,12 @@ describe('bootstrap cli', () => {
 
     const output = harness.stdout.join('\n');
     expect(exitCode).toBe(0);
-    expect(output).toContain('Optional Hermes/Discord readiness');
-    expect(output).toContain('SKIP hermes_runtime');
-    expect(output).toContain('SKIP discord_config');
-    expect(output).toContain('core AgenticOS verification is unaffected');
+    expect(output).toContain('OK codex');
+    expect(output).not.toContain('Optional Discord channel readiness');
+    expect(output).not.toContain('discord_config');
   });
 
-  it('blocks Hermes+Discord routing verification only when that workflow is explicitly required', () => {
+  it('blocks Discord channel routing verification only when that workflow is explicitly required', () => {
     const harness = createDeps();
     harness.deps.commandExists = (command: string) => command === 'codex';
 
@@ -837,7 +836,7 @@ describe('bootstrap cli', () => {
     expect(output).toContain('Recovery: Install or start Hermes');
   });
 
-  it('passes required Hermes+Discord verification when prerequisites and thread bindings are present', () => {
+  it('passes required Discord channel verification when prerequisites and thread bindings are present', () => {
     const harness = createDeps();
     harness.deps.env.HERMES_GATEWAY_URL = 'http://127.0.0.1:8787';
     harness.deps.env.DISCORD_APP_ID = 'app-id';

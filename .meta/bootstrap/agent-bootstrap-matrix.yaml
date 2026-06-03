@@ -171,11 +171,10 @@ supported_agents:
       - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify`
       - restart Hermes Agent or reload Hermes skills
       - ask Hermes to handle a project-entry request and confirm it calls AgenticOS MCP instead of `cd`
-      - use `--verify-hermes-discord` only when Discord project-thread gateway readiness must be enforced
     transport_debug:
       - Hermes Agent Skill support does not register MCP by itself; Hermes must already have access to AgenticOS MCP tools through its runtime/gateway integration
       - if Hermes cannot call AgenticOS MCP, debug Hermes runtime MCP/tool configuration before treating Skill routing as broken
-      - machines without Hermes or Discord should still pass normal AgenticOS bootstrap unless `--agent hermes-agent` or `--verify-hermes-discord` is explicitly selected
+      - machines without Hermes should still pass normal AgenticOS bootstrap unless `--agent hermes-agent` is explicitly selected
     routing_debug:
       - if project-intent prompts do not trigger routing, verify the Hermes Agent activation Skill is installed under `~/.hermes/skills/work/agenticos/SKILL.md`
       - after `agenticos_switch`, Hermes must use the returned project path / recommended workdir for delegated workers
@@ -183,7 +182,23 @@ supported_agents:
     repair:
       - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply`
       - restart Hermes Agent or reload Hermes skills
-      - if Discord routing is expected, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify --verify-hermes-discord`
+optional_channel_integrations:
+  - id: discord-project-threads
+    label: Discord project threads
+    support_tier: optional
+    transport: hermes-side-channel-gateway
+    canonical_bootstrap_method: external-gateway-plus-agenticos-mcp
+    verification:
+      - configure Hermes-side Discord gateway credentials outside Homebrew
+      - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify --verify-hermes-discord`
+      - confirm project-entry messages call `agenticos_project_ensure` before thread work
+      - confirm thread bindings are stored through `agenticos_external_thread_bind`
+    transport_debug:
+      - Discord channel routing is not Hermes Agent activation
+      - machines without Discord should still pass normal AgenticOS bootstrap
+      - Feishu thread routing is out of scope for the MVP
+    repair:
+      - upgrade AgenticOS, rerun bootstrap verification, restart Hermes-side gateway and execution agents
 experimental_agents:
   - id: generic-mcp-tool
     label: Other MCP-Compatible Tools

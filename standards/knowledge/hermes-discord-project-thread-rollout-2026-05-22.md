@@ -1,8 +1,8 @@
-# Hermes Discord Project Thread Rollout - 2026-05-22
+# Hermes Discord Channel Project Thread Rollout - 2026-05-22
 
 ## Purpose
 
-This runbook covers the optional Hermes + Discord project-thread workflow after
+This runbook covers the optional Discord channel project-thread workflow after
 the AgenticOS router and worker dispatch helpers landed.
 
 The goal is to let a Discord message such as "切换到 AgenticOS 项目" enter a
@@ -10,10 +10,14 @@ durable AgenticOS project context, create or reuse a Discord project thread,
 bind that thread privately, and start the selected execution worker without
 polluting the main Hermes session.
 
-## Compatibility Contract
+## Boundary Contract
 
 - AgenticOS does not require Hermes.
 - AgenticOS does not require Discord.
+- Hermes Agent activation does not require Discord, a Discord gateway, or
+  Discord credentials.
+- Discord routing is a channel integration that may be hosted by Hermes-side
+  orchestration; it is not the definition of Hermes Agent support.
 - Homebrew does not install Hermes, create Discord applications, write Discord
   credentials, or start a gateway.
 - Machines without Hermes or Discord keep the normal AgenticOS MCP workflow.

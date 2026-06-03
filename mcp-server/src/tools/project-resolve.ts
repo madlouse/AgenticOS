@@ -382,7 +382,7 @@ async function buildProjectPayload(args: {
     },
     routing: {
       external_surface: 'project',
-      note: 'Hermes and Discord should surface topics and source projects as projects; project_kind remains available for internal routing.',
+      note: 'Assistant and optional channel integrations should surface topics and source projects as projects; project_kind remains available for internal routing.',
     },
   };
 }

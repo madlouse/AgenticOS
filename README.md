@@ -54,24 +54,26 @@ AgenticOS does not treat every fallback as equal:
 - `Skills-only Guidance` is experimental and does not provide the canonical
   AgenticOS runtime surface
 
-## Optional Hermes + Discord Project Threads
+## Optional Discord Channel Project Threads
 
-Hermes-side Discord routing is optional. A machine without Hermes or Discord
-keeps the normal AgenticOS MCP workflow: `agenticos_project_ensure` can still
-resolve or create a project, and Discord thread routing is skipped.
+Discord routing is an optional channel integration. It is not part of Hermes
+Agent activation and it is not required for the normal AgenticOS MCP workflow.
+A machine without Discord keeps the normal project resolve, create, switch, and
+switch-out flow.
 
-When a Discord gateway is configured, Hermes can treat "切换到 AgenticOS 项目"
-and "新建 T5T 项目" as the same project-entry operation:
+When a Hermes-side Discord gateway is configured, the channel integration can
+treat "切换到 AgenticOS 项目" and "新建 T5T 项目" as the same project-entry
+operation:
 
 1. call AgenticOS MCP `agenticos_project_ensure`
 2. create or reuse one Discord project thread
 3. persist the private thread binding with `agenticos_external_thread_bind`
 4. dispatch Codex by default, or Claude Code only when explicitly requested
 
-Discord is the only threaded surface in the MVP. Feishu does not get a thread
-path yet. Older AgenticOS installs that are missing `agenticos_project_ensure`
-or external thread binding tools must be upgraded and the agent restarted
-before Hermes should claim threaded routing is available.
+Discord is the only threaded channel surface in the MVP. Feishu does not get a
+thread path yet. Older AgenticOS installs that are missing
+`agenticos_project_ensure` or external thread binding tools must be upgraded
+and the channel agent restarted before threaded routing is claimed available.
 
 Real Discord validation requires credentials and permissions, so automated
 tests use fake adapters only. See
@@ -172,9 +174,9 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install
 ```
 
 Hermes Agent support is Skill routing support. It does not install Hermes,
-configure Discord, or register a Hermes gateway. Use `--verify-hermes-discord`
-only when Discord project-thread routing should be treated as a blocking
-requirement.
+configure Discord, or register a Hermes gateway. Verify it with
+`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify`
+after Hermes can already access AgenticOS MCP tools.
 
 Managed projects also receive the always-applied project rule at
 `.cursor/rules/agenticos.mdc` during `agenticos_init` and standard-kit adopt.

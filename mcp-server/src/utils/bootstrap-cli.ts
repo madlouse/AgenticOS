@@ -294,7 +294,7 @@ export function buildHelpLines(): string[] {
     '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to provide cwd guidance after agenticos_switch.',
     '  `--install-skills` installs or updates the AgenticOS activation Skill for agents that support local skills.',
     '  `--force-skills` allows `--install-skills` to overwrite a user-modified AgenticOS Skill.',
-    '  `--verify-hermes-discord` makes optional Hermes+Discord project routing prerequisites blocking during `--verify`.',
+    '  `--verify-hermes-discord` makes optional Discord channel project routing prerequisites blocking during `--verify`.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli, hermes-agent',
@@ -376,7 +376,7 @@ export function buildDryRunLines(
       continue;
     }
     if (agentId === 'hermes-agent') {
-      lines.push('- hermes-agent: no MCP registration is written by AgenticOS bootstrap; Hermes routing uses the activation Skill plus optional Hermes/Discord readiness checks');
+      lines.push('- hermes-agent: no MCP registration is written by AgenticOS bootstrap; Hermes Agent routing uses the activation Skill and existing MCP availability');
       continue;
     }
     const remove = renderRepairRemoveCommand(agentId);
@@ -405,9 +405,7 @@ export function buildDryRunLines(
     }
   }
   if (options.verifyHermesDiscord) {
-    lines.push('- hermes-discord: enforce Hermes+Discord project routing prerequisites during verification');
-  } else {
-    lines.push('- hermes-discord: report optional readiness during verification without blocking core AgenticOS checks');
+    lines.push('- hermes-discord: enforce optional Discord channel project routing prerequisites during verification');
   }
   if (selected.includes('claude-code')) {
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
@@ -497,13 +495,15 @@ function runVerification(
     }
   }
 
-  const hermesDiscord = inspectHermesDiscordReadiness(deps, {
-    required: options.verifyHermesDiscord,
-    workspace,
-  });
-  lines.push('', ...renderHermesDiscordReadinessLines(hermesDiscord));
-  if (options.verifyHermesDiscord && !hermesDiscord.ok) {
-    ok = false;
+  if (options.verifyHermesDiscord) {
+    const hermesDiscord = inspectHermesDiscordReadiness(deps, {
+      required: true,
+      workspace,
+    });
+    lines.push('', ...renderHermesDiscordReadinessLines(hermesDiscord));
+    if (!hermesDiscord.ok) {
+      ok = false;
+    }
   }
 
   return { ok, lines };
@@ -857,7 +857,7 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
     case 'hermes-agent':
       return {
         ok: true,
-        detail: 'Hermes Agent uses Skill-only activation; use --install-skills --verify for Skill state and --verify-hermes-discord for gateway readiness.',
+        detail: 'Hermes Agent uses Skill-only activation; use --install-skills --verify for Skill state and confirm Hermes runtime MCP availability separately.',
       };
   }
 }

@@ -199,13 +199,12 @@ want to replace a local edit.
 
 These are currently experimental. Do not describe them as first-class supported agents unless they have a documented bootstrap, verification, and debugging contract.
 
-### Optional Hermes + Discord Routing
+### Hermes Agent
 
-Hermes + Discord project routing is an optional integration layer, not a core
-install requirement. AgenticOS works the same on machines that do not have
-Hermes, a Hermes gateway, or Discord credentials.
-
-Hermes Agent can still receive the managed AgenticOS activation Skill:
+Hermes Agent is a peer runtime alongside Codex, Claude Code, Cursor, and Gemini
+CLI. AgenticOS bootstrap does not register Hermes MCP transport by itself; it
+installs the managed activation Skill so Hermes routes project-intent prompts
+through AgenticOS MCP when the Hermes runtime can already see those tools.
 
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
@@ -214,6 +213,18 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install
 This writes `~/.hermes/skills/work/agenticos/SKILL.md` and helps Hermes route
 "切换到 ... 项目", `pwd`, and "切出/退出项目" prompts through AgenticOS MCP.
 It does not install Hermes, configure Discord, or prove gateway readiness.
+
+Verify Skill state without Discord:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify
+```
+
+### Optional Discord Channel Project Routing
+
+Discord project routing is an optional channel integration, not a Hermes Agent
+activation requirement. AgenticOS works the same on machines that do not have a
+Hermes-side Discord gateway or Discord credentials.
 
 The supported MVP flow is:
 
@@ -236,6 +247,12 @@ Discord routing was skipped. If older installs are missing
 `agenticos_project_ensure`, `agenticos_external_thread_get`, or
 `agenticos_external_thread_bind`, upgrade AgenticOS, rerun bootstrap verification,
 and restart the agent before retrying threaded routing.
+
+Use the Discord readiness gate only when this channel integration is in scope:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify --verify-hermes-discord
+```
 
 Verification without real Discord credentials is covered by fake E2E tests.
 For a real-gateway checklist, see
