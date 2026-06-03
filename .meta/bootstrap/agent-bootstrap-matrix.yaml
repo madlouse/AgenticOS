@@ -155,6 +155,35 @@ supported_agents:
       - transport registration only proves MCP availability, not project-intent recognition
       - if the activation Skill is missing or stale, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --verify`
       - load the project `AGENTS.md` adapter surface and explicit `agenticos_*` tool calls before treating routing failure as transport failure
+  - id: hermes-agent
+    label: Hermes Agent
+    support_tier: official
+    transport: skill-only-routing
+    canonical_bootstrap_method: activation-skill
+    canonical_config_location: ~/.hermes/skills/work/agenticos/SKILL.md
+    activation_skill:
+      support: official
+      path: ~/.hermes/skills/work/agenticos/SKILL.md
+      install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
+      verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify
+      purpose: route project switch/status/pwd/switch-out prompts through AgenticOS MCP before filesystem guessing
+    verification:
+      - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify`
+      - restart Hermes Agent or reload Hermes skills
+      - ask Hermes to handle a project-entry request and confirm it calls AgenticOS MCP instead of `cd`
+      - use `--verify-hermes-discord` only when Discord project-thread gateway readiness must be enforced
+    transport_debug:
+      - Hermes Agent Skill support does not register MCP by itself; Hermes must already have access to AgenticOS MCP tools through its runtime/gateway integration
+      - if Hermes cannot call AgenticOS MCP, debug Hermes runtime MCP/tool configuration before treating Skill routing as broken
+      - machines without Hermes or Discord should still pass normal AgenticOS bootstrap unless `--agent hermes-agent` or `--verify-hermes-discord` is explicitly selected
+    routing_debug:
+      - if project-intent prompts do not trigger routing, verify the Hermes Agent activation Skill is installed under `~/.hermes/skills/work/agenticos/SKILL.md`
+      - after `agenticos_switch`, Hermes must use the returned project path / recommended workdir for delegated workers
+      - after `agenticos_switch_out`, Hermes must use `target_workdir` and must not keep routing filesystem work into the previous project path
+    repair:
+      - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply`
+      - restart Hermes Agent or reload Hermes skills
+      - if Discord routing is expected, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify --verify-hermes-discord`
 experimental_agents:
   - id: generic-mcp-tool
     label: Other MCP-Compatible Tools

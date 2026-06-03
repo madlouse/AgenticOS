@@ -20,7 +20,7 @@ A project management system designed for AI collaboration. When you work on comp
 
 Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
-It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, Cursor, and Gemini CLI — so switch/status/pwd prompts route to AgenticOS MCP before filesystem guessing.
+It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent — so switch/status/pwd/switch-out prompts route to AgenticOS MCP before filesystem guessing.
 Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
@@ -61,7 +61,7 @@ If the user installed AgenticOS with Homebrew:
 
 - Homebrew installs the binary only
 - Homebrew does **not** create or select a workspace
-- Homebrew does **not** edit Claude Code, Codex, Cursor, or Gemini CLI configuration
+- Homebrew does **not** edit Claude Code, Codex, Cursor, Gemini CLI, or Hermes Agent configuration
 - Homebrew does **not** restart the AI tool
 - Homebrew does **not** prove activation by itself
 
@@ -204,6 +204,16 @@ These are currently experimental. Do not describe them as first-class supported 
 Hermes + Discord project routing is an optional integration layer, not a core
 install requirement. AgenticOS works the same on machines that do not have
 Hermes, a Hermes gateway, or Discord credentials.
+
+Hermes Agent can still receive the managed AgenticOS activation Skill:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
+```
+
+This writes `~/.hermes/skills/work/agenticos/SKILL.md` and helps Hermes route
+"切换到 ... 项目", `pwd`, and "切出/退出项目" prompts through AgenticOS MCP.
+It does not install Hermes, configure Discord, or prove gateway readiness.
 
 The supported MVP flow is:
 
@@ -646,11 +656,14 @@ Get complete context for the current session project.
 ### Tools appear but natural-language switch does not use AgenticOS
 
 This is a routing problem, not necessarily a transport problem. Install or
-verify the activation Skill for Codex or Claude Code:
+verify the activation Skill for the local-skill-capable agent you use:
 
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --verify
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent cursor --install-skills --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify
 ```
 
 If verification fails, rerun the same command with `--apply`, restart or reload

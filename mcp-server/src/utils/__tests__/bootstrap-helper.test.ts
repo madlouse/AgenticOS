@@ -14,7 +14,7 @@ import {
 
 describe('bootstrap helper', () => {
   it('deduplicates and validates selected agents', () => {
-    expect(parseAgentSelection(['codex,cursor', 'codex'])).toEqual(['codex', 'cursor']);
+    expect(parseAgentSelection(['codex,cursor', 'codex', 'hermes-agent'])).toEqual(['codex', 'cursor', 'hermes-agent']);
     expect(() => parseAgentSelection(['missing-agent'])).toThrow('Unsupported agent "missing-agent".');
   });
 
@@ -100,6 +100,13 @@ describe('bootstrap helper', () => {
     expect(renderRepairRemoveCommand('cursor')).toBeNull();
   });
 
+  it('reports Hermes Agent bootstrap as Skill-only', () => {
+    expect(() => renderBootstrapCommand('hermes-agent', '/tmp/workspace')).toThrow(
+      'Hermes Agent bootstrap is Skill-only',
+    );
+    expect(renderRepairRemoveCommand('hermes-agent')).toBeNull();
+  });
+
   it('merges cursor MCP config without dropping other servers', () => {
     const merged = mergeCursorMcpConfig(
       JSON.stringify({
@@ -147,13 +154,14 @@ describe('bootstrap helper', () => {
 
   it('detects supported agents from commands and cursor state', () => {
     const detected = detectSupportedAgents(
-      (command) => command === 'codex',
-      (path) => path === '/Users/tester/.cursor',
+      (command) => command === 'codex' || command === 'hermes-gateway',
+      (path) => path === '/Users/tester/.cursor' || path === '/Users/tester/.hermes',
       '/Users/tester',
     );
 
     expect(detected.find((agent) => agent.id === 'codex')?.installed).toBe(true);
     expect(detected.find((agent) => agent.id === 'cursor')?.installed).toBe(true);
+    expect(detected.find((agent) => agent.id === 'hermes-agent')?.installed).toBe(true);
     expect(detected.find((agent) => agent.id === 'claude-code')?.installed).toBe(false);
   });
 

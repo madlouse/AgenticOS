@@ -34,7 +34,7 @@ function createDeps() {
 }
 
 describe('agent skill bootstrap', () => {
-  it('resolves Codex, Claude Code, Cursor, and Gemini CLI Skill targets', () => {
+  it('resolves Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent Skill targets', () => {
     expect(resolveAgentSkillTarget('codex', '/Users/tester').path)
       .toBe('/Users/tester/.codex/skills/agenticos/SKILL.md');
     expect(resolveAgentSkillTarget('claude-code', '/Users/tester').path)
@@ -49,6 +49,11 @@ describe('agent skill bootstrap', () => {
     expect(geminiTarget.supported).toBe(true);
     expect(geminiTarget.path).toBe('/Users/tester/.gemini/skills/agenticos/SKILL.md');
     expect(geminiTarget.reloadHint).toMatch(/Gemini CLI/);
+
+    const hermesTarget = resolveAgentSkillTarget('hermes-agent', '/Users/tester');
+    expect(hermesTarget.supported).toBe(true);
+    expect(hermesTarget.path).toBe('/Users/tester/.hermes/skills/work/agenticos/SKILL.md');
+    expect(hermesTarget.reloadHint).toMatch(/Hermes Agent/);
   });
 
   it('installs and verifies the Cursor managed Skill at ~/.cursor/skills-cursor/agenticos/SKILL.md', () => {
@@ -87,23 +92,44 @@ describe('agent skill bootstrap', () => {
     expect(isAgentSkillOkForVerify(inspectAgentSkill('gemini-cli', '/Users/tester', harness.deps.readFile))).toBe(true);
   });
 
-  it('renders the same canonical Skill content for Codex, Claude Code, Cursor, and Gemini CLI', () => {
+  it('installs and verifies the Hermes Agent managed Skill at ~/.hermes/skills/work/agenticos/SKILL.md', () => {
+    const harness = createDeps();
+
+    const result = installAgentSkill('hermes-agent', '/Users/tester', harness.deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.wrote).toBe(true);
+    expect(result.status).toBe('current');
+    expect(harness.dirs).toEqual(['/Users/tester/.hermes/skills/work/agenticos']);
+
+    const installedPath = '/Users/tester/.hermes/skills/work/agenticos/SKILL.md';
+    const installed = harness.files.get(installedPath);
+    expect(installed).toContain('AgenticOS Activation');
+    expect(installed).toContain('Hermes Agent');
+    expect(installed).toContain('target_workdir');
+    expect(isAgentSkillOkForVerify(inspectAgentSkill('hermes-agent', '/Users/tester', harness.deps.readFile))).toBe(true);
+  });
+
+  it('renders the same canonical Skill content for Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent', () => {
     const harness = createDeps();
 
     installAgentSkill('codex', '/Users/tester', harness.deps);
     installAgentSkill('claude-code', '/Users/tester', harness.deps);
     installAgentSkill('cursor', '/Users/tester', harness.deps);
     installAgentSkill('gemini-cli', '/Users/tester', harness.deps);
+    installAgentSkill('hermes-agent', '/Users/tester', harness.deps);
 
     const codex = harness.files.get('/Users/tester/.codex/skills/agenticos/SKILL.md');
     const claude = harness.files.get('/Users/tester/.claude/skills/agenticos/SKILL.md');
     const cursor = harness.files.get('/Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
     const gemini = harness.files.get('/Users/tester/.gemini/skills/agenticos/SKILL.md');
+    const hermes = harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md');
 
     expect(codex).toBeDefined();
     expect(claude).toBe(codex);
     expect(cursor).toBe(codex);
     expect(gemini).toBe(codex);
+    expect(hermes).toBe(codex);
   });
 
   it('renders a managed Skill with project switch triggers and hash marker', () => {
@@ -116,6 +142,7 @@ describe('agent skill bootstrap', () => {
     expect(content).toContain('description: |');
     expect(content).toContain('agenticos_switch');
     expect(content).toContain('agenticos_switch_out');
+    expect(content).toContain('Hermes Agent');
     expect(content).toContain('切换到');
     expect(content).toContain('切出');
     expect(content).toContain('退出项目');

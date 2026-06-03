@@ -1,7 +1,7 @@
 # AgenticOS
 
 AgenticOS gives AI coding assistants (Claude Code, Codex, Cursor, Gemini CLI,
-and any MCP-compatible tool) a persistent, structured memory of your
+Hermes Agent, and any MCP-compatible tool) a persistent, structured memory of your
 projects. Every conversation, decision, and working state is saved so you can
 pick up exactly where you left off — even weeks later. No more re-explaining
 context at the start of every session.
@@ -22,8 +22,8 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
 # 3. Verify — restart your AI tool, then ask it to run agenticos_list
 ```
 
-`--first-run` also installs the AgenticOS activation Skill for Codex and
-Claude Code when those clients are selected, so natural-language requests like
+`--first-run` also installs the AgenticOS activation Skill for local-skill-capable
+agents when those clients are selected, so natural-language requests like
 "switch to 360Teams" or "切换到 360Teams 项目" are routed through AgenticOS MCP
 instead of raw filesystem guessing.
 
@@ -86,11 +86,12 @@ The official bootstrap surface currently covers:
 - Codex
 - Cursor
 - Gemini CLI
+- Hermes Agent
 
 Bootstrap is complete only when:
 
 1. the MCP server is registered for the target agent
-2. the activation Skill is installed for Codex or Claude Code when natural-language routing is required
+2. the activation Skill is installed for local-skill-capable agents when natural-language routing is required
 3. the agent has been restarted or reloaded if required
 4. `agenticos_list` succeeds
 
@@ -112,7 +113,7 @@ agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-h
 
 On macOS, `--first-run` also sets up `launchctl` persistence so GUI tools
 inherit `AGENTICOS_HOME` across sessions. It installs the AgenticOS activation
-Skill for local-skill-capable agents: Codex, Claude Code, Cursor, and Gemini CLI.
+Skill for local-skill-capable agents: Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent.
 `--auto-configure-hooks` adds the Claude Code PostToolUse hook that reads the
 `agenticos_switch` result from hook stdin and feeds the selected project path
 back into Claude as explicit cwd guidance. The hook cannot mutate a parent
@@ -163,6 +164,17 @@ For Gemini CLI, install or refresh the activation Skill with:
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent gemini-cli --install-skills --apply
 ```
+
+For Hermes Agent, install or refresh the activation Skill with:
+
+```bash
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
+```
+
+Hermes Agent support is Skill routing support. It does not install Hermes,
+configure Discord, or register a Hermes gateway. Use `--verify-hermes-discord`
+only when Discord project-thread routing should be treated as a blocking
+requirement.
 
 Managed projects also receive the always-applied project rule at
 `.cursor/rules/agenticos.mdc` during `agenticos_init` and standard-kit adopt.

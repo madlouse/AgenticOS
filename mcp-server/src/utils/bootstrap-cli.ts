@@ -297,7 +297,7 @@ export function buildHelpLines(): string[] {
     '  `--verify-hermes-discord` makes optional Hermes+Discord project routing prerequisites blocking during `--verify`.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
-    'Supported agent ids: claude-code, codex, cursor, gemini-cli',
+    'Supported agent ids: claude-code, codex, cursor, gemini-cli, hermes-agent',
   ];
 }
 
@@ -375,6 +375,10 @@ export function buildDryRunLines(
       lines.push(renderCursorConfigSnippet(workspace));
       continue;
     }
+    if (agentId === 'hermes-agent') {
+      lines.push('- hermes-agent: no MCP registration is written by AgenticOS bootstrap; Hermes routing uses the activation Skill plus optional Hermes/Discord readiness checks');
+      continue;
+    }
     const remove = renderRepairRemoveCommand(agentId);
     const add = renderBootstrapCommand(agentId, workspace);
     if (remove) lines.push(`- ${agentId}: ${formatCommand(remove)} || true`);
@@ -423,6 +427,7 @@ function getRecoveryCommand(agentId: SupportedAgentId): string {
     'codex': 'agenticos-bootstrap --agent codex',
     'cursor': 'agenticos-bootstrap --agent cursor',
     'gemini-cli': 'agenticos-bootstrap --agent gemini-cli',
+    'hermes-agent': 'agenticos-bootstrap --agent hermes-agent --install-skills --apply',
   };
   return commands[agentId];
 }
@@ -511,6 +516,14 @@ function applyAgent(
 ): ApplyResult {
   if (agentId === 'cursor') {
     return applyCursor(workspace, deps);
+  }
+
+  if (agentId === 'hermes-agent') {
+    return {
+      agentId,
+      ok: true,
+      detail: 'Hermes Agent uses Skill-only routing; no MCP registration command was run.',
+    };
   }
 
   const remove = renderRepairRemoveCommand(agentId);
@@ -841,6 +854,11 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
         ? { ok: true, detail: `verified ${configPath}` }
         : { ok: false, detail: `expected agenticos MCP entry in ${configPath}` };
     }
+    case 'hermes-agent':
+      return {
+        ok: true,
+        detail: 'Hermes Agent uses Skill-only activation; use --install-skills --verify for Skill state and --verify-hermes-discord for gateway readiness.',
+      };
   }
 }
 

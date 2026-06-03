@@ -216,6 +216,9 @@ function collectConfigSources(deps: ConfigAuditDeps): ConfigSourceRecord[] {
     readCodexConfigSource(deps),
     readAgentSkillSource(deps, 'codex'),
     readCursorConfigSource(deps),
+    readAgentSkillSource(deps, 'cursor'),
+    readAgentSkillSource(deps, 'gemini-cli'),
+    readAgentSkillSource(deps, 'hermes-agent'),
     ...readHomebrewSources(deps),
     ...readHermesDiscordReadinessSources(deps),
   ];

@@ -30,7 +30,7 @@ function createDeps() {
         return '2026-04-03T09:00:00.000Z';
       },
       commandExists(command: string) {
-        return ['codex', 'claude', 'gemini', 'cursor-agent'].includes(command);
+        return ['codex', 'claude', 'gemini', 'cursor-agent', 'hermes-gateway'].includes(command);
       },
       runCommand(command: string, args: string[], failOnError: boolean) {
         commands.push({ command, args, failOnError });
@@ -75,6 +75,7 @@ describe('bootstrap cli', () => {
     expect(buildHelpLines().join('\n')).toContain('--auto-configure-hooks');
     expect(buildHelpLines().join('\n')).toContain('--install-skills');
     expect(buildHelpLines().join('\n')).toContain('--verify-hermes-discord');
+    expect(buildHelpLines().join('\n')).toContain('hermes-agent');
     expect(parseCliArgs(['--all', '--auto-configure-hooks']).all).toBe(true);
     expect(parseCliArgs(['--install-skills', '--force-skills']).installSkills).toBe(true);
     expect(parseCliArgs(['--install-skills', '--force-skills']).forceSkills).toBe(true);
@@ -186,8 +187,9 @@ describe('bootstrap cli', () => {
       [
         { id: 'cursor', label: 'Cursor', installed: true, detection_hint: 'test' },
         { id: 'gemini-cli', label: 'Gemini CLI', installed: true, detection_hint: 'test' },
+        { id: 'hermes-agent', label: 'Hermes Agent', installed: true, detection_hint: 'test' },
       ],
-      ['cursor', 'gemini-cli'],
+      ['cursor', 'gemini-cli', 'hermes-agent'],
       {
         apply: false,
         verify: false,
@@ -209,8 +211,44 @@ describe('bootstrap cli', () => {
     const text = lines.join('\n');
     expect(text).toContain('cursor-skill: install/update /Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
     expect(text).toContain('gemini-cli-skill: install/update /Users/tester/.gemini/skills/agenticos/SKILL.md');
+    expect(text).toContain('hermes-agent: no MCP registration is written');
+    expect(text).toContain('hermes-agent-skill: install/update /Users/tester/.hermes/skills/work/agenticos/SKILL.md');
     expect(text).toContain('overwrite user-modified managed Skill files');
     expect(text).toContain('hermes-discord: enforce Hermes+Discord');
+  });
+
+  it('applies Hermes Agent Skill-only bootstrap without requiring Hermes Discord readiness', () => {
+    const harness = createDeps();
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--install-skills', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.commands).toEqual([]);
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('AgenticOS Activation');
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes Agent uses Skill-only routing'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v3'))).toBe(true);
+  });
+
+  it('verifies Hermes Agent activation Skill state independently of optional Discord readiness', () => {
+    const harness = createDeps();
+    runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--install-skills', '--apply'],
+      harness.deps,
+    );
+    harness.stdout.length = 0;
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--install-skills', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes Agent uses Skill-only activation'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: Skill state: current'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Optional Hermes/Discord readiness'))).toBe(true);
   });
 
   it('reports non-Error thrown failures', () => {
@@ -768,6 +806,7 @@ describe('bootstrap cli', () => {
 
   it('reports optional Hermes and Discord readiness during verification without blocking normal AgenticOS checks', () => {
     const harness = createDeps();
+    harness.deps.commandExists = (command: string) => command === 'codex';
 
     const exitCode = runBootstrapCli(
       ['--workspace', '/tmp/workspace', '--agent', 'codex', '--verify'],
@@ -784,6 +823,7 @@ describe('bootstrap cli', () => {
 
   it('blocks Hermes+Discord routing verification only when that workflow is explicitly required', () => {
     const harness = createDeps();
+    harness.deps.commandExists = (command: string) => command === 'codex';
 
     const exitCode = runBootstrapCli(
       ['--workspace', '/tmp/workspace', '--agent', 'codex', '--verify', '--verify-hermes-discord'],

@@ -2,7 +2,7 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-export type SupportedAgentId = 'claude-code' | 'codex' | 'cursor' | 'gemini-cli';
+export type SupportedAgentId = 'claude-code' | 'codex' | 'cursor' | 'gemini-cli' | 'hermes-agent';
 
 export interface DetectedAgent {
   id: SupportedAgentId;
@@ -50,7 +50,8 @@ export function isSupportedAgentId(value: string): value is SupportedAgentId {
   return value === 'claude-code'
     || value === 'codex'
     || value === 'cursor'
-    || value === 'gemini-cli';
+    || value === 'gemini-cli'
+    || value === 'hermes-agent';
 }
 
 export function detectDefaultWorkspace(
@@ -127,6 +128,14 @@ export function detectSupportedAgents(
       installed: commandExists('gemini'),
       detection_hint: 'detected via `gemini` on PATH',
     },
+    {
+      id: 'hermes-agent',
+      label: 'Hermes Agent',
+      installed: commandExists('hermes')
+        || commandExists('hermes-gateway')
+        || fileExists(join(userHome, '.hermes')),
+      detection_hint: 'detected via `hermes`, `hermes-gateway`, or ~/.hermes',
+    },
   ];
 }
 
@@ -179,6 +188,8 @@ export function renderBootstrapCommand(
       };
     case 'cursor':
       throw new Error('Cursor bootstrap uses JSON config mutation, not a CLI command.');
+    case 'hermes-agent':
+      throw new Error('Hermes Agent bootstrap is Skill-only; use --install-skills.');
   }
 }
 
@@ -200,6 +211,7 @@ export function renderRepairRemoveCommand(agentId: SupportedAgentId): BootstrapC
         args: ['mcp', 'remove', '-s', 'user', 'agenticos'],
       };
     case 'cursor':
+    case 'hermes-agent':
       return null;
   }
 }
