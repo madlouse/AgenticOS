@@ -57,6 +57,7 @@ describe('config audit', () => {
     expect(rendered).toContain('Claude Code settings env');
     expect(rendered).toContain('Claude Code AgenticOS activation Skill');
     expect(rendered).toContain('Codex AgenticOS activation Skill');
+    expect(rendered).toContain('Hermes AgenticOS activation Skill');
     expect(rendered).toContain('Cursor MCP config');
     expect(rendered).toContain('Hermes runtime');
     expect(rendered).toContain('Discord configuration');
@@ -182,10 +183,12 @@ describe('config audit', () => {
   it('reports activation Skill status without making it canonical workspace input', () => {
     const harness = createDeps();
     harness.files.set('/Users/tester/.codex/skills/agenticos/SKILL.md', renderAgenticosSkillContent());
+    harness.files.set('/Users/tester/.hermes/skills/work/agenticos/SKILL.md', renderAgenticosSkillContent());
 
     const result = runConfigAudit({ action: 'show', scope: 'mcp' }, harness.deps);
     const codexSkill = result.sources.find((source) => source.id === 'codex_activation_skill');
     const claudeSkill = result.sources.find((source) => source.id === 'claude-code_activation_skill');
+    const hermesSkill = result.sources.find((source) => source.id === 'hermes-agent_activation_skill');
 
     expect(result.canonical_workspace).toBeNull();
     expect(codexSkill?.status).toBe('configured');
@@ -193,6 +196,9 @@ describe('config audit', () => {
     expect(codexSkill?.contributes_to_workspace).toBe(false);
     expect(claudeSkill?.status).toBe('missing');
     expect(claudeSkill?.fix_target).toContain('--install-skills');
+    expect(hermesSkill?.status).toBe('configured');
+    expect(hermesSkill?.location).toBe('/Users/tester/.hermes/skills/work/agenticos/SKILL.md');
+    expect(hermesSkill?.fix_target).toBe('agenticos-bootstrap --agent hermes-agent --install-skills --apply');
   });
 
   it('reports user-modified activation Skills as present with force recovery', () => {

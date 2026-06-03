@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mcp-server: add `agenticos_switch_out` with origin-workdir restore guidance so
   agents can leave a project context and continue subsequent filesystem work
   from the original entry directory (#500).
+- bootstrap: add Hermes Agent activation Skill support at
+  `~/.hermes/skills/work/agenticos/SKILL.md`, keeping Hermes/Discord gateway
+  readiness optional unless explicitly verified (#502).
 
 ### Changed
 - bootstrap: managed AgenticOS activation Skills now route "切出/退出项目/回到初始目录"

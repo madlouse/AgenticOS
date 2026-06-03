@@ -82,6 +82,14 @@ export function resolveAgentSkillTarget(
         path: join(homeDir, '.gemini', 'skills', AGENTICOS_SKILL_NAME, 'SKILL.md'),
         reloadHint: 'Restart Gemini CLI or run `/skills reload` so the AgenticOS activation Skill is indexed.',
       };
+    case 'hermes-agent':
+      return {
+        agentId,
+        label: 'Hermes AgenticOS activation Skill',
+        supported: true,
+        path: join(homeDir, '.hermes', 'skills', 'work', AGENTICOS_SKILL_NAME, 'SKILL.md'),
+        reloadHint: 'Restart Hermes Agent or reload Hermes skills so the AgenticOS activation Skill is indexed.',
+      };
   }
 }
 
@@ -271,7 +279,7 @@ metadata:
 
 ## When To Use
 
-Use this Skill whenever the user asks to switch, enter, continue, exit, inspect, or verify an AgenticOS-managed project, topic, or worktree. This includes natural-language requests like "switch to 360Teams", "切换到 Agentic OS 项目", "切换到 360Teams 项目", "退出项目", "切出", "回到初始目录", "pwd", "current project", or "what project am I in?".
+Use this Skill whenever the user asks Codex, Claude Code, Cursor, Gemini CLI, or Hermes Agent to switch, enter, continue, exit, inspect, or verify an AgenticOS-managed project, topic, or worktree. This includes natural-language requests like "switch to 360Teams", "切换到 Agentic OS 项目", "切换到 360Teams 项目", "退出项目", "切出", "回到初始目录", "pwd", "current project", or "what project am I in?".
 
 ## Contract
 
