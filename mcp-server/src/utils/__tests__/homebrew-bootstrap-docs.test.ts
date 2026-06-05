@@ -56,7 +56,7 @@ describe('homebrew bootstrap docs', () => {
       expect(doc).toContain('AGENTICOS_HOME');
       expect(doc).toContain('AGENTICOS_HOME="$AGENTICOS_HOME"');
       expect(doc).toContain('agenticos-config --validate');
-      expect(doc).toContain('agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify');
+      expect(doc).toContain('agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify');
       expect(doc).toContain('--install-skills');
       expect(doc).not.toContain('agenticos-bootstrap --verify');
       expect(normalized).not.toContain('seed workspace');

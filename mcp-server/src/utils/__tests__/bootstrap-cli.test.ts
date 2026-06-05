@@ -212,12 +212,13 @@ describe('bootstrap cli', () => {
     expect(text).toContain('cursor-skill: install/update /Users/tester/.cursor/skills-cursor/agenticos/SKILL.md');
     expect(text).toContain('gemini-cli-skill: install/update /Users/tester/.gemini/skills/agenticos/SKILL.md');
     expect(text).toContain('hermes-agent: no MCP registration is written');
+    expect(text).toContain('agenticos-cwd-applicator');
     expect(text).toContain('hermes-agent-skill: install/update /Users/tester/.hermes/skills/work/agenticos/SKILL.md');
     expect(text).toContain('overwrite user-modified managed Skill files');
     expect(text).toContain('hermes-discord: enforce optional Discord channel project routing');
   });
 
-  it('applies Hermes Agent Skill-only bootstrap without requiring Discord channel readiness', () => {
+  it('applies Hermes Agent activation and cwd applicator bootstrap without requiring Discord channel readiness', () => {
     const harness = createDeps();
 
     const exitCode = runBootstrapCli(
@@ -228,8 +229,10 @@ describe('bootstrap cli', () => {
     expect(exitCode).toBe(0);
     expect(harness.commands).toEqual([]);
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('AgenticOS Activation');
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes Agent uses Skill-only routing'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v3'))).toBe(true);
+    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml')).toContain('agenticos-cwd-applicator');
+    expect(harness.files.get('/Users/tester/.hermes/config.yaml')).toContain('agenticos-cwd-applicator');
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: installed v0.1.0 and enabled agenticos-cwd-applicator'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v4'))).toBe(true);
   });
 
   it('verifies Hermes Agent activation Skill state independently of optional Discord channel readiness', () => {
@@ -246,9 +249,37 @@ describe('bootstrap cli', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes Agent uses Skill-only activation'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes cwd applicator verified'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: Skill state: current'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('Discord'))).toBe(false);
+  });
+
+  it('skips Hermes cwd applicator verification when Hermes is absent', () => {
+    const harness = createDeps();
+    harness.deps.commandExists = () => false;
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes Agent was not detected'))).toBe(true);
+  });
+
+  it('fails Hermes cwd applicator verification when Hermes config exists but the plugin is missing', () => {
+    const harness = createDeps();
+    harness.deps.commandExists = (command: string) => command === 'hermes';
+    harness.files.set('/Users/tester/.hermes/config.yaml', 'plugins:\n  enabled: []\n');
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--verify'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(harness.stdout.some((line) => line.includes('FAIL hermes-agent: Hermes cwd applicator state: missing'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('Recovery: agenticos-bootstrap --agent hermes-agent --install-skills --apply'))).toBe(true);
   });
 
   it('reports non-Error thrown failures', () => {
@@ -269,6 +300,26 @@ describe('bootstrap cli', () => {
       cursorHarness.deps,
     )).toBe(1);
     expect(cursorHarness.stdout.some((line) => line.includes('FAIL cursor: cursor config locked'))).toBe(true);
+
+    const hermesHarness = createDeps();
+    hermesHarness.deps.writeFile = () => {
+      throw 'hermes config locked';
+    };
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--apply'],
+      hermesHarness.deps,
+    )).toBe(1);
+    expect(hermesHarness.stdout.some((line) => line.includes('FAIL hermes-agent: hermes config locked'))).toBe(true);
+
+    const hermesErrorHarness = createDeps();
+    hermesErrorHarness.deps.writeFile = () => {
+      throw new Error('hermes error config locked');
+    };
+    expect(runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--apply'],
+      hermesErrorHarness.deps,
+    )).toBe(1);
+    expect(hermesErrorHarness.stdout.some((line) => line.includes('FAIL hermes-agent: hermes error config locked'))).toBe(true);
 
     const profileHarness = createDeps();
     profileHarness.deps.writeFile = (path: string, content: string) => {
@@ -419,7 +470,7 @@ describe('bootstrap cli', () => {
     expect(exitCode).toBe(0);
     expect(harness.files.has('/Users/tester/.claude/settings.json')).toBe(false);
     expect(harness.stdout.some((line) => line.includes('claude-pwd-hook'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('add agenticos_switch PostToolUse cwd guidance hook'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('add agenticos_switch and agenticos_switch_out PostToolUse cwd guidance hooks'))).toBe(true);
   });
 
   it('adds Claude cwd guidance hook during apply when requested', () => {
@@ -432,8 +483,9 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(0);
     const settings = JSON.parse(harness.files.get('/Users/tester/.claude/settings.json') || '{}');
-    expect(settings.hooks.PostToolUse).toHaveLength(1);
+    expect(settings.hooks.PostToolUse).toHaveLength(2);
     expect(settings.hooks.PostToolUse[0].matcher).toBe('mcp__agenticos__agenticos_switch');
+    expect(settings.hooks.PostToolUse[1].matcher).toBe('mcp__agenticos__agenticos_switch_out');
     expect(settings.hooks.PostToolUse[0].hooks[0].command).toBe('agenticos-claude-pwd-hook');
     expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
   });
@@ -555,7 +607,7 @@ describe('bootstrap cli', () => {
     expect(bootstrapState.claude_pwd_hook.fatal).toBe(false);
   });
 
-  it('does not duplicate an existing Claude cwd guidance hook', () => {
+  it('adds missing Claude switch-out cwd guidance hook during upgrade', () => {
     const harness = createDeps();
     harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
       hooks: {
@@ -575,8 +627,9 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(0);
     const settings = JSON.parse(harness.files.get('/Users/tester/.claude/settings.json') || '{}');
-    expect(settings.hooks.PostToolUse).toHaveLength(1);
-    expect(harness.stdout.some((line) => line.includes('Detected PostToolUse hook'))).toBe(true);
+    expect(settings.hooks.PostToolUse).toHaveLength(2);
+    expect(settings.hooks.PostToolUse[1].matcher).toBe('mcp__agenticos__agenticos_switch_out');
+    expect(harness.stdout.some((line) => line.includes('updated /Users/tester/.claude/settings.json'))).toBe(true);
   });
 
   it('fails apply when Claude settings cannot be merged', () => {
@@ -1024,6 +1077,10 @@ describe('bootstrap cli', () => {
             matcher: 'mcp__agenticos__agenticos_switch',
             hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
           },
+          {
+            matcher: 'mcp__agenticos__agenticos_switch_out',
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
+          },
         ],
       },
     }));
@@ -1035,6 +1092,32 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(0);
     expect(harness.stdout.some((line) => line.includes('OK claude-code'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
+  });
+
+  it('keeps an already configured Claude cwd hook unchanged during apply', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
+          },
+          {
+            matcher: 'mcp__agenticos__agenticos_switch_out',
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
+          },
+        ],
+      },
+    }));
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
     expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
   });
 

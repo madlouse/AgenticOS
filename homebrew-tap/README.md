@@ -30,7 +30,8 @@ The recommended bootstrap also installs the AgenticOS activation Skill for Codex
 mkdir -p "$(brew --prefix)/var/agenticos"
 export AGENTICOS_HOME="$(brew --prefix)/var/agenticos"
 
-# Recommended: detect supported agents, register MCP, and install activation Skills
+# Recommended: detect supported agents, register MCP, install activation Skills,
+# and configure supported cwd applicators/hooks
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 
 # Claude Code
@@ -63,15 +64,15 @@ Then restart the AI tool and verify the Homebrew/runtime bootstrap state:
 
 ```bash
 agenticos-config --validate
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify
 ```
 
 Then confirm the server appears in the tool's MCP diagnostics and verify `agenticos_list` works.
 If you prefer not to edit your shell profile, omit `--first-run` and use the explicit MCP commands above instead.
 On macOS, `--first-run` also enables `launchctl` persistence so GUI/session processes inherit `AGENTICOS_HOME`.
 For Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent, `--first-run` implies `--install-skills` when the agent is selected or detected; bootstrap updates AgenticOS-managed Skill files by content hash and refuses to overwrite user-modified files unless you pass `--force-skills`.
-For Claude Code PWD guidance after `agenticos_switch`, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply` or include `--auto-configure-hooks` with `--first-run`. The hook reads Claude's PostToolUse stdin payload and feeds the switched project path back into Claude; it does not mutate a parent shell process.
-Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` with the same flags to audit the current machine state without mutating it.
+For Claude Code PWD guidance after `agenticos_switch` and `agenticos_switch_out`, run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply` or include `--auto-configure-hooks` with `--first-run`. The hook reads Claude's PostToolUse stdin payload and feeds the switched project or restored target path back into Claude; it does not mutate a parent shell process.
+Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify` with the same flags to audit the current machine state without mutating it.
 
 Hermes Agent Skill routing can be installed independently of any Discord
 channel integration:
@@ -80,9 +81,12 @@ channel integration:
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
 ```
 
-This writes `~/.hermes/skills/work/agenticos/SKILL.md`. It helps Hermes route
-project-entry, `pwd`, and switch-out prompts through AgenticOS MCP, but it does
-not install Hermes or prove that Hermes runtime MCP tools are available.
+This writes `~/.hermes/skills/work/agenticos/SKILL.md`, installs
+`~/.hermes/plugins/agenticos-cwd-applicator/`, and enables that plugin in
+`~/.hermes/config.yaml`. It helps Hermes route project-entry, `pwd`, and
+switch-out prompts through AgenticOS MCP, then apply the returned project or
+restore workdir to Hermes runtime tools. It does not install Hermes or prove
+that Hermes runtime MCP tools are available.
 
 Discord project threads are optional channel integration. Homebrew does not
 install Hermes, create a Discord application, store bot credentials, or enable a

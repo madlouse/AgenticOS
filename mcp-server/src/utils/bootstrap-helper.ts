@@ -189,7 +189,7 @@ export function renderBootstrapCommand(
     case 'cursor':
       throw new Error('Cursor bootstrap uses JSON config mutation, not a CLI command.');
     case 'hermes-agent':
-      throw new Error('Hermes Agent bootstrap is Skill-only; use --install-skills.');
+      throw new Error('Hermes Agent bootstrap does not use an MCP registration CLI; use agenticos-bootstrap --agent hermes-agent --apply.');
   }
 }
 

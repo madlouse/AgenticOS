@@ -13,6 +13,12 @@ import {
   type AgentSkillInstallResult,
 } from './agent-skill.js';
 import {
+  HERMES_CWD_APPLICATOR_PLUGIN_NAME,
+  installHermesCwdApplicator,
+  inspectHermesCwdApplicator,
+  isHermesCwdApplicatorOkForVerify,
+} from './hermes-cwd-applicator.js';
+import {
   inspectHermesDiscordReadiness,
   renderHermesDiscordReadinessLines,
 } from './integration-readiness.js';
@@ -376,7 +382,8 @@ export function buildDryRunLines(
       continue;
     }
     if (agentId === 'hermes-agent') {
-      lines.push('- hermes-agent: no MCP registration is written by AgenticOS bootstrap; Hermes Agent routing uses the activation Skill and existing MCP availability');
+      lines.push('- hermes-agent: no MCP registration is written by AgenticOS bootstrap; Hermes Agent routing uses existing MCP availability plus activation Skill');
+      lines.push(`- hermes-agent: install/enable ${HERMES_CWD_APPLICATOR_PLUGIN_NAME} so AgenticOS switch/switch_out results update Hermes runtime cwd`);
       continue;
     }
     const remove = renderRepairRemoveCommand(agentId);
@@ -410,9 +417,9 @@ export function buildDryRunLines(
   if (selected.includes('claude-code')) {
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
     if (options.autoConfigureHooks) {
-      lines.push(`- claude-pwd-hook: add agenticos_switch PostToolUse cwd guidance hook to ${settingsPath}`);
+      lines.push(`- claude-pwd-hook: add agenticos_switch and agenticos_switch_out PostToolUse cwd guidance hooks to ${settingsPath}`);
     } else {
-      lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add it`);
+      lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add missing switch/switch_out hooks`);
     }
   }
   lines.push('', 'Re-run with `--apply` to perform these actions.');
@@ -519,11 +526,7 @@ function applyAgent(
   }
 
   if (agentId === 'hermes-agent') {
-    return {
-      agentId,
-      ok: true,
-      detail: 'Hermes Agent uses Skill-only routing; no MCP registration command was run.',
-    };
+    return applyHermesAgent(deps);
   }
 
   const remove = renderRepairRemoveCommand(agentId);
@@ -537,6 +540,23 @@ function applyAgent(
 
   const verification = verifyAgent(agentId, deps, workspace);
   return { agentId, ok: verification.ok, detail: verification.detail };
+}
+
+function applyHermesAgent(deps: BootstrapCliDeps): ApplyResult {
+  try {
+    const applicator = installHermesCwdApplicator(deps.homeDir, deps);
+    return {
+      agentId: 'hermes-agent',
+      ok: applicator.ok,
+      detail: `${applicator.detail} No MCP registration command was run; Hermes must already have AgenticOS MCP enabled.`,
+    };
+  } catch (error) {
+    return {
+      agentId: 'hermes-agent',
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function applyCursor(workspace: string, deps: BootstrapCliDeps): ApplyResult {
@@ -855,10 +875,22 @@ function verifyAgent(agentId: SupportedAgentId, deps: BootstrapCliDeps, workspac
         : { ok: false, detail: `expected agenticos MCP entry in ${configPath}` };
     }
     case 'hermes-agent':
-      return {
-        ok: true,
-        detail: 'Hermes Agent uses Skill-only activation; use --install-skills --verify for Skill state and confirm Hermes runtime MCP availability separately.',
-      };
+      if (!deps.commandExists('hermes') && !deps.commandExists('hermes-gateway') && !deps.readFile(`${deps.homeDir}/.hermes/config.yaml`)) {
+        return {
+          ok: true,
+          detail: 'Hermes Agent was not detected; skipping Hermes cwd applicator verification.',
+        };
+      }
+      const inspection = inspectHermesCwdApplicator(deps.homeDir, deps);
+      return isHermesCwdApplicatorOkForVerify(inspection)
+        ? { ok: true, detail: `Hermes cwd applicator verified. ${inspection.detail}` }
+        : { ok: false, detail: `Hermes cwd applicator state: ${inspection.status}. ${inspection.detail}` };
+    /* c8 ignore next 4 -- SupportedAgentId is exhaustive at compile time. */
+    default: {
+      const exhaustive: never = agentId;
+      return { ok: false, detail: `unsupported agent: ${exhaustive}` };
+    }
+    /* c8 ignore next 2 -- v8 reports the exhaustive switch/function close as implicit coverage. */
   }
 }
 
