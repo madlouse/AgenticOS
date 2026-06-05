@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { dirname, join } from 'path';
 import type { SupportedAgentId } from './bootstrap-helper.js';
 
-export const AGENTICOS_SKILL_TEMPLATE_VERSION = 3;
+export const AGENTICOS_SKILL_TEMPLATE_VERSION = 4;
 export const AGENTICOS_SKILL_NAME = 'agenticos';
 
 const HASH_MARKER_RE = /^<!-- agenticos-skill-managed-sha256: ([a-f0-9]{64}) -->\n?/m;
@@ -290,9 +290,10 @@ Before using shell directory search, raw cd behavior, git branch inspection, or 
 1. Use AgenticOS MCP project tools if they are visible. Prefer \`agenticos_status\` for current state, \`agenticos_switch\` for project switching, and \`agenticos_switch_out\` for "切出/退出项目/回到初始目录" requests.
 2. In Codex-like runtimes where tools may be deferred, call tool discovery for AgenticOS MCP tools before any shell-only behavior. If \`tool_search\` is available and \`mcp__agenticos__\` tools are not visible, search for "AgenticOS MCP project switch status" first.
 3. Before the first \`agenticos_switch\` in a session, pass the best known absolute client cwd as \`origin_cwd\` when available so \`agenticos_switch_out\` can restore the original entry workdir.
-4. After \`agenticos_switch\` succeeds, treat its returned project path and recommended explicit workdir as authoritative for subsequent tool calls.
-5. After \`agenticos_switch_out\` succeeds, treat its returned \`target_workdir\` as authoritative for every subsequent filesystem and shell tool call. MCP cannot mutate the parent process cwd by itself; if you cannot apply \`target_workdir\`, say the switch-out effect is not complete.
-6. If AgenticOS MCP tools are unavailable, say that the switch was not completed through AgenticOS. Provide recovery: run \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify\`, repair MCP registration if needed, and restart or reload the agent.
+4. After \`agenticos_switch\` succeeds, immediately apply its returned project path / recommended explicit workdir as the active filesystem workdir when the runtime supports it. Codex-style runtimes must pass that path as explicit tool \`workdir\`; worker launchers should start new Codex sessions with \`codex -C <project_path>\`; Claude Code and Hermes Agent should rely on their installed AgenticOS cwd applicators/hooks when present.
+5. After \`agenticos_switch_out\` succeeds, immediately apply its returned \`target_workdir\` as the active filesystem workdir when the runtime supports it. Do not keep using the previous project path after switch-out. MCP cannot mutate the parent process cwd by itself; if the current agent cannot apply \`target_workdir\`, say the switch-out effect is not complete before continuing.
+6. For Hermes Agent, the expected installation includes both this activation Skill and the AgenticOS Hermes cwd applicator plugin. If switch succeeds but Hermes terminal/file/code tools still use the old cwd, run \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply\`, then \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify\`, and restart Hermes Agent.
+7. If AgenticOS MCP tools are unavailable, say that the switch was not completed through AgenticOS. Provide recovery: run \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --apply\`, then \`agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify\`, repair MCP registration if needed, and restart or reload the agent.
 
 For project switch/status prompts, the first observable action should be AgenticOS MCP or AgenticOS MCP tool discovery. Shell directory search before MCP discovery is a routing bug.
 
@@ -303,6 +304,7 @@ For project switch/status prompts, the first observable action should be Agentic
 - Do not substitute \`cd\` for \`agenticos_switch_out\` when the user asks to leave or exit a project context.
 - Do not ignore AgenticOS output when it differs from the client shell PWD.
 - Do not continue using the previous project path after \`agenticos_switch_out\`; use \`target_workdir\` explicitly.
+- Do not ask the user for a second manual \`cd\` when the agent runtime has an installed cwd applicator or per-tool \`workdir\` support; apply the returned workdir yourself.
 - Do not continue implementation work until AgenticOS project/session alignment is clear.
 `;
 }

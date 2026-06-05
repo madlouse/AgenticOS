@@ -143,11 +143,14 @@ describe('agent skill bootstrap', () => {
     expect(content).toContain('agenticos_switch');
     expect(content).toContain('agenticos_switch_out');
     expect(content).toContain('Hermes Agent');
+    expect(content).toContain('Hermes cwd applicator');
+    expect(content).toContain('codex -C <project_path>');
     expect(content).toContain('切换到');
     expect(content).toContain('切出');
     expect(content).toContain('退出项目');
     expect(content).toContain('target_workdir');
     expect(content).toContain('origin_cwd');
+    expect(content).toContain('Do not ask the user for a second manual `cd`');
     expect(content).toContain('Agentic OS 项目');
     expect(content).toContain('switch to Agentic OS project');
     expect(content).toContain('switch out project');

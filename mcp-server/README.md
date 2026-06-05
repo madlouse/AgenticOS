@@ -18,10 +18,11 @@ A project management system designed for AI collaboration. When you work on comp
 
 ### Quick Start
 
-Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
+Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
 It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent — so switch/status/pwd/switch-out prompts route to AgenticOS MCP before filesystem guessing.
-Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, and optional persistence layers without mutating them.
+With `--auto-configure-hooks`, Claude Code receives switch-in/switch-out cwd guidance hooks and Hermes Agent receives the `agenticos-cwd-applicator` plugin so Hermes runtime tools apply AgenticOS workdirs automatically after `agenticos_switch` and `agenticos_switch_out`.
+Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, cwd applicator state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
 After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
@@ -203,15 +204,20 @@ These are currently experimental. Do not describe them as first-class supported 
 
 Hermes Agent is a peer runtime alongside Codex, Claude Code, Cursor, and Gemini
 CLI. AgenticOS bootstrap does not register Hermes MCP transport by itself; it
-installs the managed activation Skill so Hermes routes project-intent prompts
-through AgenticOS MCP when the Hermes runtime can already see those tools.
+installs the managed activation Skill and user-level `agenticos-cwd-applicator`
+plugin so Hermes routes project-intent prompts through AgenticOS MCP and applies
+the returned switch/switch-out workdir when the Hermes runtime can already see
+those tools.
 
 ```bash
 agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
 ```
 
-This writes `~/.hermes/skills/work/agenticos/SKILL.md` and helps Hermes route
-"切换到 ... 项目", `pwd`, and "切出/退出项目" prompts through AgenticOS MCP.
+This writes `~/.hermes/skills/work/agenticos/SKILL.md`, installs
+`~/.hermes/plugins/agenticos-cwd-applicator/`, and enables that plugin in
+`~/.hermes/config.yaml`. It helps Hermes route "切换到 ... 项目", `pwd`, and
+"切出/退出项目" prompts through AgenticOS MCP, then apply the returned project
+or restore workdir to Hermes' runtime cwd.
 It does not install Hermes, configure Discord, or prove gateway readiness.
 
 Verify Skill state without Discord:
@@ -303,7 +309,7 @@ Then bootstrap your workspace and agent:
 
 ```bash
 export AGENTICOS_HOME=/path/to/your/workspace   # any valid directory
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks
 ```
 
 Restart your AI tool and verify with `agenticos_list`.
@@ -311,7 +317,7 @@ If you rely on natural-language project switching, verify the activation Skill
 as well:
 
 ```bash
-agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
+agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify
 ```
 
 ### Repairing a stale Homebrew tap

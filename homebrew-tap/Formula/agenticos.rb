@@ -27,7 +27,7 @@ class Agenticos < Formula
     ohai "First-run mode installs AgenticOS activation Skills for Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent when selected."
     ohai "On macOS, first-run mode also enables launchctl persistence for GUI/session inheritance."
     ohai "To audit the current Homebrew/runtime bootstrap state without changes, use: agenticos-config --validate"
-    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --all --install-skills --verify"
+    ohai "Then run: agenticos-bootstrap --workspace \"#{var}/agenticos\" --all --install-skills --auto-configure-hooks --verify"
     ohai "Or bootstrap your agent manually (see caveats below) and restart the tool."
   end
 
@@ -99,7 +99,7 @@ class Agenticos < Formula
 
       4. Verify the Homebrew/runtime bootstrap state:
            agenticos-config --validate
-           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --verify
+           agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify
 
          Then confirm the server is listed in the tool's MCP diagnostics and explicitly call
          agenticos_list.

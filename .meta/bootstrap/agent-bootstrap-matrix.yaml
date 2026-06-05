@@ -158,26 +158,36 @@ supported_agents:
   - id: hermes-agent
     label: Hermes Agent
     support_tier: official
-    transport: skill-only-routing
-    canonical_bootstrap_method: activation-skill
-    canonical_config_location: ~/.hermes/skills/work/agenticos/SKILL.md
+    transport: existing-hermes-mcp-plus-skill-and-cwd-applicator
+    canonical_bootstrap_method: activation-skill-and-cwd-applicator
+    canonical_config_location: ~/.hermes/skills/work/agenticos/SKILL.md + ~/.hermes/plugins/agenticos-cwd-applicator/
     activation_skill:
       support: official
       path: ~/.hermes/skills/work/agenticos/SKILL.md
       install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
       verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify
       purpose: route project switch/status/pwd/switch-out prompts through AgenticOS MCP before filesystem guessing
+    cwd_applicator:
+      support: official
+      path: ~/.hermes/plugins/agenticos-cwd-applicator/
+      config_location: ~/.hermes/config.yaml plugins.enabled
+      install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply
+      verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify
+      purpose: apply AgenticOS switch and switch-out workdirs to Hermes runtime cwd after MCP returns a project or target_workdir
     verification:
       - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --verify`
       - restart Hermes Agent or reload Hermes skills
-      - ask Hermes to handle a project-entry request and confirm it calls AgenticOS MCP instead of `cd`
+      - ask Hermes to handle a project-entry request and confirm it calls AgenticOS MCP before filesystem guessing
+      - after switch-in, ask Hermes `pwd` and confirm terminal/file/code tools use the returned project path
+      - after switch-out, ask Hermes `pwd` and confirm terminal/file/code tools use the returned target_workdir
     transport_debug:
       - Hermes Agent Skill support does not register MCP by itself; Hermes must already have access to AgenticOS MCP tools through its runtime/gateway integration
       - if Hermes cannot call AgenticOS MCP, debug Hermes runtime MCP/tool configuration before treating Skill routing as broken
       - machines without Hermes should still pass normal AgenticOS bootstrap unless `--agent hermes-agent` is explicitly selected
     routing_debug:
       - if project-intent prompts do not trigger routing, verify the Hermes Agent activation Skill is installed under `~/.hermes/skills/work/agenticos/SKILL.md`
-      - after `agenticos_switch`, Hermes must use the returned project path / recommended workdir for delegated workers
+      - if MCP calls succeed but filesystem work stays in the old cwd, verify `~/.hermes/plugins/agenticos-cwd-applicator/` and `plugins.enabled` in `~/.hermes/config.yaml`
+      - after `agenticos_switch`, Hermes must use the returned project path / recommended workdir for terminal/file/code tools and delegated workers
       - after `agenticos_switch_out`, Hermes must use `target_workdir` and must not keep routing filesystem work into the previous project path
     repair:
       - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent hermes-agent --install-skills --apply`

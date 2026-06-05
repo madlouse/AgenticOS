@@ -2,6 +2,11 @@ import { shellQuote, validatePathSecurity } from './session-context.js';
 
 export const CLAUDE_SETTINGS_PATH = '.claude/settings.json';
 export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER = 'mcp__agenticos__agenticos_switch';
+export const CLAUDE_SWITCH_OUT_PWD_ALIGNMENT_HOOK_MATCHER = 'mcp__agenticos__agenticos_switch_out';
+export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS = [
+  CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER,
+  CLAUDE_SWITCH_OUT_PWD_ALIGNMENT_HOOK_MATCHER,
+] as const;
 export const CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND = 'agenticos-claude-pwd-hook';
 
 export type ClaudePwdHookStatus = 'configured' | 'missing' | 'unset' | 'unavailable';
@@ -23,17 +28,23 @@ export interface ClaudePostToolUseHookResponse {
   };
 }
 
-const CLAUDE_PWD_ALIGNMENT_HOOK_ENTRY = {
-  matcher: CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER,
-  hooks: [
-    {
-      type: 'command',
-      command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND,
-      shell: 'bash',
-      timeout: 5,
-    },
-  ],
-} as const;
+function buildClaudePwdAlignmentHookEntry(matcher: string) {
+  return {
+    matcher,
+    hooks: [
+      {
+        type: 'command',
+        command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND,
+        shell: 'bash',
+        timeout: 5,
+      },
+    ],
+  };
+}
+
+const CLAUDE_PWD_ALIGNMENT_HOOK_ENTRIES = CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS.map(
+  buildClaudePwdAlignmentHookEntry,
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -67,15 +78,48 @@ export function extractProjectPathFromClaudeHookPayload(payload: unknown): strin
   return match?.[1]?.trim() || null;
 }
 
-export function renderClaudePwdHookResponse(projectPath: string): ClaudePostToolUseHookResponse {
+export function extractTargetWorkdirFromClaudeHookPayload(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  const toolResponse = payload.tool_response;
+  if (!isRecord(toolResponse)) return null;
+
+  if (typeof toolResponse.target_workdir === 'string' && toolResponse.target_workdir.trim()) {
+    return toolResponse.target_workdir.trim();
+  }
+
+  const contentText = extractTextContent(toolResponse.content).join('\n');
+  const match = contentText.match(/^target_workdir:\s*(.+)$/m);
+  return match?.[1]?.trim() || null;
+}
+
+function isSwitchOutHookPayload(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  const toolName = payload.tool_name;
+  return typeof toolName === 'string' && toolName.includes('agenticos_switch_out');
+}
+
+function matcherMatchesExpected(matcher: string, expectedMatcher: string): boolean {
+  return matcher.trim() === expectedMatcher;
+}
+
+export function renderClaudePwdHookResponse(
+  targetPath: string,
+  action: 'switch' | 'switch_out' = 'switch',
+): ClaudePostToolUseHookResponse {
+  const label = action === 'switch_out'
+    ? 'AgenticOS switch-out target workdir'
+    : 'AgenticOS switched project path';
+  const commandIntro = action === 'switch_out'
+    ? 'If the client shell PWD differs, restore it with:'
+    : 'If the client shell PWD differs, enter it with:';
   return {
     hookSpecificOutput: {
       hookEventName: 'PostToolUse',
       additionalContext: [
-        `AgenticOS switched project path: ${projectPath}`,
-        'Use this path as the explicit workdir for subsequent filesystem operations.',
+        `${label}: ${targetPath}`,
+        'Apply this path as the explicit workdir for subsequent filesystem operations.',
         'This hook provides cwd guidance only; it cannot mutate a parent shell PWD.',
-        `If the client shell PWD differs, run: cd ${shellQuote(projectPath)}`,
+        `${commandIntro} cd ${shellQuote(targetPath)}`,
       ].join('\n'),
     },
   };
@@ -89,24 +133,31 @@ export function runClaudePwdHook(input: string): string | null {
     return null;
   }
 
-  const projectPath = extractProjectPathFromClaudeHookPayload(parsed);
-  if (!projectPath) return null;
-  if (!validatePathSecurity(projectPath).valid) return null;
+  const action = isSwitchOutHookPayload(parsed) ? 'switch_out' : 'switch';
+  const targetPath = action === 'switch_out'
+    ? extractTargetWorkdirFromClaudeHookPayload(parsed)
+    : extractProjectPathFromClaudeHookPayload(parsed);
+  if (!targetPath) return null;
+  if (!validatePathSecurity(targetPath).valid) return null;
 
-  return `${JSON.stringify(renderClaudePwdHookResponse(projectPath))}\n`;
+  return `${JSON.stringify(renderClaudePwdHookResponse(targetPath, action))}\n`;
 }
 
 export function hasClaudePwdAlignmentHook(settings: unknown): boolean {
-  if (!isRecord(settings)) return false;
-  const hooks = settings.hooks;
-  if (!isRecord(hooks)) return false;
-  const postToolUse = hooks.PostToolUse;
-  if (!Array.isArray(postToolUse)) return false;
+  return getMissingClaudePwdAlignmentHookMatchers(settings).length === 0;
+}
 
-  return postToolUse.some((entry) => {
+export function getMissingClaudePwdAlignmentHookMatchers(settings: unknown): string[] {
+  if (!isRecord(settings)) return [...CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS];
+  const hooks = settings.hooks;
+  if (!isRecord(hooks)) return [...CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS];
+  const postToolUse = hooks.PostToolUse;
+  if (!Array.isArray(postToolUse)) return [...CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS];
+
+  return CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS.filter((expectedMatcher) => !postToolUse.some((entry) => {
     if (!isRecord(entry)) return false;
     const matcher = entry.matcher;
-    if (typeof matcher !== 'string' || !matcher.includes('agenticos_switch')) {
+    if (typeof matcher !== 'string' || !matcherMatchesExpected(matcher, expectedMatcher)) {
       return false;
     }
     const nestedHooks = entry.hooks;
@@ -117,7 +168,7 @@ export function hasClaudePwdAlignmentHook(settings: unknown): boolean {
         && typeof hook.command === 'string'
         && hook.command.trim() === CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND;
     });
-  });
+  }));
 }
 
 export function inspectClaudePwdAlignmentHook(settingsContent: string | null): ClaudePwdHookInspection {
@@ -130,14 +181,15 @@ export function inspectClaudePwdAlignmentHook(settingsContent: string | null): C
 
   try {
     const parsed = parseSettings(settingsContent);
-    return hasClaudePwdAlignmentHook(parsed)
+    const missingMatchers = getMissingClaudePwdAlignmentHookMatchers(parsed);
+    return missingMatchers.length === 0
       ? {
         status: 'configured',
-        detail: 'Detected PostToolUse hook for agenticos_switch cwd guidance.',
+        detail: 'Detected PostToolUse hooks for agenticos_switch and agenticos_switch_out cwd guidance.',
       }
       : {
         status: 'unset',
-        detail: 'Claude Code settings exist but no agenticos_switch cwd guidance hook was detected.',
+        detail: `Claude Code settings exist but missing cwd guidance hook(s): ${missingMatchers.join(', ')}.`,
       };
   } catch {
     return {
@@ -156,7 +208,8 @@ export function mergeClaudePwdAlignmentHook(settingsContent: string | null): Cla
     throw new Error('Claude Code settings must be a JSON object.');
   }
 
-  if (hasClaudePwdAlignmentHook(parsed)) {
+  const missingMatchers = getMissingClaudePwdAlignmentHookMatchers(parsed);
+  if (missingMatchers.length === 0) {
     const configuredContent = settingsContent as string;
     return {
       changed: false,
@@ -184,7 +237,7 @@ export function mergeClaudePwdAlignmentHook(settingsContent: string | null): Cla
       ...hooks,
       PostToolUse: [
         ...postToolUse,
-        CLAUDE_PWD_ALIGNMENT_HOOK_ENTRY,
+        ...CLAUDE_PWD_ALIGNMENT_HOOK_ENTRIES.filter((entry) => missingMatchers.includes(entry.matcher)),
       ],
     },
   };

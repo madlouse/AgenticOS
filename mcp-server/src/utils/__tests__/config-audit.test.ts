@@ -146,6 +146,10 @@ describe('config audit', () => {
             matcher: 'mcp__agenticos__agenticos_switch',
             hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
           },
+          {
+            matcher: 'mcp__agenticos__agenticos_switch_out',
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
+          },
         ],
       },
     }));
@@ -155,7 +159,7 @@ describe('config audit', () => {
 
     expect(result.canonical_workspace).toBeNull();
     expect(hookSource?.status).toBe('configured');
-    expect(hookSource?.value).toBe('mcp__agenticos__agenticos_switch');
+    expect(hookSource?.value).toBe('mcp__agenticos__agenticos_switch,mcp__agenticos__agenticos_switch_out');
   });
 
   it('reports configured Claude Code cwd guidance hooks', () => {
@@ -167,6 +171,10 @@ describe('config audit', () => {
             matcher: 'mcp__agenticos__agenticos_switch',
             hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
           },
+          {
+            matcher: 'mcp__agenticos__agenticos_switch_out',
+            hooks: [{ type: 'command', command: 'agenticos-claude-pwd-hook' }],
+          },
         ],
       },
     }));
@@ -175,7 +183,7 @@ describe('config audit', () => {
     const hook = result.sources.find((source) => source.id === 'claude_pwd_alignment_hook');
 
     expect(hook?.status).toBe('configured');
-    expect(hook?.value).toBe('mcp__agenticos__agenticos_switch');
+    expect(hook?.value).toBe('mcp__agenticos__agenticos_switch,mcp__agenticos__agenticos_switch_out');
     expect(hook?.detail).toContain('Detected PostToolUse hook');
   });
 
@@ -191,7 +199,7 @@ describe('config audit', () => {
 
     expect(result.canonical_workspace).toBeNull();
     expect(codexSkill?.status).toBe('configured');
-    expect(codexSkill?.value).toBe('agenticos-skill:v3');
+    expect(codexSkill?.value).toBe('agenticos-skill:v4');
     expect(codexSkill?.contributes_to_workspace).toBe(false);
     expect(claudeSkill?.status).toBe('missing');
     expect(claudeSkill?.fix_target).toContain('--install-skills');
@@ -260,7 +268,7 @@ describe('config audit', () => {
     const hook = result.sources.find((source) => source.id === 'claude_pwd_alignment_hook');
 
     expect(hook?.status).toBe('unset');
-    expect(hook?.detail).toContain('no agenticos_switch cwd guidance hook');
+    expect(hook?.detail).toContain('missing cwd guidance hook');
   });
 
   it('accepts generic Codex AGENTICOS_HOME entries outside a focused agent block', () => {

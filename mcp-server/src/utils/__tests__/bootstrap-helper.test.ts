@@ -100,9 +100,9 @@ describe('bootstrap helper', () => {
     expect(renderRepairRemoveCommand('cursor')).toBeNull();
   });
 
-  it('reports Hermes Agent bootstrap as Skill-only', () => {
+  it('reports Hermes Agent bootstrap as no MCP registration CLI', () => {
     expect(() => renderBootstrapCommand('hermes-agent', '/tmp/workspace')).toThrow(
-      'Hermes Agent bootstrap is Skill-only',
+      'Hermes Agent bootstrap does not use an MCP registration CLI',
     );
     expect(renderRepairRemoveCommand('hermes-agent')).toBeNull();
   });

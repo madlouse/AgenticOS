@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- bootstrap: add the Hermes Agent `agenticos-cwd-applicator` user plugin and
+  enable it during Hermes bootstrap so `agenticos_switch` and
+  `agenticos_switch_out` update Hermes runtime cwd after MCP returns the
+  project or restore workdir (#506).
 - mcp-server: add `agenticos_switch_out` with origin-workdir restore guidance so
   agents can leave a project context and continue subsequent filesystem work
   from the original entry directory (#500).
@@ -17,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   readiness optional unless explicitly verified (#502).
 
 ### Changed
+- bootstrap: Claude Code cwd alignment now installs/verifies PostToolUse hooks
+  for both `agenticos_switch` and `agenticos_switch_out`, and the managed
+  activation Skill v4 requires supported runtimes to auto-apply returned
+  workdirs instead of asking the user for a second manual `cd` (#506).
 - bootstrap: managed AgenticOS activation Skills now route "切出/退出项目/回到初始目录"
   through `agenticos_switch_out` and require agents to apply the returned
   `target_workdir` explicitly (#500).

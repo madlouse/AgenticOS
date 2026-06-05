@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { detectDefaultShellProfile } from './bootstrap-helper.js';
 import {
-  CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER,
+  CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS,
   inspectClaudePwdAlignmentHook,
 } from './claude-pwd-hook.js';
 import { inspectAgentSkill } from './agent-skill.js';
@@ -249,7 +249,7 @@ function readClaudePwdAlignmentHookSource(deps: ConfigAuditDeps): ConfigSourceRe
     label: 'Claude Code cwd guidance hook',
     scope: 'mcp',
     status: inspection.status,
-    value: inspection.status === 'configured' ? CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER : null,
+    value: inspection.status === 'configured' ? CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS.join(',') : null,
     location: filePath,
     fix_target: 'agenticos-bootstrap --agent claude-code --auto-configure-hooks --apply',
     detail: inspection.status === 'configured'

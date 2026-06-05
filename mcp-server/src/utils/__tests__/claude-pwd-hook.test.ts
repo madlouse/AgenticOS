@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND,
+  CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS,
+  extractTargetWorkdirFromClaudeHookPayload,
   extractProjectPathFromClaudeHookPayload,
+  getMissingClaudePwdAlignmentHookMatchers,
   hasClaudePwdAlignmentHook,
   inspectClaudePwdAlignmentHook,
   mergeClaudePwdAlignmentHook,
@@ -21,6 +24,9 @@ describe('claude-pwd-hook', () => {
     expect(hasClaudePwdAlignmentHook({ hooks: { PostToolUse: [{ matcher: 'agenticos_switch', hooks: {} }] } })).toBe(false);
     expect(hasClaudePwdAlignmentHook({ hooks: { PostToolUse: [{ matcher: 'agenticos_switch', hooks: [null] }] } })).toBe(false);
     expect(hasClaudePwdAlignmentHook({ hooks: { PostToolUse: [{ matcher: 'agenticos_switch', hooks: [{ type: 'command', command: 1 }] }] } })).toBe(false);
+    expect(getMissingClaudePwdAlignmentHookMatchers({ hooks: { PostToolUse: [{ matcher: 'mcp__agenticos__agenticos_switch', hooks: {} }] } })).toEqual([...CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS]);
+    expect(getMissingClaudePwdAlignmentHookMatchers({ hooks: { PostToolUse: [{ matcher: 'mcp__agenticos__agenticos_switch', hooks: [null] }] } })).toEqual([...CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS]);
+    expect(getMissingClaudePwdAlignmentHookMatchers({ hooks: [] })).toEqual([...CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS]);
   });
 
   it('inspects missing, configured, unset, and invalid settings content', () => {
@@ -34,6 +40,10 @@ describe('claude-pwd-hook', () => {
             matcher: 'mcp__agenticos__agenticos_switch',
             hooks: [{ type: 'command', command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND }],
           },
+          {
+            matcher: 'mcp__agenticos__agenticos_switch_out',
+            hooks: [{ type: 'command', command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND }],
+          },
         ],
       },
     })).status).toBe('configured');
@@ -42,7 +52,7 @@ describe('claude-pwd-hook', () => {
   it('merges into empty and existing settings', () => {
     const empty = mergeClaudePwdAlignmentHook(null);
     expect(empty.changed).toBe(true);
-    expect(JSON.parse(empty.content).hooks.PostToolUse).toHaveLength(1);
+    expect(JSON.parse(empty.content).hooks.PostToolUse).toHaveLength(2);
 
     const existing = mergeClaudePwdAlignmentHook(JSON.stringify({
       env: { AGENTICOS_HOME: '/workspace' },
@@ -54,7 +64,27 @@ describe('claude-pwd-hook', () => {
     }));
     const parsed = JSON.parse(existing.content);
     expect(parsed.env.AGENTICOS_HOME).toBe('/workspace');
+    expect(parsed.hooks.PostToolUse).toHaveLength(3);
+  });
+
+  it('adds missing switch-out hook to old switch-only settings', () => {
+    const switchOnly = JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND }],
+          },
+        ],
+      },
+    });
+
+    const result = mergeClaudePwdAlignmentHook(switchOnly);
+    const parsed = JSON.parse(result.content);
+
+    expect(result.changed).toBe(true);
     expect(parsed.hooks.PostToolUse).toHaveLength(2);
+    expect(parsed.hooks.PostToolUse[1].matcher).toBe('mcp__agenticos__agenticos_switch_out');
   });
 
   it('preserves existing configured content and rejects invalid shapes', () => {
@@ -63,6 +93,10 @@ describe('claude-pwd-hook', () => {
         PostToolUse: [
           {
             matcher: 'mcp__agenticos__agenticos_switch',
+            hooks: [{ type: 'command', command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND }],
+          },
+          {
+            matcher: 'mcp__agenticos__agenticos_switch_out',
             hooks: [{ type: 'command', command: CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND }],
           },
         ],
@@ -127,6 +161,24 @@ describe('claude-pwd-hook', () => {
     })).toBeNull();
   });
 
+  it('extracts switch-out target workdirs from Claude hook stdin payloads', () => {
+    expect(extractTargetWorkdirFromClaudeHookPayload(null)).toBeNull();
+    expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: null })).toBeNull();
+    expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { target_workdir: '  ' } })).toBeNull();
+    expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { content: [{ type: 'text', text: 'origin_cwd: /tmp/origin' }] } })).toBeNull();
+    expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { target_workdir: ' /tmp/origin ' } })).toBe('/tmp/origin');
+    expect(extractTargetWorkdirFromClaudeHookPayload({
+      tool_response: {
+        content: [
+          {
+            type: 'text',
+            text: '✅ Exited AgenticOS project context "AgenticOS"\norigin_cwd: /tmp/origin\ntarget_workdir: /tmp/origin',
+          },
+        ],
+      },
+    })).toBe('/tmp/origin');
+  });
+
   it('renders hook JSON that adds cwd guidance for Claude instead of cd in a child shell', () => {
     const response = renderClaudePwdHookResponse('/tmp/work space');
 
@@ -134,6 +186,13 @@ describe('claude-pwd-hook', () => {
     expect(response.hookSpecificOutput.additionalContext).toContain('/tmp/work space');
     expect(response.hookSpecificOutput.additionalContext).toContain("cd '/tmp/work space'");
     expect(response.hookSpecificOutput.additionalContext).toContain('cwd guidance only');
+  });
+
+  it('renders switch-out restore guidance', () => {
+    const response = renderClaudePwdHookResponse('/tmp/origin', 'switch_out');
+
+    expect(response.hookSpecificOutput.additionalContext).toContain('switch-out target workdir');
+    expect(response.hookSpecificOutput.additionalContext).toContain("restore it with: cd '/tmp/origin'");
   });
 
   it('does not render hook output for unsafe project paths', () => {
@@ -164,6 +223,25 @@ describe('claude-pwd-hook', () => {
     expect(JSON.parse(output || '{}').hookSpecificOutput.additionalContext).toContain('/tmp/agenticos');
     expect(runClaudePwdHook('{bad json')).toBeNull();
     expect(runClaudePwdHook('')).toBeNull();
+    expect(runClaudePwdHook('null')).toBeNull();
     expect(runClaudePwdHook(JSON.stringify({ tool_response: { content: [] } }))).toBeNull();
+  });
+
+  it('executes the hook payload parser for switch-out restore JSON', () => {
+    const output = runClaudePwdHook(JSON.stringify({
+      tool_name: 'mcp__agenticos__agenticos_switch_out',
+      tool_response: {
+        content: [
+          {
+            type: 'text',
+            text: '✅ Exited AgenticOS project context "AgenticOS"\ntarget_workdir: /tmp/origin',
+          },
+        ],
+      },
+    }));
+
+    expect(output).not.toBeNull();
+    expect(JSON.parse(output || '{}').hookSpecificOutput.additionalContext).toContain('/tmp/origin');
+    expect(JSON.parse(output || '{}').hookSpecificOutput.additionalContext).toContain('switch-out');
   });
 });
