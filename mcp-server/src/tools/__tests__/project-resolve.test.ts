@@ -517,12 +517,13 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     await writeRegistry([{ id: 'id-mismatch', name: 'Id Mismatch', path: idMismatchPath }]);
     expect(parseResult(await runProjectResolve({ project: 'id-mismatch' })).code).toBe('IDENTITY_UNPROVEN');
 
+    // Display-name divergence is allowed: identity is proven by id alone.
     const nameMismatchPath = await seedRawProject('name-mismatch', 'Name Mismatch', {
       meta: { id: 'name-mismatch', name: 'Other Name' },
       source_control: { topology: 'local_directory_only', context_publication_policy: 'local_private' },
     });
     await writeRegistry([{ id: 'name-mismatch', name: 'Name Mismatch', path: nameMismatchPath }]);
-    expect(parseResult(await runProjectResolve({ project: 'name-mismatch' })).code).toBe('IDENTITY_UNPROVEN');
+    expect(parseResult(await runProjectResolve({ project: 'name-mismatch' })).status).toBe('RESOLVED');
   });
 
   it('fails closed for archived or unnormalized projects', async () => {

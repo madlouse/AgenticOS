@@ -423,17 +423,23 @@ describe('resolveManagedProjectTarget', () => {
     })).rejects.toThrow('Project identity mismatch: registry id "alpha" does not match .project.yaml meta.id "beta".');
   });
 
-  it('fails when .project.yaml name mismatches the registry name', async () => {
+  it('resolves when registry display name diverges from .project.yaml meta.name as long as ids match', async () => {
     readFileMock.mockResolvedValue(JSON.stringify({
       meta: {
         id: 'alpha',
-        name: 'Wrong Project Name',
+        name: 'alpha-canonical-slug',
+      },
+      source_control: {
+        topology: 'local_directory_only',
       },
     }));
 
-    await expect(resolveManagedProjectTarget({
+    const result = await resolveManagedProjectTarget({
       commandName: 'agenticos_record',
-    })).rejects.toThrow('Project identity mismatch: registry name "Alpha Project" does not match .project.yaml meta.name "Wrong Project Name".');
+    });
+
+    expect(result.projectId).toBe('alpha');
+    expect(result.projectName).toBe('Alpha Project');
   });
 
   it('fails when the resolved project is archived reference content', async () => {

@@ -307,7 +307,6 @@ async function buildProjectPayload(args: {
   }
 
   const metaId = projectYaml?.meta?.id;
-  const metaName = projectYaml?.meta?.name;
 
   if (!metaId) {
     throw new ProjectResolveError('IDENTITY_UNPROVEN', `Project identity could not be proven because ${projectYamlPath} is missing meta.id.`);
@@ -318,12 +317,8 @@ async function buildProjectPayload(args: {
       `Project identity mismatch: registry id "${project.id}" does not match .project.yaml meta.id "${metaId}".`,
     );
   }
-  if (metaName && metaName !== project.name) {
-    throw new ProjectResolveError(
-      'IDENTITY_UNPROVEN',
-      `Project identity mismatch: registry name "${project.name}" does not match .project.yaml meta.name "${metaName}".`,
-    );
-  }
+  // Identity is proven by id alone; registry name is a display name and may
+  // legitimately diverge from .project.yaml meta.name.
 
   if (isArchivedReferenceProject(projectYaml, project.status)) {
     throw new ProjectResolveError(
