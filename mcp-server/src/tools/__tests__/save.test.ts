@@ -775,7 +775,7 @@ describe('saveState', () => {
     expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
   });
 
-  it('fails closed when private_continuity paths escape the project root even if they remain inside the repo', async () => {
+  it('fails closed when an agent_context path uses parent-directory traversal (rejected at contract validation)', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry({
       projects: [
         {
@@ -836,8 +836,11 @@ describe('saveState', () => {
 
     const result = await saveState({ message: 'should fail on project escape' });
 
-    expect(result).toContain('could not persist tracked continuity');
-    expect(result).toContain('tasks path escapes project root');
+    // The unsafe agent_context path is now rejected up front by managed-project
+    // identity/contract resolution, before save reaches its continuity boundary
+    // check — an earlier, stronger fail-closed (#513).
+    expect(result).toContain('unsafe agent_context.tasks');
+    expect(result).toContain('parent-directory traversal');
     expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
     expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
   });

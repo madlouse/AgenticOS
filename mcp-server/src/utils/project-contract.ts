@@ -312,3 +312,64 @@ export function validateManagedProjectTopology(projectName: string, projectYaml:
     message: `Project "${projectName}" declares unsupported source_control.topology "${String(topology)}". Supported values are "local_directory_only", "git_versioned", and legacy "github_versioned".`,
   };
 }
+
+/**
+ * The `.project.yaml agent_context.*` values become tracked file paths that flow
+ * into git staging and file writes. They are untrusted input — a `.project.yaml`
+ * can be imported or shared — so they must be simple project-relative paths.
+ * Reject absolute paths, parent-directory traversal, and any character that
+ * could escape the project tree or a shell argument (defense-in-depth on top of
+ * the execFile migration in #512).
+ */
+const AGENT_CONTEXT_PATH_FIELDS = [
+  'quick_start',
+  'current_state',
+  'conversations',
+  'last_record_marker',
+  'knowledge',
+  'tasks',
+  'artifacts',
+] as const;
+
+// Control characters and shell/path metacharacters that must never appear in a
+// project-relative context path.
+// eslint-disable-next-line no-control-regex
+const UNSAFE_CONTEXT_PATH_CHARS = /[\x00-\x1f\x7f$`;|&<>()*?!\\"'\n\r]/;
+
+function findAgentContextPathViolation(rawValue: unknown): string | null {
+  if (rawValue === undefined || rawValue === null) return null; // optional → default applies
+  if (typeof rawValue !== 'string') return 'must be a string';
+  const value = rawValue.trim();
+  if (value.length === 0) return null; // empty → default applies
+  if (value.startsWith('/')) return 'must be a project-relative path, not absolute';
+  if (/^[A-Za-z]:[\\/]/.test(value)) return 'must be a project-relative path, not absolute';
+  if (UNSAFE_CONTEXT_PATH_CHARS.test(value)) return 'must not contain control characters or shell metacharacters';
+  const segments = value.split('/');
+  if (segments.includes('..')) return 'must not contain parent-directory traversal ("..")';
+  return null;
+}
+
+export function validateAgentContextPaths(
+  projectName: string,
+  projectYaml: any,
+): { ok: true } | { ok: false; message: string } {
+  const agentContext = projectYaml?.agent_context;
+  if (agentContext === undefined || agentContext === null) {
+    return { ok: true };
+  }
+  if (typeof agentContext !== 'object' || Array.isArray(agentContext)) {
+    return { ok: false, message: `Project "${projectName}" has an invalid agent_context: it must be a mapping of context paths.` };
+  }
+
+  for (const field of AGENT_CONTEXT_PATH_FIELDS) {
+    const violation = findAgentContextPathViolation(agentContext[field]);
+    if (violation) {
+      return {
+        ok: false,
+        message: `Project "${projectName}" has an unsafe agent_context.${field}: it ${violation}.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}

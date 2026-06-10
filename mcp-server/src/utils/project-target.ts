@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { loadRegistry, type Project, type Registry } from './registry.js';
 import { loadAndVerifyManagedProjectIdentity } from './checkout-identity.js';
-import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from './project-contract.js';
+import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateAgentContextPaths, validateManagedProjectTopology } from './project-contract.js';
 import { getSessionProjectBinding } from './session-context.js';
 import {
   type ManagedProjectContextPaths,
@@ -112,6 +112,11 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
   const topologyValidation = validateManagedProjectTopology(project.name, projectYaml);
   if (!topologyValidation.ok) {
     throw new Error(`${topologyValidation.message} ${args.commandName} only works with normalized managed projects.`);
+  }
+
+  const agentContextValidation = validateAgentContextPaths(project.name, projectYaml);
+  if (!agentContextValidation.ok) {
+    throw new Error(`${agentContextValidation.message} ${args.commandName} only works with normalized managed projects.`);
   }
 
   const contextPaths = resolveManagedProjectContextPaths(targetProjectPath, projectYaml);
