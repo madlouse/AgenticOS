@@ -57,6 +57,12 @@ export interface HookConfigResult {
   detail: string;
 }
 
+interface SwitchWorkdirEffectVerification {
+  agentId: SupportedAgentId;
+  ok: boolean;
+  detail: string;
+}
+
 export interface BootstrapCliDeps {
   env: Record<string, string | undefined>;
   homeDir: string;
@@ -264,6 +270,11 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
         deps.stdout(`${marker} ${result.agentId}-skill: ${result.detail}`);
       }
     }
+    const switchWorkdirEffectResults = verifySwitchWorkdirEffects(selectedAgents, options, deps);
+    for (const result of switchWorkdirEffectResults) {
+      const marker = result.ok ? 'OK' : 'FAIL';
+      deps.stdout(`${marker} ${result.agentId}-switch-workdir: ${result.detail}`);
+    }
     {
       const marker = bootstrapStateResult.ok ? 'OK' : 'FAIL';
       deps.stdout(`${marker} bootstrap-state: ${bootstrapStateResult.detail}`);
@@ -274,6 +285,7 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       || (launchctlResult && !launchctlResult.ok)
       || (hookConfigResult && hookConfigResult.fatal)
       || (skillInstallResults && skillInstallResults.some((result) => !result.ok))
+      || switchWorkdirEffectResults.some((result) => !result.ok)
       || !bootstrapStateResult.ok
       ? 1
       : 0;
@@ -301,6 +313,7 @@ export function buildHelpLines(): string[] {
     '  `--install-skills` installs or updates the AgenticOS activation Skill for agents that support local skills.',
     '  `--force-skills` allows `--install-skills` to overwrite a user-modified AgenticOS Skill.',
     '  `--verify-hermes-discord` makes optional Discord channel project routing prerequisites blocking during `--verify`.',
+    '  Switch workdir effects are client-side: MCP returns project_workdir/target_workdir/explicit_workdir, then each selected agent must apply that path through its supported Skill, hook, applicator, or explicit per-tool workdir mechanism.',
     '  Workspace selection is explicit: use `--workspace <path>` or set AGENTICOS_HOME beforehand.',
     '',
     'Supported agent ids: claude-code, codex, cursor, gemini-cli, hermes-agent',
@@ -422,8 +435,27 @@ export function buildDryRunLines(
       lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add missing switch/switch_out hooks`);
     }
   }
+  lines.push('', 'Switch workdir effects:');
+  lines.push(...buildSwitchWorkdirEffectPlanLines(selected));
   lines.push('', 'Re-run with `--apply` to perform these actions.');
   return lines;
+}
+
+function buildSwitchWorkdirEffectPlanLines(selected: SupportedAgentId[]): string[] {
+  return selected.map((agentId) => {
+    switch (agentId) {
+      case 'codex':
+        return '- codex-switch-workdir: activation Skill routes switch requests to MCP; Codex must pass structuredContent.explicit_workdir as per-tool workdir after switch-in and target_workdir after switch-out.';
+      case 'claude-code':
+        return '- claude-code-switch-workdir: activation Skill plus PostToolUse hook provide per-call cwd guidance for agenticos_switch and agenticos_switch_out.';
+      case 'hermes-agent':
+        return `- hermes-agent-switch-workdir: activation Skill plus ${HERMES_CWD_APPLICATOR_PLUGIN_NAME} apply switch-in and switch-out workdirs to Hermes runtime cwd.`;
+      case 'cursor':
+        return '- cursor-switch-workdir: activation Skill routes switch requests to MCP; Cursor must use the returned explicit_workdir/target_workdir for subsequent operations and must not claim parent-shell cwd mutation.';
+      case 'gemini-cli':
+        return '- gemini-cli-switch-workdir: activation Skill routes switch requests to MCP; Gemini CLI must use the returned explicit_workdir/target_workdir for subsequent operations and must not claim parent-shell cwd mutation.';
+    }
+  });
 }
 
 function getRecoveryCommand(agentId: SupportedAgentId): string {
@@ -500,6 +532,13 @@ function runVerification(
         lines.push(`   Recovery: ${result.recovery}`);
       }
     }
+  }
+
+  lines.push('', 'Switch workdir effects:');
+  for (const result of verifySwitchWorkdirEffects(selected, options, deps)) {
+    const marker = result.ok ? 'OK' : 'FAIL';
+    lines.push(`${marker} ${result.agentId}-switch-workdir: ${result.detail}`);
+    if (!result.ok) ok = false;
   }
 
   if (options.verifyHermesDiscord) {
@@ -755,6 +794,92 @@ function verifyAgentSkill(
     detail: `Skill state: ${inspection.status}. ${inspection.detail}`,
     recovery: formatCommand({ command: 'agenticos-bootstrap', args: recoveryArgs }),
   };
+}
+
+function verifySwitchWorkdirEffects(
+  selected: SupportedAgentId[],
+  options: CliOptions,
+  deps: BootstrapCliDeps,
+): SwitchWorkdirEffectVerification[] {
+  return selected.map((agentId) => verifySwitchWorkdirEffect(agentId, options, deps));
+}
+
+function verifySwitchWorkdirEffect(
+  agentId: SupportedAgentId,
+  options: CliOptions,
+  deps: BootstrapCliDeps,
+): SwitchWorkdirEffectVerification {
+  const skill = options.installSkills
+    ? inspectAgentSkill(agentId, deps.homeDir, deps.readFile)
+    : null;
+  if (skill && !isAgentSkillOkForVerify(skill)) {
+    return {
+      agentId,
+      ok: false,
+      detail: `activation Skill is required for switch routing but is ${skill.status}. ${skill.detail}`,
+    };
+  }
+
+  switch (agentId) {
+    case 'codex':
+      return {
+        agentId,
+        ok: true,
+        detail: 'Codex uses AgenticOS activation Skill routing and applies structuredContent.explicit_workdir/project_workdir/target_workdir as explicit per-tool workdir; MCP does not mutate the parent cwd.',
+      };
+    case 'cursor':
+      return {
+        agentId,
+        ok: true,
+        detail: 'Cursor uses AgenticOS activation Skill routing and must apply explicit_workdir/target_workdir for subsequent operations; no persistent parent cwd mutation is claimed.',
+      };
+    case 'gemini-cli':
+      return {
+        agentId,
+        ok: true,
+        detail: 'Gemini CLI uses AgenticOS activation Skill routing and must apply explicit_workdir/target_workdir for subsequent operations; no persistent parent cwd mutation is claimed.',
+      };
+    case 'claude-code': {
+      const hook = inspectClaudePwdAlignmentHook(deps.readFile(`${deps.homeDir}/${CLAUDE_SETTINGS_PATH}`));
+      return hook.status === 'configured'
+        ? {
+          agentId,
+          ok: true,
+          detail: 'Claude Code switch-in/out workdir effect is covered by activation Skill routing plus PostToolUse cwd guidance hooks for agenticos_switch and agenticos_switch_out.',
+        }
+        : {
+          agentId,
+          ok: false,
+          detail: `Claude Code requires both switch-in and switch-out cwd guidance hooks. ${hook.detail}`,
+        };
+    }
+    case 'hermes-agent': {
+      if (!deps.commandExists('hermes') && !deps.commandExists('hermes-gateway') && !deps.readFile(`${deps.homeDir}/.hermes/config.yaml`)) {
+        return {
+          agentId,
+          ok: true,
+          detail: 'Hermes Agent was not detected; skipping Hermes runtime cwd applicator verification.',
+        };
+      }
+      const applicator = inspectHermesCwdApplicator(deps.homeDir, deps);
+      return isHermesCwdApplicatorOkForVerify(applicator)
+        ? {
+          agentId,
+          ok: true,
+          detail: `Hermes switch-in/out workdir effect is covered by activation Skill routing plus ${HERMES_CWD_APPLICATOR_PLUGIN_NAME}. ${applicator.detail}`,
+        }
+        : {
+          agentId,
+          ok: false,
+          detail: `Hermes Agent requires ${HERMES_CWD_APPLICATOR_PLUGIN_NAME} for runtime cwd application. State: ${applicator.status}. ${applicator.detail}`,
+        };
+    }
+    /* c8 ignore next 4 -- SupportedAgentId is exhaustive at compile time. */
+    default: {
+      const exhaustive: never = agentId;
+      return { agentId: exhaustive, ok: false, detail: `unsupported agent: ${exhaustive}` };
+    }
+  }
 }
 
 function persistBootstrapState(

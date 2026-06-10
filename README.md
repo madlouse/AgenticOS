@@ -127,8 +127,11 @@ reported workdir. Prefer `structuredContent.project_workdir`,
 `structuredContent.target_workdir`, or `structuredContent.explicit_workdir`
 when present, then fall back to the text `project_workdir`, `target_workdir`,
 or `explicit_workdir` lines. Codex should use explicit tool `workdir`; Claude
-Code should use per-command cwd prefixes or absolute paths; Hermes Agent should
-use the cwd applicator when installed. Then restart your AI tool and run:
+Code should use the installed PostToolUse cwd hook, per-command cwd prefixes, or
+absolute paths; Hermes Agent should use the cwd applicator when installed.
+Cursor and Gemini CLI should use per-call workdir when their runtime exposes it,
+otherwise use absolute paths and avoid claiming persistent parent-shell cwd
+mutation. Then restart your AI tool and run:
 
 ```bash
 agenticos-config --validate
@@ -142,6 +145,9 @@ Use `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --
 to audit the current transport and activation-skill state without mutating
 anything. If you have intentionally edited the generated Skill, bootstrap will
 not overwrite it unless you pass `--force-skills`.
+Verification also reports `*-switch-workdir` rows so initial installs and
+upgrades fail visibly when an agent cannot apply switch-in or switch-out
+workdirs through its supported mechanism.
 
 ### Alternative: Per-agent manual setup
 
@@ -214,8 +220,8 @@ first managed project:
 2. **Switch to it** — ask the tool to run `agenticos_switch(project: "my-project")`
    Switching binds AgenticOS context and returns `structuredContent.project_workdir`
    / `structuredContent.explicit_workdir`, plus text fallback lines. Codex,
-   Claude Code, Hermes Agent, and other clients must apply that workdir through
-   their supported mechanism before using relative paths.
+   Claude Code, Hermes Agent, Cursor, Gemini CLI, and other clients must apply
+   that workdir through their supported mechanism before using relative paths.
 3. **Do real work** — complete a task across two or more sessions
 4. **Switch out when done** — ask the tool to run `agenticos_switch_out`.
    It returns `structuredContent.target_workdir` / `structuredContent.explicit_workdir`
