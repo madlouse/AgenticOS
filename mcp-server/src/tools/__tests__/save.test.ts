@@ -44,10 +44,41 @@ vi.mock('../../utils/canonical-main-guard.js', () => ({
 }));
 
 // Mock child_process before the module imports it
-// Mock child_process before the module imports it
+const execMock = vi.hoisted(() => vi.fn());
 vi.mock('child_process', () => ({
-  exec: vi.fn(),
+  exec: execMock,
 }));
+
+// save.ts now executes git through execFile-based exec-git helpers. The test
+// shim reconstructs the equivalent `git -C "<repo>" <args>` command string and
+// delegates to the existing child_process exec mock so per-test command-string
+// matchers continue to work. Note: argv elements (paths, commit message) are
+// joined unquoted, mirroring execFile semantics — no shell quoting.
+vi.mock('../../utils/exec-git.js', () => {
+  const run = (repoPath: string, args: string[], options?: { allowFailure?: boolean }) =>
+    new Promise<{ ok: boolean; stdout: string; stderr: string }>((resolve, reject) => {
+      const cmd = `git -C "${repoPath}" ${args.join(' ')}`;
+      execMock(cmd, (error: any, stdout?: string, stderr?: string) => {
+        const out = String(stdout || '');
+        const err = String(stderr || '');
+        if (error) {
+          if (options?.allowFailure) {
+            resolve({ ok: false, stdout: out, stderr: err });
+            return;
+          }
+          reject(Object.assign(error, { stdout: out, stderr: err }));
+          return;
+        }
+        resolve({ ok: true, stdout: out, stderr: err });
+      });
+    });
+  return {
+    execGit: run,
+    gitText: async (repoPath: string, args: string[], options?: any) => (await run(repoPath, args, options)).stdout.trim(),
+    execGh: (args: string[], options?: any) => run('.', ['gh', ...args], options),
+    ghText: async (args: string[], options?: any) => (await run('.', ['gh', ...args], options)).stdout.trim(),
+  };
+});
 
 import { saveState, validateGitBackedContinuityRepoBinding, extractGitHubRepoFromRemoteOrigin, resolveDeclaredSourceRepoRoots } from '../save.js';
 import * as fsPromises from 'fs/promises';
@@ -341,10 +372,9 @@ describe('saveState', () => {
       return '';
     });
 
-    const execMock = vi.fn((cmd: string, cb: Function) => {
+    childProcessMock.exec.mockImplementation((_cmd: string, cb: Function) => {
       cb(null, '', '');
     });
-    childProcessMock.exec = execMock as any;
 
     const result = await saveState({ message: 'test' });
 
@@ -699,13 +729,13 @@ describe('saveState', () => {
 
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(addCommand).toBeDefined();
-    expect(addCommand).toContain('".project.yaml"');
-    expect(addCommand).toContain('".context/quick-start.md"');
-    expect(addCommand).toContain('".context/state.yaml"');
-    expect(addCommand).toContain('".context/conversations/"');
-    expect(addCommand).toContain('"knowledge/"');
-    expect(addCommand).toContain('"tasks/"');
-    expect(addCommand).toContain('"CLAUDE.md"');
+    expect(addCommand).toContain('.project.yaml');
+    expect(addCommand).toContain('.context/quick-start.md');
+    expect(addCommand).toContain('.context/state.yaml');
+    expect(addCommand).toContain('.context/conversations/');
+    expect(addCommand).toContain('knowledge/');
+    expect(addCommand).toContain('tasks/');
+    expect(addCommand).toContain('CLAUDE.md');
     expect(addCommand).not.toContain('.context/.last_record');
     expect(result).toContain('Recovery: tracked continuity contract evaluated; no new continuity changes were committed');
   });
@@ -1054,8 +1084,8 @@ describe('saveState', () => {
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(addCommand).toBeDefined();
     expect(addCommand).toContain('git -C "/repo/worktrees/issue-244" add -A --');
-    expect(addCommand).toContain('".project.yaml"');
-    expect(addCommand).toContain('".context/state.yaml"');
+    expect(addCommand).toContain('.project.yaml');
+    expect(addCommand).toContain('.context/state.yaml');
     expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
   });
 
@@ -1214,9 +1244,9 @@ describe('saveState', () => {
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(addCommand).toBeDefined();
     expect(addCommand).toContain('git -C "/repo" add -A --');
-    expect(addCommand).toContain('"projects/app/.project.yaml"');
-    expect(addCommand).toContain('"projects/app/.context/state.yaml"');
-    expect(addCommand).toContain('"projects/app/tasks/"');
+    expect(addCommand).toContain('projects/app/.project.yaml');
+    expect(addCommand).toContain('projects/app/.context/state.yaml');
+    expect(addCommand).toContain('projects/app/tasks/');
     expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
   });
 
@@ -1273,12 +1303,12 @@ describe('saveState', () => {
 
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(addCommand).toBeDefined();
-    expect(addCommand).toContain('".project.yaml"');
-    expect(addCommand).toContain('".context/quick-start.md"');
-    expect(addCommand).toContain('".context/state.yaml"');
-    expect(addCommand).toContain('"knowledge/"');
-    expect(addCommand).toContain('"tasks/"');
-    expect(addCommand).toContain('"CLAUDE.md"');
+    expect(addCommand).toContain('.project.yaml');
+    expect(addCommand).toContain('.context/quick-start.md');
+    expect(addCommand).toContain('.context/state.yaml');
+    expect(addCommand).toContain('knowledge/');
+    expect(addCommand).toContain('tasks/');
+    expect(addCommand).toContain('CLAUDE.md');
     expect(addCommand).not.toContain('.context/conversations');
     expect(result).toContain('Recovery: distilled continuity contract evaluated; no new continuity changes were committed');
     expect(result).toContain('.private/conversations/');
@@ -1408,7 +1438,7 @@ describe('saveState', () => {
     const result = await saveState({ message: 'should block nested project public transcript leak' });
 
     const statusCommand = commands.find((cmd) => cmd.includes('status --porcelain'));
-    expect(statusCommand).toContain('"projects/app/runtime/conversations/"');
+    expect(statusCommand).toContain('projects/app/runtime/conversations/');
     expect(result).toContain('agenticos_save blocked');
     expect(result).toContain('runtime/conversations/');
   });
@@ -1978,7 +2008,7 @@ describe('saveState', () => {
     const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
     expect(result).toMatch(/State saved/);
     expect(addCommand).toBeDefined();
-    expect(addCommand).toContain('"AGENTS.md"');
+    expect(addCommand).toContain('AGENTS.md');
   });
 
   it('fails closed when tracked continuity paths escape the git worktree root', async () => {

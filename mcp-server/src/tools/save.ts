@@ -1,9 +1,9 @@
-import { exec } from 'child_process';
 import { updateClaudeMdState } from '../utils/distill.js';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import yaml from 'yaml';
+import { execGit } from '../utils/exec-git.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
@@ -18,28 +18,12 @@ import { type ProjectYamlSchema } from '../utils/yaml-schemas.js';
 import { normalizeRepositorySlug, resolveSourceControlRepository, type GitRepositoryContract } from '../utils/project-contract.js';
 import { extractRepositorySlugFromRemoteOrigin } from '../utils/guardrail-repo-identity.js';
 
-async function execCommand(command: string): Promise<{ stdout: string; stderr: string }> {
-  return await new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        const enriched = Object.assign(error, { stdout, stderr });
-        reject(enriched);
-        return;
-      }
-      resolve({
-        stdout: stdout || '',
-        stderr: stderr || '',
-      });
-    });
-  });
-}
-
 /** Detect git worktree/common repo identity from a directory path */
 async function findGitIdentity(fromDir: string): Promise<{ worktreeRoot: string; commonRepoRoot: string } | null> {
   try {
-    const { stdout: worktreeStdout } = await execCommand(`git -C "${fromDir}" rev-parse --show-toplevel`);
+    const { stdout: worktreeStdout } = await execGit(fromDir, ['rev-parse', '--show-toplevel']);
     const worktreeRoot = worktreeStdout.trim();
-    const { stdout: commonDirStdout } = await execCommand(`git -C "${fromDir}" rev-parse --git-common-dir`);
+    const { stdout: commonDirStdout } = await execGit(fromDir, ['rev-parse', '--git-common-dir']);
     const commonDir = resolve(worktreeRoot, commonDirStdout.trim());
     return {
       worktreeRoot,
@@ -148,7 +132,7 @@ export async function validateGitBackedContinuityRepoBinding(args: {
     : '';
   if (repository && repository.provider !== 'generic') {
     try {
-      const { stdout } = await execCommand(`git -C "${gitWorktreeRoot}" remote get-url origin`);
+      const { stdout } = await execGit(gitWorktreeRoot, ['remote', 'get-url', 'origin']);
       const actualRepo = extractRepositorySlugFromRemoteOrigin(stdout, repository.provider);
       const expectedRepo = repository.slug ? normalizeRepositorySlug(repository.slug) : null;
       if (!expectedRepo || actualRepo !== expectedRepo) {
@@ -178,8 +162,9 @@ export async function validateGitBackedContinuityRepoBinding(args: {
 }
 
 async function hasTrackedPublicTranscriptDiffs(gitRoot: string, trackedConversationPath: string): Promise<boolean> {
-  const { stdout } = await execCommand(
-    `git -C "${gitRoot}" status --porcelain --untracked-files=all -- "${trackedConversationPath}"`,
+  const { stdout } = await execGit(
+    gitRoot,
+    ['status', '--porcelain', '--untracked-files=all', '--', trackedConversationPath],
   );
   return stdout.trim().length > 0;
 }
@@ -312,7 +297,6 @@ export async function saveState(args: any): Promise<string> {
     }
 
     // Project-scoped git: stage policy-aware continuity paths for private repos, otherwise keep runtime-managed paths.
-    const gitCmd = `git -C "${gitWorktreeRoot}"`;
     const stagePaths = continuityPlan
       ? [
         toGitRelativePath(gitWorktreeRoot, join(projectPath, contextPolicyPlan.trackedContextDisplayPaths.projectFile)),
@@ -330,19 +314,19 @@ export async function saveState(args: any): Promise<string> {
         include_claude_state_mirror: true,
       }).tracked_review_excluded_paths;
     const filteredStagePaths = stagePaths.filter((trackedPath) => !isLastRecordMarkerPath(trackedPath));
-    const stageTargets = filteredStagePaths
-      .map((trackedPath) => continuityPlan
-        ? `"${trackedPath}"`
-        : `"${toProjectAbsoluteRuntimePath(projectPath, trackedPath)}"`)
-      .join(' ');
+    // Pass each path as a distinct argv element (no shell, no quoting); runtime
+    // paths resolve to absolute so they apply from the git worktree root.
+    const stageTargets = filteredStagePaths.map((trackedPath) => continuityPlan
+      ? trackedPath
+      : toProjectAbsoluteRuntimePath(projectPath, trackedPath));
 
     // Phase 1: git add
-    await execCommand(`${gitCmd} add -A -- ${stageTargets}`);
+    await execGit(gitWorktreeRoot, ['add', '-A', '--', ...stageTargets]);
 
     // Phase 2: git commit
     let committed = false;
     try {
-      await execCommand(`${gitCmd} commit -m "${commitMessage}"`);
+      await execGit(gitWorktreeRoot, ['commit', '-m', commitMessage]);
       committed = true;
     } catch (e: any) {
       const msg = (e.stderr || e.stdout || e.message || '').toString();
@@ -357,7 +341,7 @@ export async function saveState(args: any): Promise<string> {
     let pushed = false;
     if (committed) {
       try {
-        await execCommand(`${gitCmd} push`);
+        await execGit(gitWorktreeRoot, ['push']);
         pushed = true;
       } catch { /* push failure is degraded, not fatal */ }
     }
