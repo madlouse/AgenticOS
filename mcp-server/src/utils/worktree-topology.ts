@@ -1,8 +1,5 @@
-import { exec } from 'child_process';
 import { join, resolve, sep } from 'path';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { gitText as runGit } from './exec-git.js';
 
 export type WorktreeTopologyStatus = 'PASS' | 'WARN' | 'BLOCK';
 export type WorktreePlacement = 'canonical_main' | 'project_scoped' | 'misplaced';
@@ -121,10 +118,6 @@ function summarizeTopology(counts: WorktreeTopologyInspection['counts'], inspect
   };
 }
 
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
-}
 
 function parseWorktreeListPorcelain(output: string): ParsedWorktreeRecord[] {
   const records: ParsedWorktreeRecord[] = [];
@@ -157,7 +150,7 @@ function parseWorktreeListPorcelain(output: string): ParsedWorktreeRecord[] {
 
 async function readUpstream(path: string): Promise<string | null> {
   try {
-    const upstream = await runGit(path, 'rev-parse --abbrev-ref --symbolic-full-name @{upstream}');
+    const upstream = await runGit(path, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']);
     return upstream || null;
   } catch {
     return null;
@@ -165,7 +158,7 @@ async function readUpstream(path: string): Promise<string | null> {
 }
 
 async function isDirtyWorktree(path: string): Promise<boolean> {
-  const output = await runGit(path, 'status --porcelain --untracked-files=all');
+  const output = await runGit(path, ['status', '--porcelain', '--untracked-files=all']);
   return output.length > 0;
 }
 
@@ -193,8 +186,8 @@ export async function inspectProjectWorktreeTopology(args: InspectProjectWorktre
   let canonicalWorktreeRoot: string | null = null;
 
   try {
-    canonicalWorktreeRoot = normalizePath(await runGit(args.repoPath, 'rev-parse --show-toplevel'));
-    parsedWorktrees = parseWorktreeListPorcelain(await runGit(args.repoPath, 'worktree list --porcelain'));
+    canonicalWorktreeRoot = normalizePath(await runGit(args.repoPath, ['rev-parse', '--show-toplevel']));
+    parsedWorktrees = parseWorktreeListPorcelain(await runGit(args.repoPath, ['worktree', 'list', '--porcelain']));
   } catch (error) {
     inspectionErrors.push(error instanceof Error ? error.message : 'failed to list git worktrees');
   }
