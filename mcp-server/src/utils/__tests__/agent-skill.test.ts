@@ -150,6 +150,8 @@ describe('agent skill bootstrap', () => {
     expect(content).toContain('切换到');
     expect(content).toContain('切出');
     expect(content).toContain('退出项目');
+    expect(content).toContain('project_workdir');
+    expect(content).toContain('explicit_workdir');
     expect(content).toContain('target_workdir');
     expect(content).toContain('origin_cwd');
     expect(content).toContain('Do not ask the user for a second manual `cd`');

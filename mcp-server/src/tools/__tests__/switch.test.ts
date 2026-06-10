@@ -182,6 +182,8 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('✅ Switched to project "Test Project"');
       expect(result).toContain('Path: /test/path');
       expect(result).toContain('Status: active');
+      expect(result).toContain('project_workdir: /test/path');
+      expect(result).toContain('explicit_workdir: /test/path');
       expect(result).toContain('🧰 Project path: /test/path');
       expect(result).toContain('🧰 Recommended explicit workdir for tool calls: /test/path');
       expect(result).toContain('Client shell PWD: unavailable to MCP');
@@ -333,6 +335,7 @@ describe('switchProject — agenticos_switch tests', () => {
       expect(result).toContain('✅ Exited AgenticOS project context "Test Project"');
       expect(result).toContain('origin_cwd: /entry/start');
       expect(result).toContain('target_workdir: /entry/start');
+      expect(result).toContain('explicit_workdir: /entry/start');
       expect(result).toContain('Recommended explicit workdir for tool calls: /entry/start');
       expect(result).toContain('MCP cannot mutate the parent process cwd');
       expect(getSessionProjectBinding()).toBeNull();

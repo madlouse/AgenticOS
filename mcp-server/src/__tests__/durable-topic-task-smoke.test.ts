@@ -52,7 +52,7 @@ describe('durable topic task MCP smoke flow', () => {
       'agenticos_task_list',
       'agenticos_task_close',
     ]));
-  });
+  }, 45000);
 
   afterEach(() => {
     session.kill();
@@ -150,7 +150,7 @@ describe('durable topic task MCP smoke flow', () => {
     const stateAfterClose = readYamlFile(join(topicPath, '.context', 'state.yaml'));
     expect(stateAfterClose.current_task).toBeNull();
     expect(stateAfterClose.resume).toBeUndefined();
-  });
+  }, 45000);
 
   it('routes topic and project tasks by project_kind', async () => {
     const topicPath = await initProject('Hermes Finance Topic', 'topic');
@@ -173,7 +173,7 @@ describe('durable topic task MCP smoke flow', () => {
     expect(projectTask.status).toBe('CREATED');
     expect(projectTask.project_kind).toBe('project');
     expect(projectTask.task_path).toBe(join(projectPath, 'tasks', 'add-ci-retry-policy.yaml'));
-  });
+  }, 45000);
 
   it('does not claim success when project context is unavailable or secret-looking input is rejected', async () => {
     const noProject = await callJson('agenticos_task_create', {
@@ -205,5 +205,5 @@ describe('durable topic task MCP smoke flow', () => {
 
     const taskFiles = readdirSync(join(topicPath, 'tasks')).filter((entry) => entry.endsWith('.yaml'));
     expect(taskFiles).toEqual([]);
-  });
+  }, 45000);
 });

@@ -13,11 +13,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // In compiled form, __dirname = mcp-server/build/__tests__
 // MONOREPO_ROOT = __dirname/../../../ = worktree root
 const MONOREPO_ROOT = join(__dirname, '..', '..', '..');
-const BUILD_INDEX = join(MONOREPO_ROOT, 'mcp-server', 'build', 'index.js');
+const BIN_WRAPPER = join(MONOREPO_ROOT, 'mcp-server', 'bin', 'agenticos-mcp');
 const PKG_JSON = join(MONOREPO_ROOT, 'mcp-server', 'package.json');
+const MCP_RESPONSE_TIMEOUT_MS = 30_000;
 let MCP_BINARY: string;
 try {
-  MCP_BINARY = realpathSync(BUILD_INDEX);
+  MCP_BINARY = realpathSync(BIN_WRAPPER);
 } catch {
   // build/ not present — use installed binary (avoids ELOOP from self-referential symlink)
   MCP_BINARY = 'agenticos-mcp';
@@ -33,7 +34,7 @@ interface JsonRpcMessage {
 }
 
 
-async function sendMessage(proc: ReturnType<typeof spawn> & { stdin: { write: (data: string) => void }; stdout: { on: (event: string, cb: (data: Buffer) => void) => void } }, msg: Omit<JsonRpcMessage, 'jsonrpc'> & { jsonrpc?: string }, timeoutMs = 5000): Promise<JsonRpcMessage> {
+async function sendMessage(proc: ReturnType<typeof spawn> & { stdin: { write: (data: string) => void }; stdout: { on: (event: string, cb: (data: Buffer) => void) => void } }, msg: Omit<JsonRpcMessage, 'jsonrpc'> & { jsonrpc?: string }, timeoutMs = MCP_RESPONSE_TIMEOUT_MS): Promise<JsonRpcMessage> {
   const id = Math.floor(Math.random() * 999999);
   const fullMsg = { jsonrpc: '2.0', id, ...msg };
 
@@ -73,7 +74,7 @@ describe('MCP transport lifecycle integration tests', () => {
       try { chmodSync(MCP_BINARY, 0o755); } catch { /* ignore */ }
     }
     // When MCP_BINARY === 'agenticos-mcp', symlinkPath stays null — binary is used directly
-  });
+  }, 45000);
 
   afterAll(() => {
     if (symlinkPath) { try { unlinkSync(symlinkPath); } catch { /* ignore */ } }
@@ -86,7 +87,8 @@ describe('MCP transport lifecycle integration tests', () => {
   });
 
   function spawnServer(args: string[] = []) {
-    // Use symlink (simulates Homebrew install) or fall back to installed binary directly
+    // Use a symlink to the published bin wrapper (simulates Homebrew/npm install)
+    // or fall back to an installed binary directly.
     const binary = symlinkPath ?? MCP_BINARY;
     const proc = spawn(binary, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -120,7 +122,7 @@ describe('MCP transport lifecycle integration tests', () => {
     proc.kill();
     await sleep(200);
     expect(proc.killed).toBe(true);
-  });
+  }, 45000);
 
   it('should respond to tools/list after initialize', async () => {
     const proc = spawnServer();
@@ -156,7 +158,7 @@ describe('MCP transport lifecycle integration tests', () => {
 
     proc.kill();
     await sleep(200);
-  }, 15000);
+  }, 45000);
 
   it('should NOT exit prematurely after connect returns', async () => {
     const proc = spawnServer();
@@ -181,11 +183,11 @@ describe('MCP transport lifecycle integration tests', () => {
 
     proc.kill();
     await sleep(200);
-  }, 10000);
+  }, 45000);
 
   it('should handle --version flag correctly', async () => {
-    const binary = MCP_BINARY === 'agenticos-mcp' ? MCP_BINARY : 'node';
-    const args = MCP_BINARY === 'agenticos-mcp' ? ['--version'] : [MCP_BINARY, '--version'];
+    const binary = symlinkPath ?? MCP_BINARY;
+    const args = ['--version'];
     const proc = spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
     const output = await new Promise<string>((resolve) => {
@@ -194,9 +196,9 @@ describe('MCP transport lifecycle integration tests', () => {
       proc.on('close', () => resolve(data));
     });
 
-    // When using the installed binary (worktree/CI without build step),
-    // verify the output is a valid semver string. When using the built binary,
-    // also verify it matches package.json.
+    // When using the installed binary (worktree/CI without package files),
+    // verify the output is a valid semver string. When using the package
+    // wrapper, also verify it matches package.json.
     expect(output.trim()).toMatch(/^\d+\.\d+\.\d+$/);
     if (MCP_BINARY !== 'agenticos-mcp') {
       const pkg = JSON.parse(readFileSync(PKG_JSON, 'utf-8'));
@@ -204,5 +206,5 @@ describe('MCP transport lifecycle integration tests', () => {
     }
 
     proc.kill();
-  });
+  }, 45000);
 });

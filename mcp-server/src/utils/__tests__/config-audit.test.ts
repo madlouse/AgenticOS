@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'crypto';
 import { renderConfigAuditResult, runConfigAudit } from '../config-audit.js';
-import { renderAgenticosSkillContent } from '../agent-skill.js';
+import { AGENTICOS_SKILL_TEMPLATE_VERSION, renderAgenticosSkillContent } from '../agent-skill.js';
 
 function createDeps() {
   const files = new Map<string, string>();
@@ -199,7 +199,7 @@ describe('config audit', () => {
 
     expect(result.canonical_workspace).toBeNull();
     expect(codexSkill?.status).toBe('configured');
-    expect(codexSkill?.value).toBe('agenticos-skill:v5');
+    expect(codexSkill?.value).toBe(`agenticos-skill:v${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
     expect(codexSkill?.contributes_to_workspace).toBe(false);
     expect(claudeSkill?.status).toBe('missing');
     expect(claudeSkill?.fix_target).toContain('--install-skills');

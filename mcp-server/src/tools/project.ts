@@ -356,6 +356,8 @@ function buildFilesystemAlignmentLines(
   pwdResult: PwdAlignmentResult,
 ): string[] {
   const lines = [
+    `project_workdir: ${projectPath}`,
+    `explicit_workdir: ${projectPath}`,
     `🧰 Project path: ${projectPath}`,
     `🧰 Recommended explicit workdir for tool calls: ${projectPath}`,
   ];
@@ -395,6 +397,7 @@ function buildTargetWorkdirAlignmentLines(
 ): string[] {
   const lines = [
     `target_workdir: ${targetWorkdir}`,
+    `explicit_workdir: ${targetWorkdir}`,
     `🧰 Recommended explicit workdir for tool calls: ${targetWorkdir}`,
   ];
 

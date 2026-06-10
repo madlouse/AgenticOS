@@ -69,12 +69,22 @@ export function extractProjectPathFromClaudeHookPayload(payload: unknown): strin
   const toolResponse = payload.tool_response;
   if (!isRecord(toolResponse)) return null;
 
+  if (typeof toolResponse.project_workdir === 'string' && toolResponse.project_workdir.trim()) {
+    return toolResponse.project_workdir.trim();
+  }
+
+  if (typeof toolResponse.explicit_workdir === 'string' && toolResponse.explicit_workdir.trim()) {
+    return toolResponse.explicit_workdir.trim();
+  }
+
   if (typeof toolResponse.path === 'string' && toolResponse.path.trim()) {
     return toolResponse.path.trim();
   }
 
   const contentText = extractTextContent(toolResponse.content).join('\n');
-  const match = contentText.match(/^Path:\s*(.+)$/m);
+  const match = contentText.match(/^project_workdir:\s*(.+)$/m)
+    || contentText.match(/^explicit_workdir:\s*(.+)$/m)
+    || contentText.match(/^Path:\s*(.+)$/m);
   return match?.[1]?.trim() || null;
 }
 
@@ -87,8 +97,13 @@ export function extractTargetWorkdirFromClaudeHookPayload(payload: unknown): str
     return toolResponse.target_workdir.trim();
   }
 
+  if (typeof toolResponse.explicit_workdir === 'string' && toolResponse.explicit_workdir.trim()) {
+    return toolResponse.explicit_workdir.trim();
+  }
+
   const contentText = extractTextContent(toolResponse.content).join('\n');
-  const match = contentText.match(/^target_workdir:\s*(.+)$/m);
+  const match = contentText.match(/^target_workdir:\s*(.+)$/m)
+    || contentText.match(/^explicit_workdir:\s*(.+)$/m);
   return match?.[1]?.trim() || null;
 }
 
