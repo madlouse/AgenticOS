@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.37] — 2026-06-10
+
+### Added
+- bootstrap: `agenticos-bootstrap` now reports a `*-switch-workdir` verification
+  matrix for Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent, so fresh
+  installs and upgrades fail visibly when an agent cannot apply
+  `agenticos_switch` or `agenticos_switch_out` workdirs through its supported
+  mechanism (#542).
+
+### Changed
+- bootstrap: managed AgenticOS activation Skills are now v8 and explicitly
+  require agents to route switch/status prompts through AgenticOS MCP before
+  filesystem guessing, then apply `project_workdir`, `target_workdir`, or
+  `explicit_workdir` through per-tool workdir, Claude Code cwd hooks, Hermes
+  cwd applicator, or absolute paths depending on the runtime (#542).
+- docs: README and MCP README now document the verified switch-in/switch-out
+  workdir effect matrix and distinguish MCP logical binding from client-side
+  cwd/workdir application (#542).
+
 ## [0.4.36] — 2026-06-10
 
 ### Fixed
