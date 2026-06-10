@@ -1,8 +1,7 @@
-import { readFile } from 'fs/promises';
 import { join } from 'path';
-import yaml from 'yaml';
 import { initProject } from './init.js';
 import { loadRegistry, type Project, type Registry } from '../utils/registry.js';
+import { loadAndVerifyManagedProjectIdentity } from '../utils/checkout-identity.js';
 import {
   buildArchivedReferenceMessage,
   defaultReviewSystemForProvider,
@@ -299,24 +298,11 @@ async function buildProjectPayload(args: {
   }
 
   const projectYamlPath = join(project.path, '.project.yaml');
-  let projectYaml: any;
-  try {
-    projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
-  } catch {
-    throw new ProjectResolveError('IDENTITY_UNPROVEN', `Project identity could not be proven because ${projectYamlPath} is missing or unreadable.`);
+  const identity = await loadAndVerifyManagedProjectIdentity(projectYamlPath, project.id);
+  if (!identity.ok) {
+    throw new ProjectResolveError('IDENTITY_UNPROVEN', identity.message);
   }
-
-  const metaId = projectYaml?.meta?.id;
-
-  if (!metaId) {
-    throw new ProjectResolveError('IDENTITY_UNPROVEN', `Project identity could not be proven because ${projectYamlPath} is missing meta.id.`);
-  }
-  if (metaId !== project.id) {
-    throw new ProjectResolveError(
-      'IDENTITY_UNPROVEN',
-      `Project identity mismatch: registry id "${project.id}" does not match .project.yaml meta.id "${metaId}".`,
-    );
-  }
+  const projectYaml = identity.projectYaml;
   // Identity is proven by id alone; registry name is a display name and may
   // legitimately diverge from .project.yaml meta.name.
 
