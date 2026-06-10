@@ -153,6 +153,9 @@ describe('agent skill bootstrap', () => {
     expect(content).toContain('project_workdir');
     expect(content).toContain('explicit_workdir');
     expect(content).toContain('target_workdir');
+    expect(content).toContain('structuredContent.project_workdir');
+    expect(content).toContain('structuredContent.target_workdir');
+    expect(content).toContain('structuredContent.explicit_workdir');
     expect(content).toContain('origin_cwd');
     expect(content).toContain('Do not ask the user for a second manual `cd`');
     expect(content).toContain('Agentic OS 项目');

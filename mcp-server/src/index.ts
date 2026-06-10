@@ -19,6 +19,7 @@ import {
 import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, switchOutProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
+import { buildSwitchWorkdirStructuredContent, buildTextToolResult } from './utils/tool-result.js';
 
 const server = new Server(
   {
@@ -664,15 +665,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   switch (name) {
     case 'agenticos_init':
-      return { content: [{ type: 'text', text: await initProject(args) }] };
-    case 'agenticos_switch':
-      return { content: [{ type: 'text', text: await switchProject(args) }] };
-    case 'agenticos_switch_out':
-      return { content: [{ type: 'text', text: await switchOutProject(args ?? {}) }] };
+      return buildTextToolResult(await initProject(args));
+    case 'agenticos_switch': {
+      const text = await switchProject(args);
+      return buildTextToolResult(text, buildSwitchWorkdirStructuredContent('agenticos_switch', text));
+    }
+    case 'agenticos_switch_out': {
+      const text = await switchOutProject(args ?? {});
+      return buildTextToolResult(text, buildSwitchWorkdirStructuredContent('agenticos_switch_out', text));
+    }
     case 'agenticos_project_resolve':
-      return { content: [{ type: 'text', text: await runProjectResolve(args ?? {}) }] };
+      return buildTextToolResult(await runProjectResolve(args ?? {}));
     case 'agenticos_project_ensure':
-      return { content: [{ type: 'text', text: await runProjectEnsure(args ?? {}) }] };
+      return buildTextToolResult(await runProjectEnsure(args ?? {}));
     case 'agenticos_external_thread_bind':
       return { content: [{ type: 'text', text: await runExternalThreadBind(args ?? {}) }] };
     case 'agenticos_external_thread_get':

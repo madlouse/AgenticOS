@@ -64,10 +64,29 @@ function extractTextContent(value: unknown): string[] {
     .filter((entry): entry is string => entry !== null);
 }
 
+function findNestedRecord(value: unknown, key: string): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  const direct = value[key];
+  if (isRecord(direct)) return direct;
+  return null;
+}
+
 export function extractProjectPathFromClaudeHookPayload(payload: unknown): string | null {
   if (!isRecord(payload)) return null;
   const toolResponse = payload.tool_response;
   if (!isRecord(toolResponse)) return null;
+
+  const structuredContent = findNestedRecord(payload, 'structuredContent')
+    || findNestedRecord(toolResponse, 'structuredContent')
+    || findNestedRecord(payload, 'structured_content')
+    || findNestedRecord(toolResponse, 'structured_content');
+  if (typeof structuredContent?.project_workdir === 'string' && structuredContent.project_workdir.trim()) {
+    return structuredContent.project_workdir.trim();
+  }
+
+  if (typeof structuredContent?.explicit_workdir === 'string' && structuredContent.explicit_workdir.trim()) {
+    return structuredContent.explicit_workdir.trim();
+  }
 
   if (typeof toolResponse.project_workdir === 'string' && toolResponse.project_workdir.trim()) {
     return toolResponse.project_workdir.trim();
@@ -92,6 +111,18 @@ export function extractTargetWorkdirFromClaudeHookPayload(payload: unknown): str
   if (!isRecord(payload)) return null;
   const toolResponse = payload.tool_response;
   if (!isRecord(toolResponse)) return null;
+
+  const structuredContent = findNestedRecord(payload, 'structuredContent')
+    || findNestedRecord(toolResponse, 'structuredContent')
+    || findNestedRecord(payload, 'structured_content')
+    || findNestedRecord(toolResponse, 'structured_content');
+  if (typeof structuredContent?.target_workdir === 'string' && structuredContent.target_workdir.trim()) {
+    return structuredContent.target_workdir.trim();
+  }
+
+  if (typeof structuredContent?.explicit_workdir === 'string' && structuredContent.explicit_workdir.trim()) {
+    return structuredContent.explicit_workdir.trim();
+  }
 
   if (typeof toolResponse.target_workdir === 'string' && toolResponse.target_workdir.trim()) {
     return toolResponse.target_workdir.trim();

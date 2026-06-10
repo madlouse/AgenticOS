@@ -2,7 +2,7 @@ import { dirname, join } from 'path';
 import yaml from 'yaml';
 
 export const HERMES_CWD_APPLICATOR_PLUGIN_NAME = 'agenticos-cwd-applicator';
-export const HERMES_CWD_APPLICATOR_PLUGIN_VERSION = '0.1.2';
+export const HERMES_CWD_APPLICATOR_PLUGIN_VERSION = '0.1.3';
 
 export type HermesCwdApplicatorStatus =
   | 'current'
@@ -158,7 +158,7 @@ def _find_string_value(value: Any, keys: set[str]) -> str | None:
             raw = value.get(key)
             if isinstance(raw, str) and raw.strip():
                 return raw.strip()
-        for nested_key in ("tool_response", "content", "result", "data"):
+        for nested_key in ("structuredContent", "structured_content", "tool_response", "content", "result", "data"):
             if nested_key in value:
                 found = _find_string_value(value[nested_key], keys)
                 if found:

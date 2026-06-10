@@ -21,7 +21,7 @@ A project management system designed for AI collaboration. When you work on comp
 Install AgenticOS, set `AGENTICOS_HOME` explicitly, then either run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --first-run --auto-configure-hooks` or bootstrap one supported agent manually, restart that agent, and explicitly verify `agenticos_list` works before relying on project-intent routing.
 On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inheritance.
 It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent — so switch/status/pwd/switch-out prompts route to AgenticOS MCP before filesystem guessing.
-`agenticos_switch` returns stable `project_workdir` / `explicit_workdir` lines, and `agenticos_switch_out` returns stable `target_workdir` / `explicit_workdir` lines, so clients do not need to scrape emoji guidance.
+`agenticos_switch` returns stable `structuredContent.project_workdir` / `structuredContent.explicit_workdir` fields plus text fallback lines, and `agenticos_switch_out` returns stable `structuredContent.target_workdir` / `structuredContent.explicit_workdir` fields plus text fallback lines, so clients do not need to scrape emoji guidance.
 With `--auto-configure-hooks`, Claude Code receives switch-in/switch-out per-call cwd guidance hooks and Hermes Agent receives the `agenticos-cwd-applicator` plugin so Hermes runtime tools apply AgenticOS workdirs automatically after `agenticos_switch` and `agenticos_switch_out`.
 Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, cwd applicator state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
@@ -219,7 +219,8 @@ This writes `~/.hermes/skills/work/agenticos/SKILL.md`, installs
 `~/.hermes/config.yaml`. It helps Hermes route "切换到 ... 项目", `pwd`, and
 "切出/退出项目" prompts through AgenticOS MCP, then apply the returned project
 or restore workdir to Hermes' runtime cwd. The plugin prefers
-`project_workdir`, `target_workdir`, and `explicit_workdir` fields, with older
+`structuredContent.project_workdir`, `structuredContent.target_workdir`, and
+`structuredContent.explicit_workdir`, with older top-level fields and
 human-readable output lines kept as fallback compatibility.
 It does not install Hermes, configure Discord, or prove gateway readiness.
 
