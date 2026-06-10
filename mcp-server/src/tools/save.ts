@@ -1,9 +1,10 @@
 import { updateClaudeMdState } from '../utils/distill.js';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'path';
+import { isAbsolute, join, relative, resolve } from 'path';
 import yaml from 'yaml';
 import { execGit } from '../utils/exec-git.js';
+import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import { resolveManagedProjectTarget } from '../utils/project-target.js';
 import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
@@ -17,22 +18,6 @@ import {
 import { type ProjectYamlSchema } from '../utils/yaml-schemas.js';
 import { normalizeRepositorySlug, resolveSourceControlRepository, type GitRepositoryContract } from '../utils/project-contract.js';
 import { extractRepositorySlugFromRemoteOrigin } from '../utils/guardrail-repo-identity.js';
-
-/** Detect git worktree/common repo identity from a directory path */
-async function findGitIdentity(fromDir: string): Promise<{ worktreeRoot: string; commonRepoRoot: string } | null> {
-  try {
-    const { stdout: worktreeStdout } = await execGit(fromDir, ['rev-parse', '--show-toplevel']);
-    const worktreeRoot = worktreeStdout.trim();
-    const { stdout: commonDirStdout } = await execGit(fromDir, ['rev-parse', '--git-common-dir']);
-    const commonDir = resolve(worktreeRoot, commonDirStdout.trim());
-    return {
-      worktreeRoot,
-      commonRepoRoot: dirname(commonDir),
-    };
-  } catch {
-    return null;
-  }
-}
 
 function buildContinuityFailureMessage(projectName: string, reasons: string[]): string {
   return `❌ agenticos_save could not persist tracked continuity for "${projectName}"\n\n${reasons.map((reason) => `- ${reason}`).join('\n')}`;
@@ -207,7 +192,7 @@ export async function saveState(args: any): Promise<string> {
 
   try {
     // Find git root from the binding path (worktree-aware when repo_path/project_path is supplied)
-    const gitIdentity = await findGitIdentity(gitBindingPath);
+    const gitIdentity = await resolveGitCheckoutIdentity(gitBindingPath);
     const gitWorktreeRoot = gitIdentity?.worktreeRoot || null;
     const gitCommonRepoRoot = gitIdentity?.commonRepoRoot || null;
 

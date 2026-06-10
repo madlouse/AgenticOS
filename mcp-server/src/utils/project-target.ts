@@ -1,7 +1,6 @@
-import { readFile } from 'fs/promises';
 import { join } from 'path';
-import yaml from 'yaml';
 import { loadRegistry, type Project, type Registry } from './registry.js';
+import { loadAndVerifyManagedProjectIdentity } from './checkout-identity.js';
 import { buildArchivedReferenceMessage, isArchivedReferenceProject, validateManagedProjectTopology } from './project-contract.js';
 import { getSessionProjectBinding } from './session-context.js';
 import {
@@ -98,25 +97,11 @@ export async function resolveManagedProjectTarget(args: ResolveManagedProjectTar
     ? args.projectPath.trim()
     : project.path;
   const projectYamlPath = join(targetProjectPath, '.project.yaml');
-  let projectYaml: any;
-  try {
-    projectYaml = yaml.parse(await readFile(projectYamlPath, 'utf-8')) || {};
-  } catch {
-    throw new Error(`Project identity could not be proven because ${projectYamlPath} is missing or unreadable.`);
+  const identity = await loadAndVerifyManagedProjectIdentity(projectYamlPath, project.id);
+  if (!identity.ok) {
+    throw new Error(identity.message);
   }
-
-  const metaId = projectYaml?.meta?.id;
-
-  if (!metaId) {
-    throw new Error(`Project identity could not be proven because ${projectYamlPath} is missing meta.id.`);
-  }
-  if (metaId !== project.id) {
-    throw new Error(
-      `Project identity mismatch: registry id "${project.id}" does not match .project.yaml meta.id "${metaId}".`
-    );
-  }
-  // Identity is proven by id alone; registry name is a display name and may
-  // legitimately diverge from .project.yaml meta.name.
+  const projectYaml = identity.projectYaml;
 
   if (isArchivedReferenceProject(projectYaml, project.status)) {
     throw new Error(
