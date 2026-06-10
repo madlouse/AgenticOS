@@ -376,6 +376,10 @@ function buildFilesystemAlignmentLines(
       lines.push('   To start a new Codex session in this project, run:');
       lines.push(`   ${pwdResult.instruction}`);
     }
+  } else if (pwdResult.agentType === 'claude-code') {
+    lines.push('⚠️ Claude Code shell cwd is per-call; MCP output cannot persistently change the parent session cwd.');
+    lines.push('   Use this project path as explicit workdir for file/edit tools, or prefix each shell command with:');
+    lines.push(`   ${pwdResult.instruction}`);
   } else {
     lines.push('📍 Client alignment hint:');
     lines.push(`   ${pwdResult.instruction}`);
@@ -409,6 +413,10 @@ function buildTargetWorkdirAlignmentLines(
       lines.push('   To start a new Codex session at the restored workdir, run:');
       lines.push(`   ${pwdResult.instruction}`);
     }
+  } else if (pwdResult.agentType === 'claude-code') {
+    lines.push('⚠️ Claude Code shell cwd is per-call; switch-out is complete only when subsequent operations use target_workdir.');
+    lines.push('   Use target_workdir as explicit workdir for file/edit tools, or prefix each shell command with:');
+    lines.push(`   ${pwdResult.instruction}`);
   } else {
     lines.push('📍 Client alignment hint:');
     lines.push(`   ${pwdResult.instruction}`);

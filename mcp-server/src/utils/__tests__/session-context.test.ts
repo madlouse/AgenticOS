@@ -344,14 +344,14 @@ describe('session-context', () => {
       expect(result.warning).toBeNull();
     });
 
-    it('returns Claude Code cd instruction when CLAUDE_CODE is set', async () => {
+    it('returns Claude Code per-call cwd instruction when CLAUDE_CODE is set', async () => {
       process.env.CLAUDE_CODE = '1';
 
       const result = await alignPwd('/tmp');
 
       expect(result.success).toBe(true);
-      expect(result.instruction).toBe("cd '/tmp'");
-      expect(result.instructionKind).toBe('current-session');
+      expect(result.instruction).toBe("cd '/tmp' && <command>");
+      expect(result.instructionKind).toBe('per-call');
     });
 
     it('returns Codex startup instruction when CODEX is set', async () => {
@@ -372,7 +372,7 @@ describe('session-context', () => {
       const result = await alignPwd(projectPath);
 
       expect(result.success).toBe(true);
-      expect(result.instruction).toBe(`cd ${shellQuote(projectPath)}`);
+      expect(result.instruction).toBe(`cd ${shellQuote(projectPath)} && <command>`);
       rmSync(projectPath, { recursive: true, force: true });
     });
 

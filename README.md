@@ -118,13 +118,15 @@ inherit `AGENTICOS_HOME` across sessions. It installs the AgenticOS activation
 Skill for local-skill-capable agents: Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent.
 `--auto-configure-hooks` adds the Claude Code PostToolUse hook that reads the
 `agenticos_switch` and `agenticos_switch_out` results from hook stdin and feeds
-the selected project or restore path back into Claude as explicit cwd guidance.
+the selected project or restore path back into Claude as per-call cwd guidance.
 For Hermes Agent, bootstrap also installs/enables the user-level
 `agenticos-cwd-applicator` plugin so Hermes runtime tools apply AgenticOS
 switch-in and switch-out workdirs through Hermes' cwd carrier. MCP still cannot
 mutate a parent shell process by itself; supported clients must apply the
-reported workdir through their hook/plugin/per-tool `workdir` mechanism. Then
-restart your AI tool and run:
+reported workdir through their per-tool `workdir`, hook, or plugin mechanism.
+Codex should use explicit tool `workdir`; Claude Code should use per-command
+cwd prefixes or absolute paths; Hermes Agent should use the cwd applicator when
+installed. Then restart your AI tool and run:
 
 ```bash
 agenticos-config --validate

@@ -199,7 +199,7 @@ describe('config audit', () => {
 
     expect(result.canonical_workspace).toBeNull();
     expect(codexSkill?.status).toBe('configured');
-    expect(codexSkill?.value).toBe('agenticos-skill:v4');
+    expect(codexSkill?.value).toBe('agenticos-skill:v5');
     expect(codexSkill?.contributes_to_workspace).toBe(false);
     expect(claudeSkill?.status).toBe('missing');
     expect(claudeSkill?.fix_target).toContain('--install-skills');

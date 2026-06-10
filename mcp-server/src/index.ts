@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'fs';
+import { readFileSync, realpathSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
+const __filename = realpathSync(fileURLToPath(import.meta.url));
 const __dirname = dirname(__filename);
 const VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')).version;
 

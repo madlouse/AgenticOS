@@ -43,6 +43,10 @@ describe('mcp server cli helpers', () => {
       'file:///tmp/index.js',
     )).toBe(true);
     expect(isDirectExecution(
+      ['node', '/opt/homebrew/bin/agenticos-mcp'],
+      'file:///opt/homebrew/Cellar/agenticos/0.4.36/libexec/build/index.js',
+    )).toBe(true);
+    expect(isDirectExecution(
       ['node', '/tmp/other.js'],
       'file:///tmp/index.js',
     )).toBe(false);

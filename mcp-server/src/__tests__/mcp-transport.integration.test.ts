@@ -36,7 +36,6 @@ interface JsonRpcMessage {
 async function sendMessage(proc: ReturnType<typeof spawn> & { stdin: { write: (data: string) => void }; stdout: { on: (event: string, cb: (data: Buffer) => void) => void } }, msg: Omit<JsonRpcMessage, 'jsonrpc'> & { jsonrpc?: string }, timeoutMs = 5000): Promise<JsonRpcMessage> {
   const id = Math.floor(Math.random() * 999999);
   const fullMsg = { jsonrpc: '2.0', id, ...msg };
-  proc.stdin.write(JSON.stringify(fullMsg) + '\n');
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timeout waiting for response to ${msg.method}`)), timeoutMs);
@@ -58,6 +57,7 @@ async function sendMessage(proc: ReturnType<typeof spawn> & { stdin: { write: (d
     };
 
     proc.stdout.on('data', handler);
+    proc.stdin.write(JSON.stringify(fullMsg) + '\n');
   });
 }
 
