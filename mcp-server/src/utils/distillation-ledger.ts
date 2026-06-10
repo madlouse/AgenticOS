@@ -8,6 +8,7 @@ import type { AppendedRecordCapture } from './record-capture.js';
 export type DistillationLedgerStatus =
   | 'captured'
   | 'distilled_to_knowledge'
+  | 'distilled_to_state'
   | 'converted_to_task'
   | 'superseded'
   | 'ignored_with_reason';
@@ -24,6 +25,11 @@ export interface DistillationLedgerEntry {
   capture_date?: string;
   capture_time?: string;
   summary?: string;
+  /** Structured payload retained so a later worktree record can fold the
+   * capture into tracked state without re-parsing the markdown capture file. */
+  decisions?: string[];
+  outcomes?: string[];
+  pending?: string[];
   knowledge_paths?: string[];
   task_id?: string;
   superseded_by?: string;
@@ -71,6 +77,7 @@ const DEFAULT_STALE_AFTER_DAYS = 14;
 const LEDGER_STATUSES = new Set<DistillationLedgerStatus>([
   'captured',
   'distilled_to_knowledge',
+  'distilled_to_state',
   'converted_to_task',
   'superseded',
   'ignored_with_reason',
@@ -131,6 +138,9 @@ function normalizeEntry(projectId: string, value: unknown, now: Date = new Date(
     ...(typeof raw.capture_date === 'string' && raw.capture_date.trim() ? { capture_date: raw.capture_date.trim() } : {}),
     ...(typeof raw.capture_time === 'string' && raw.capture_time.trim() ? { capture_time: raw.capture_time.trim() } : {}),
     ...(typeof raw.summary === 'string' && raw.summary.trim() ? { summary: raw.summary.trim() } : {}),
+    ...(asStringArray(raw.decisions) ? { decisions: asStringArray(raw.decisions) } : {}),
+    ...(asStringArray(raw.outcomes) ? { outcomes: asStringArray(raw.outcomes) } : {}),
+    ...(asStringArray(raw.pending) ? { pending: asStringArray(raw.pending) } : {}),
     ...(asStringArray(raw.knowledge_paths) ? { knowledge_paths: asStringArray(raw.knowledge_paths) } : {}),
     ...(typeof raw.task_id === 'string' && raw.task_id.trim() ? { task_id: raw.task_id.trim() } : {}),
     ...(typeof raw.superseded_by === 'string' && raw.superseded_by.trim() ? { superseded_by: raw.superseded_by.trim() } : {}),
@@ -206,6 +216,9 @@ export async function recordCapturedDistillationEntry(args: {
   projectId: string;
   capture: AppendedRecordCapture;
   summary: string;
+  decisions?: string[];
+  outcomes?: string[];
+  pending?: string[];
   now?: Date;
 }): Promise<DistillationLedgerWriteResult> {
   const now = args.now ?? new Date();
@@ -232,6 +245,9 @@ export async function recordCapturedDistillationEntry(args: {
     capture_date: args.capture.date,
     capture_time: args.capture.time,
     summary: args.summary,
+    ...(args.decisions && args.decisions.length > 0 ? { decisions: args.decisions } : {}),
+    ...(args.outcomes && args.outcomes.length > 0 ? { outcomes: args.outcomes } : {}),
+    ...(args.pending && args.pending.length > 0 ? { pending: args.pending } : {}),
     refs: [{
       type: 'runtime_capture',
       uri: args.capture.filePath,
@@ -308,6 +324,54 @@ export async function markDistillationLedgerEntry(args: {
     entry,
     created: false,
   };
+}
+
+/**
+ * Load capture entries still awaiting distillation (status 'captured'). Used by
+ * a worktree record to drain captures that accumulated on the canonical main
+ * checkout (where record is capture-only) into the tracked continuity layer.
+ */
+export async function loadPendingCaptureEntries(
+  projectId: string,
+  now: Date = new Date(),
+): Promise<{ path: string; entries: DistillationLedgerEntry[] }> {
+  const loaded = await loadDistillationLedger(projectId, now);
+  return {
+    path: loaded.path,
+    entries: loaded.ledger.entries.filter((entry) => entry.status === 'captured'),
+  };
+}
+
+/**
+ * Batch-mark captured entries as distilled into tracked state. Loads and saves
+ * the ledger once. Only entries currently in 'captured' status are transitioned.
+ */
+export async function markCapturesDistilledToState(args: {
+  projectId: string;
+  entryIds: string[];
+  now?: Date;
+}): Promise<{ path: string; markedCount: number }> {
+  const now = args.now ?? new Date();
+  const loaded = await loadDistillationLedger(args.projectId, now);
+  const ids = new Set(args.entryIds);
+  const timestamp = nowIso(now);
+  let markedCount = 0;
+  for (let index = 0; index < loaded.ledger.entries.length; index += 1) {
+    const entry = loaded.ledger.entries[index];
+    if (ids.has(entry.id) && entry.status === 'captured') {
+      loaded.ledger.entries[index] = {
+        ...entry,
+        status: 'distilled_to_state',
+        updated_at: timestamp,
+        processed_at: timestamp,
+      };
+      markedCount += 1;
+    }
+  }
+  if (markedCount > 0) {
+    await saveDistillationLedger(args.projectId, loaded.ledger, now);
+  }
+  return { path: loaded.path, markedCount };
 }
 
 function normalizeEntryTime(entry: DistillationLedgerEntry): string | null {

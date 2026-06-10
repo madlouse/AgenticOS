@@ -6,12 +6,23 @@ import yaml from 'yaml';
 import {
   getDistillationLedgerPath,
   loadDistillationLedger,
+  loadPendingCaptureEntries,
+  markCapturesDistilledToState,
   markDistillationLedgerEntry,
   recordCapturedDistillationEntry,
   saveDistillationLedger,
   summarizeDistillationLedger,
   type DistillationLedger,
 } from '../distillation-ledger.js';
+
+function captureArgs(date: string, time: string) {
+  return {
+    filePath: `/tmp/cap-${date}.md`,
+    date,
+    time,
+    entry: 'raw capture',
+  };
+}
 
 const originalHome = process.env.AGENTICOS_HOME;
 let home: string | null = null;
@@ -524,5 +535,67 @@ describe('distillation ledger', () => {
       updated_at: '2026-05-21T00:00:00.000Z',
       entries: [],
     });
+  });
+
+  it('persists and round-trips the structured capture payload', async () => {
+    await setupHome();
+    const now = new Date('2026-06-10T09:00:00.000Z');
+    await recordCapturedDistillationEntry({
+      projectId: 'p',
+      now,
+      summary: 'release session',
+      decisions: ['decided X'],
+      outcomes: ['shipped Y'],
+      pending: ['follow up Z'],
+      capture: captureArgs('2026-06-10', '09:00'),
+    });
+
+    const reloaded = await loadDistillationLedger('p', now);
+    expect(reloaded.ledger.entries[0]).toMatchObject({
+      status: 'captured',
+      decisions: ['decided X'],
+      outcomes: ['shipped Y'],
+      pending: ['follow up Z'],
+    });
+  });
+
+  it('loadPendingCaptureEntries returns only entries still in captured status', async () => {
+    await setupHome();
+    const now = new Date('2026-06-10T09:00:00.000Z');
+    await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 's1', capture: captureArgs('2026-06-10', '09:00') });
+    const second = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 's2', capture: captureArgs('2026-06-10', '10:00') });
+    await markDistillationLedgerEntry({ projectId: 'p', entryId: second.entry.id, status: 'ignored_with_reason', reason: 'noise', now });
+
+    const pending = await loadPendingCaptureEntries('p', now);
+    expect(pending.entries).toHaveLength(1);
+    expect(pending.entries[0].summary).toBe('s1');
+  });
+
+  it('markCapturesDistilledToState transitions only captured entries and is idempotent', async () => {
+    await setupHome();
+    const now = new Date('2026-06-10T09:00:00.000Z');
+    const a = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-10', '09:00') });
+    const b = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'b', capture: captureArgs('2026-06-10', '10:00') });
+
+    const first = await markCapturesDistilledToState({ projectId: 'p', entryIds: [a.entry.id, b.entry.id, 'missing-id'], now });
+    expect(first.markedCount).toBe(2);
+
+    const reloaded = await loadDistillationLedger('p', now);
+    expect(reloaded.ledger.entries.every((e) => e.status === 'distilled_to_state')).toBe(true);
+    expect(reloaded.ledger.entries.every((e) => e.processed_at === now.toISOString())).toBe(true);
+
+    // Already distilled → nothing left to transition.
+    const second = await markCapturesDistilledToState({ projectId: 'p', entryIds: [a.entry.id, b.entry.id], now });
+    expect(second.markedCount).toBe(0);
+  });
+
+  it('does not count distilled_to_state captures as unprocessed in the health summary', async () => {
+    await setupHome();
+    const now = new Date('2026-06-10T09:00:00.000Z');
+    const a = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-10', '09:00') });
+    await markCapturesDistilledToState({ projectId: 'p', entryIds: [a.entry.id], now });
+
+    const health = await summarizeDistillationLedger({ projectId: 'p', now });
+    expect(health.unprocessed_capture_count).toBe(0);
   });
 });

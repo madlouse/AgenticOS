@@ -7,6 +7,8 @@ const yamlMock = vi.hoisted(() => ({
 }));
 const distillationLedgerMock = vi.hoisted(() => ({
   recordCapturedDistillationEntry: vi.fn(),
+  loadPendingCaptureEntries: vi.fn(),
+  markCapturesDistilledToState: vi.fn(),
 }));
 
 // Mock modules
@@ -48,6 +50,8 @@ vi.mock('../../utils/canonical-main-guard.js', () => ({
 
 vi.mock('../../utils/distillation-ledger.js', () => ({
   recordCapturedDistillationEntry: distillationLedgerMock.recordCapturedDistillationEntry,
+  loadPendingCaptureEntries: distillationLedgerMock.loadPendingCaptureEntries,
+  markCapturesDistilledToState: distillationLedgerMock.markCapturesDistilledToState,
 }));
 
 import { recordSession } from '../record.js';
@@ -158,6 +162,14 @@ describe('recordSession', () => {
       path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
       entry: { id: 'capture-2026-05-21-1200-test', status: 'captured' },
       created: true,
+    });
+    distillationLedgerMock.loadPendingCaptureEntries.mockResolvedValue({
+      path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
+      entries: [],
+    });
+    distillationLedgerMock.markCapturesDistilledToState.mockResolvedValue({
+      path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
+      markedCount: 0,
     });
     mockProjectFiles();
   });
@@ -319,6 +331,41 @@ describe('recordSession', () => {
     expect(writtenState.working_memory.decisions).toContain('previous decision');
     expect(writtenState.working_memory.decisions).toContain('new decision 1');
     expect(writtenState.working_memory.decisions).toContain('new decision 2');
+  });
+
+  it('drains prior capture-only records into tracked state and marks them distilled', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
+
+    distillationLedgerMock.loadPendingCaptureEntries.mockResolvedValue({
+      path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
+      entries: [
+        { id: 'capture-2026-05-21-1200-test', status: 'captured', decisions: ['current'], outcomes: ['current-out'] },
+        { id: 'prior-canonical-main-capture', status: 'captured', decisions: ['main-decision'], outcomes: ['main-outcome'], pending: ['stale-pending'] },
+      ],
+    });
+
+    const result = await recordSession({
+      summary: 'worktree session that drains canonical-main captures',
+      decisions: ['worktree-decision'],
+      outcomes: ['worktree-outcome'],
+      pending: ['current-pending'],
+    });
+
+    const stateCall = fsPromisesMock.writeFile.mock.calls.find((c) => String(c[0]).endsWith('state.yaml'));
+    expect(stateCall).toBeDefined();
+    const writtenState = JSON.parse(stateCall![1] as string);
+    // Drained prior decisions/outcomes are folded in (append-only) ahead of this session's.
+    expect(writtenState.working_memory.decisions).toEqual(['main-decision', 'worktree-decision']);
+    expect(writtenState.working_memory.facts).toEqual(['main-outcome', 'worktree-outcome']);
+    // Pending is the current session's only — stale prior pending is not re-applied.
+    expect(writtenState.working_memory.pending).toEqual(['current-pending']);
+
+    // The current capture and the drained prior capture are both marked distilled.
+    expect(distillationLedgerMock.markCapturesDistilledToState).toHaveBeenCalledWith(expect.objectContaining({
+      entryIds: ['capture-2026-05-21-1200-test', 'prior-canonical-main-capture'],
+    }));
+    expect(result).toContain('Drained 1 pending capture-only record');
   });
 
   it('replaces pending items in state.yaml', async () => {
