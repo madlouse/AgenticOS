@@ -1,9 +1,9 @@
 {
   "capturedAt": "2026-05-28T08:50:54.185Z",
-  "version": "0.4.33",
+  "version": "0.4.36",
   "serverInfo": {
     "name": "agenticos-mcp",
-    "version": "0.4.33"
+    "version": "0.4.36"
   },
   "protocolVersion": "2025-11-25",
   "capabilities": {

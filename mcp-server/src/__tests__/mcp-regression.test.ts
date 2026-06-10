@@ -150,7 +150,15 @@ describe('MCP regression — handshake baseline', () => {
 
       // --- Regression assertions ---
       expect(result.serverInfo.name).toBe(baseline.serverInfo.name);
-      expect(result.serverInfo.version).toBe(baseline.serverInfo.version);
+      // The version legitimately changes every release, so it is not pinned to
+      // the frozen baseline. Instead verify the handshake reports the real
+      // package version — this still catches a broken/empty version field
+      // without breaking on routine version bumps.
+      const packageVersion = JSON.parse(
+        readFileSync(join(MONOREPO_ROOT, 'mcp-server', 'package.json'), 'utf-8'),
+      ).version as string;
+      expect(packageVersion).toMatch(/^\d+\.\d+\.\d+/);
+      expect(result.serverInfo.version).toBe(packageVersion);
       expect(result.protocolVersion).toBe(baseline.protocolVersion);
 
       // Tools list
