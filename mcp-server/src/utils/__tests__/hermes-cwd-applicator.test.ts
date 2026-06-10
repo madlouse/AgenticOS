@@ -47,6 +47,8 @@ describe('hermes cwd applicator bootstrap', () => {
     expect(renderHermesCwdApplicatorPlugin()).toContain('project_workdir');
     expect(renderHermesCwdApplicatorPlugin()).toContain('explicit_workdir');
     expect(renderHermesCwdApplicatorPlugin()).toContain('target_workdir');
+    expect(renderHermesCwdApplicatorPlugin()).toContain('structuredContent');
+    expect(renderHermesCwdApplicatorPlugin()).toContain('structured_content');
     expect(renderHermesCwdApplicatorPlugin()).toContain('Recommended explicit workdir for tool calls');
   });
 

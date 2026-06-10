@@ -123,11 +123,12 @@ For Hermes Agent, bootstrap also installs/enables the user-level
 `agenticos-cwd-applicator` plugin so Hermes runtime tools apply AgenticOS
 switch-in and switch-out workdirs through Hermes' cwd carrier. MCP still cannot
 mutate a parent shell process by itself; supported clients must apply the
-reported `project_workdir`, `target_workdir`, or `explicit_workdir` through
-their per-tool `workdir`, hook, or plugin mechanism. Codex should use explicit
-tool `workdir`; Claude Code should use per-command cwd prefixes or absolute
-paths; Hermes Agent should use the cwd applicator when installed. Then restart
-your AI tool and run:
+reported workdir. Prefer `structuredContent.project_workdir`,
+`structuredContent.target_workdir`, or `structuredContent.explicit_workdir`
+when present, then fall back to the text `project_workdir`, `target_workdir`,
+or `explicit_workdir` lines. Codex should use explicit tool `workdir`; Claude
+Code should use per-command cwd prefixes or absolute paths; Hermes Agent should
+use the cwd applicator when installed. Then restart your AI tool and run:
 
 ```bash
 agenticos-config --validate
@@ -211,14 +212,15 @@ first managed project:
    `agenticos_init` with a name and topology, e.g.
    `agenticos_init(name: "my-project", topology: "local_directory_only")`
 2. **Switch to it** — ask the tool to run `agenticos_switch(project: "my-project")`
-   Switching binds AgenticOS context and returns `project_workdir` /
-   `explicit_workdir`. Codex, Claude Code, Hermes Agent, and other clients must
-   apply that workdir through their supported mechanism before using relative
-   paths.
+   Switching binds AgenticOS context and returns `structuredContent.project_workdir`
+   / `structuredContent.explicit_workdir`, plus text fallback lines. Codex,
+   Claude Code, Hermes Agent, and other clients must apply that workdir through
+   their supported mechanism before using relative paths.
 3. **Do real work** — complete a task across two or more sessions
 4. **Switch out when done** — ask the tool to run `agenticos_switch_out`.
-   It returns `target_workdir` / `explicit_workdir` for the original entry
-   directory; the agent must apply it before continuing non-project work.
+   It returns `structuredContent.target_workdir` / `structuredContent.explicit_workdir`
+   plus text fallback lines for the original entry directory; the agent must
+   apply it before continuing non-project work.
 5. **Verify persistence** — on the second session, ask the tool to run
    `agenticos_status` and confirm it shows your previous context
 

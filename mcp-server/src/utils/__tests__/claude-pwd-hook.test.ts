@@ -152,6 +152,30 @@ describe('claude-pwd-hook', () => {
     })).toBe('/tmp/explicit');
 
     expect(extractProjectPathFromClaudeHookPayload({
+      structuredContent: {
+        project_workdir: ' /tmp/structured-project ',
+        explicit_workdir: '/tmp/structured-explicit',
+      },
+      tool_response: {
+        content: [
+          {
+            type: 'text',
+            text: 'project_workdir: /tmp/from-text',
+          },
+        ],
+      },
+    })).toBe('/tmp/structured-project');
+
+    expect(extractProjectPathFromClaudeHookPayload({
+      tool_response: {
+        structuredContent: {
+          explicit_workdir: ' /tmp/structured-explicit ',
+        },
+        path: '/tmp/fallback',
+      },
+    })).toBe('/tmp/structured-explicit');
+
+    expect(extractProjectPathFromClaudeHookPayload({
       tool_response: {
         content: [
           {
@@ -180,6 +204,23 @@ describe('claude-pwd-hook', () => {
     expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { content: [{ type: 'text', text: 'origin_cwd: /tmp/origin' }] } })).toBeNull();
     expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { target_workdir: ' /tmp/origin ' } })).toBe('/tmp/origin');
     expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { explicit_workdir: ' /tmp/explicit-origin ' } })).toBe('/tmp/explicit-origin');
+    expect(extractTargetWorkdirFromClaudeHookPayload({
+      structuredContent: {
+        target_workdir: ' /tmp/structured-origin ',
+        explicit_workdir: '/tmp/structured-explicit-origin',
+      },
+      tool_response: {
+        content: [{ type: 'text', text: 'target_workdir: /tmp/from-text' }],
+      },
+    })).toBe('/tmp/structured-origin');
+    expect(extractTargetWorkdirFromClaudeHookPayload({
+      tool_response: {
+        structuredContent: {
+          explicit_workdir: ' /tmp/structured-explicit-origin ',
+        },
+        content: [{ type: 'text', text: 'target_workdir: /tmp/from-text' }],
+      },
+    })).toBe('/tmp/structured-explicit-origin');
     expect(extractTargetWorkdirFromClaudeHookPayload({
       tool_response: {
         content: [
