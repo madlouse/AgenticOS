@@ -15,7 +15,11 @@ import {
   getRuntimeCaptureConversationDir,
   type RecordCapturePayload,
 } from '../utils/record-capture.js';
-import { recordCapturedDistillationEntry } from '../utils/distillation-ledger.js';
+import {
+  loadPendingCaptureEntries,
+  markCapturesDistilledToState,
+  recordCapturedDistillationEntry,
+} from '../utils/distillation-ledger.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 
 function parseArray(val: unknown): string[] {
@@ -165,6 +169,9 @@ export async function recordSession(args: any): Promise<string> {
     projectId: project.id,
     capture,
     summary,
+    decisions,
+    outcomes,
+    pending,
     now,
   });
 
@@ -179,6 +186,16 @@ export async function recordSession(args: any): Promise<string> {
     });
   }
 
+  // Drain captures that accumulated while record was capture-only (e.g. on the
+  // canonical main checkout). This full-mode record can distill them, so fold
+  // their append-only decisions/outcomes into this state patch and mark them
+  // distilled. The current session's own pending is authoritative, so prior
+  // pending is not re-applied (it may already be resolved).
+  const pendingCaptures = await loadPendingCaptureEntries(project.id, now);
+  const drainedCaptures = pendingCaptures.entries.filter((entry) => entry.id !== ledgerCapture.entry.id);
+  const drainedDecisions = drainedCaptures.flatMap((entry) => entry.decisions ?? []);
+  const drainedOutcomes = drainedCaptures.flatMap((entry) => entry.outcomes ?? []);
+
   await applyTrackedContinuityPatch({
     projectId: project.id,
     projectName: project.name,
@@ -187,16 +204,28 @@ export async function recordSession(args: any): Promise<string> {
     markerPath,
     currentTask: current_task,
     now,
-    decisions,
-    outcomes,
+    decisions: [...drainedDecisions, ...decisions],
+    outcomes: [...drainedOutcomes, ...outcomes],
     pending,
   });
 
+  // Mark the current capture and every drained prior capture as distilled into
+  // tracked state so they stop showing as unprocessed in the ledger.
+  await markCapturesDistilledToState({
+    projectId: project.id,
+    entryIds: [ledgerCapture.entry.id, ...drainedCaptures.map((entry) => entry.id)],
+    now,
+  });
+
   const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
+  const drainNote = drainedCaptures.length > 0
+    ? `\n♻️ Drained ${drainedCaptures.length} pending capture-only record(s) into tracked state\n`
+    : '';
   return `✅ Session recorded for "${project.name}"\n\n` +
     `📝 Raw conversation: ${conversationRoutingPlan.raw_conversations_display_dir}${today}.md\n` +
     `🧾 Distillation ledger: ${ledgerCapture.path}#${ledgerCapture.entry.id}\n` +
     `📊 State: ${contextPolicyPlan.trackedContextDisplayPaths.state} (updated)\n` +
     `📋 CLAUDE.md: Current State synced\n` +
+    drainNote +
     (routingNotes.length > 0 ? `\n${routingNotes.join('\n')}\n` : '');
 }
