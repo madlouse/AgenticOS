@@ -2,6 +2,7 @@ import { exec, spawn } from 'child_process';
 import { readFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import yaml from 'yaml';
+import { gitText } from './exec-git.js';
 import { checkStandardKitUpgrade } from './standard-kit.js';
 import { analyzeCanonicalRepoSync, type CanonicalRepoSyncDetails } from './canonical-checkout-sync.js';
 import { resolveManagedProjectContextDisplayPaths, resolveManagedProjectContextPaths } from './agent-context-paths.js';
@@ -435,10 +436,10 @@ async function resolveTrustedProjectPath(args: {
   }
 
   try {
-    const gitWorktreeRoot = (await execCommand(`git -C "${repoPath}" rev-parse --show-toplevel`)).trim();
-    const gitCommonDir = resolve(gitWorktreeRoot, (await execCommand(`git -C "${repoPath}" rev-parse --git-common-dir`)).trim());
+    const gitWorktreeRoot = await gitText(repoPath, ['rev-parse', '--show-toplevel']);
+    const gitCommonDir = resolve(gitWorktreeRoot, await gitText(repoPath, ['rev-parse', '--git-common-dir']));
     const gitCommonRepoRoot = dirname(gitCommonDir);
-    const gitRemoteOrigin = await execCommand(`git -C "${repoPath}" config --get remote.origin.url`).catch(() => '');
+    const gitRemoteOrigin = await gitText(repoPath, ['config', '--get', 'remote.origin.url']).catch(() => '');
     const repoIdentity = validateGuardrailRepoIdentity({
       projectId: targetProject.id,
       projectYamlPath: targetProject.projectYamlPath,
@@ -491,7 +492,7 @@ export async function runHealthCheck(args: HealthArgs): Promise<HealthResult> {
   });
   const effectiveProjectPath = trustedProject.effectiveProjectPath;
 
-  const repoStatus = await execCommand(`git -C "${args.repo_path}" status --short --branch --untracked-files=all`);
+  const repoStatus = await gitText(args.repo_path, ['status', '--short', '--branch', '--untracked-files=all']);
   const resolvedProjectPath = effectiveProjectPath ?? undefined;
   const projectYaml = await readProjectYaml(resolvedProjectPath);
   const state = await readState(resolvedProjectPath, projectYaml);

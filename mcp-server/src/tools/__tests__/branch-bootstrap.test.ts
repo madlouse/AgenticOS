@@ -13,6 +13,26 @@ vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
 }));
 
+// branch-bootstrap now runs git through execFile-based exec-git helpers (and
+// resolveGitCheckoutIdentity). The shim reconstructs the equivalent
+// `git -C "<repo>" <args>` command string and delegates to the existing
+// execAsync mock so command-string matchers keep working.
+vi.mock('../../utils/exec-git.js', () => ({
+  gitText: async (repoPath: string, args: string[]) => {
+    const { stdout } = await execAsyncMock(`git -C "${repoPath}" ${args.join(' ')}`);
+    return String(stdout || '').trim();
+  },
+  execGit: async (repoPath: string, args: string[], options?: { allowFailure?: boolean }) => {
+    try {
+      const { stdout, stderr } = await execAsyncMock(`git -C "${repoPath}" ${args.join(' ')}`);
+      return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
+    } catch (e: any) {
+      if (options?.allowFailure) return { ok: false, stdout: String(e?.stdout || ''), stderr: String(e?.stderr || '') };
+      throw e;
+    }
+  },
+}));
+
 const persistGuardrailEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedValue({
   attempted: true,
   persisted: true,
@@ -88,7 +108,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/36-guardrail-helper')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-36-guardrail-helper" -b feat/36-guardrail-helper base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-36-guardrail-helper -b feat/36-guardrail-helper base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -135,7 +155,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/fix/441-durable-topic')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-441-durable-topic" -b fix/441-durable-topic base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-441-durable-topic -b fix/441-durable-topic base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -195,7 +215,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/fix/gh-441-topic')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-gh-441-topic" -b fix/gh-441-topic base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-gh-441-topic -b fix/gh-441-topic base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -244,7 +264,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/fix-bug/441-topic')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-441-topic" -b fix-bug/441-topic base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-441-topic -b fix-bug/441-topic base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -285,7 +305,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/fix/160-boundary')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-160-boundary" -b fix/160-boundary base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-160-boundary -b fix/160-boundary base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -635,7 +655,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/490-gitlab-flow')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/gitlab-project/repo-490-gitlab-flow" -b feat/490-gitlab-flow base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/gitlab-project/repo-490-gitlab-flow -b feat/490-gitlab-flow base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -718,7 +738,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/52-basename-fallback')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/worktree-52-basename-fallback" -b feat/52-basename-fallback base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/worktree-52-basename-fallback -b feat/52-basename-fallback base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -769,7 +789,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/53-literal-fallback')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-53-literal-fallback" -b feat/53-literal-fallback base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-53-literal-fallback -b feat/53-literal-fallback base123')) {
         return { stdout: 'Preparing worktree\n', stderr: '' };
       }
       throw new Error(`Unexpected command: ${cmd}`);
@@ -835,7 +855,7 @@ describe('runBranchBootstrap', () => {
       if (cmd.includes('show-ref --verify --quiet refs/heads/feat/62-worktree-add-failure')) {
         throw new Error('branch missing');
       }
-      if (cmd.includes('worktree add "/workspace/worktrees/agenticos/repo-62-worktree-add-failure" -b feat/62-worktree-add-failure base123')) {
+      if (cmd.includes('worktree add /workspace/worktrees/agenticos/repo-62-worktree-add-failure -b feat/62-worktree-add-failure base123')) {
         throw new Error('worktree add failed');
       }
       throw new Error(`Unexpected command: ${cmd}`);

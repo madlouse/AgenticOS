@@ -4,7 +4,12 @@ import { appendFile, lstat, mkdir, open as openFile, readFile, rename, unlink, w
 import { resolve } from 'path';
 import { promisify } from 'util';
 import pLimit from 'p-limit';
+import { ghText } from '../utils/exec-git.js';
 
+// execAsync is retained only for the `command claude ...` subprocess, which
+// needs the shell `command` builtin and is already injection-mitigated (the
+// prompt is written to a temp file and paths are shell-quoted). All gh calls
+// go through execFile-based ghText.
 const execAsync = promisify(exec);
 export const AGENT_REVIEW_CONCURRENCY = 2;
 export const CLAUDE_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -319,9 +324,8 @@ function buildPromptTempFilePath(tmpDir: string, pid: number, timestamp: number,
   return `${tmpDir}/claude-agent-prompt-${pid}-${timestamp}-${uuid}.txt`;
 }
 
-async function runGh(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`gh ${args}`, { cwd: repoPath, timeout: 30000 });
-  return stdout.trim();
+async function runGh(repoPath: string, args: string[]): Promise<string> {
+  return ghText(args, { cwd: repoPath, timeout: 30000 });
 }
 
 async function getPrDetails(repoPath: string, prNumber: number): Promise<{
@@ -333,7 +337,7 @@ async function getPrDetails(repoPath: string, prNumber: number): Promise<{
   additions: number;
   deletions: number;
 }> {
-  const prJson = await runGh(repoPath, `pr view ${prNumber} --json title,body,state,author,files,additions,deletions`);
+  const prJson = await runGh(repoPath, ['pr', 'view', String(prNumber), '--json', 'title,body,state,author,files,additions,deletions']);
   const pr = JSON.parse(prJson);
   const files = (pr.files?.nodes || pr.files || []) as Array<{ path: string }>;
 
@@ -350,7 +354,7 @@ async function getPrDetails(repoPath: string, prNumber: number): Promise<{
 
 async function getFileDiff(repoPath: string, prNumber: number): Promise<string> {
   try {
-    return await runGh(repoPath, `pr diff ${prNumber}`);
+    return await runGh(repoPath, ['pr', 'diff', String(prNumber)]);
   } catch {
     return '(diff unavailable)';
   }
