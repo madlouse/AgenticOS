@@ -1,5 +1,7 @@
 function normalizeIssueId(issueId: string | undefined | null): string {
-  return (issueId || '').trim();
+  // Strip a leading '#' so "#524" and "524" compare equal against issue
+  // references extracted from commit subjects (which never include the '#').
+  return (issueId || '').trim().replace(/^#+/, '');
 }
 
 export function extractIssueReferences(subject: string): string[] {
