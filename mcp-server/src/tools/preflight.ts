@@ -2,6 +2,8 @@ import { exec } from 'child_process';
 import { readFile } from 'fs/promises';
 import { dirname, relative, resolve, sep } from 'path';
 import { promisify } from 'util';
+import { gitText } from '../utils/exec-git.js';
+import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import {
   extractLatestIssueBootstrap,
   loadLatestGuardrailState,
@@ -18,6 +20,9 @@ import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.
 import { classifyUnrelatedCommitSubjects } from '../utils/issue-commit-scope.js';
 import { validateCoverageEvidence, type CoverageEvidence } from '../utils/coverage-evidence.js';
 
+// Shell execution is retained only for operator-declared reproducibility-gate
+// commands (e.g. "npm ci && npm run build"), which are intentionally shell
+// commands. All git invocations go through execFile-based gitText.
 const execAsync = promisify(exec);
 
 function isWithinDirectory(root: string, candidate: string): boolean {
@@ -90,11 +95,6 @@ interface PreflightResult {
   persistence?: GuardrailPersistenceResult;
 }
 
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
-}
-
 function normalizeLines(content: string): string[] {
   return content
     .split('\n')
@@ -104,7 +104,7 @@ function normalizeLines(content: string): string[] {
 
 async function detectWorkspaceType(repoPath: string): Promise<WorkspaceType> {
   try {
-    const output = await runGit(repoPath, 'worktree list --porcelain');
+    const output = await gitText(repoPath, ['worktree', 'list', '--porcelain']);
     const worktreeLines = output
       .split('\n')
       .filter((line) => line.startsWith('worktree '))
@@ -226,19 +226,22 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
   }
 
   try {
-    const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
-    const gitCommonDirRaw = await runGit(repo_path, 'rev-parse --git-common-dir');
-    const gitCommonDir = resolve(gitWorktreeRoot, gitCommonDirRaw);
-    const gitCommonRepoRoot = dirname(gitCommonDir);
+    const checkout = await resolveGitCheckoutIdentity(repo_path);
+    if (!checkout) {
+      throw new Error('failed to resolve git checkout identity');
+    }
+    const gitWorktreeRoot = checkout.worktreeRoot;
+    const gitCommonDir = checkout.commonDir;
+    const gitCommonRepoRoot = checkout.commonRepoRoot;
 
     result.evidence.git_worktree_root = gitWorktreeRoot;
     result.evidence.git_common_dir = gitCommonDir;
     result.evidence.git_common_repo_root = gitCommonRepoRoot;
-    result.evidence.git_remote_origin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
-    result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
-    result.evidence.current_head = await runGit(repo_path, 'rev-parse HEAD');
-    result.evidence.remote_base_head = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
-    result.evidence.branch_fork_point = await runGit(repo_path, `merge-base HEAD ${remote_base_branch}`);
+    result.evidence.git_remote_origin = await gitText(repo_path, ['config', '--get', 'remote.origin.url']).catch(() => null);
+    result.evidence.current_branch = await gitText(repo_path, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    result.evidence.current_head = await gitText(repo_path, ['rev-parse', 'HEAD']);
+    result.evidence.remote_base_head = await gitText(repo_path, ['rev-parse', remote_base_branch]);
+    result.evidence.branch_fork_point = await gitText(repo_path, ['merge-base', 'HEAD', remote_base_branch]);
     result.branch_ancestry_verified = true;
     result.evidence.workspace_type = await detectWorkspaceType(repo_path);
 
@@ -301,7 +304,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
   }
 
   if (isImplementationAffectingTask(task_type)) {
-    const subjectsRaw = await runGit(repo_path, `log --format=%s ${remote_base_branch}..HEAD`).catch(() => '');
+    const subjectsRaw = await gitText(repo_path, ['log', '--format=%s', `${remote_base_branch}..HEAD`]).catch(() => '');
     const subjects = normalizeLines(subjectsRaw);
     result.evidence.commit_subjects_since_base = subjects;
 
@@ -328,7 +331,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
         result.reproducibility_gate_defined = true;
         // Active structural_move enforcement: detect renames and execute gate commands
         try {
-          const diffOutput = await runGit(repo_path, `diff --name-status --diff-filter=R ${remote_base_branch} HEAD`);
+          const diffOutput = await gitText(repo_path, ['diff', '--name-status', '--diff-filter=R', remote_base_branch, 'HEAD']);
           const renamedFiles = normalizeLines(diffOutput).filter((line) => line.startsWith('R'));
           if (renamedFiles.length > 0) {
             for (const cmd of clean_reproducibility_gate) {
@@ -349,7 +352,7 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
       result.reproducibility_gate_defined = clean_reproducibility_gate.length > 0 || !structural_move;
       // structural_move not declared — check for accidental renames and block if found
       try {
-        const diffOutput = await runGit(repo_path, `diff --name-status --diff-filter=R ${remote_base_branch} HEAD`);
+        const diffOutput = await gitText(repo_path, ['diff', '--name-status', '--diff-filter=R', remote_base_branch, 'HEAD']);
         const renamedFiles = normalizeLines(diffOutput).filter((line) => line.startsWith('R'));
         if (renamedFiles.length > 0) {
           result.block_reasons.push('Structural move detected but not declared');

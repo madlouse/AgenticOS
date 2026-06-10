@@ -12,6 +12,26 @@ vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
 }));
 
+// edit-guard now runs git through execFile-based exec-git helpers (and
+// resolveGitCheckoutIdentity). The shim reconstructs the equivalent
+// `git -C "<repo>" <args>` command string and delegates to the existing
+// execAsync mock so per-test command-string matchers keep working.
+vi.mock('../../utils/exec-git.js', () => ({
+  gitText: async (repoPath: string, args: string[]) => {
+    const { stdout } = await execAsyncMock(`git -C "${repoPath}" ${args.join(' ')}`);
+    return String(stdout || '').trim();
+  },
+  execGit: async (repoPath: string, args: string[], options?: { allowFailure?: boolean }) => {
+    try {
+      const { stdout, stderr } = await execAsyncMock(`git -C "${repoPath}" ${args.join(' ')}`);
+      return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
+    } catch (e: any) {
+      if (options?.allowFailure) return { ok: false, stdout: String(e?.stdout || ''), stderr: String(e?.stderr || '') };
+      throw e;
+    }
+  },
+}));
+
 vi.mock('../../utils/registry.js', () => ({
   loadRegistry: vi.fn(),
 }));

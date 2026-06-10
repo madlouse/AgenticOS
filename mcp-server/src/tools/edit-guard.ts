@@ -1,6 +1,6 @@
-import { exec } from 'child_process';
-import { dirname, resolve } from 'path';
-import { promisify } from 'util';
+import { resolve } from 'path';
+import { gitText } from '../utils/exec-git.js';
+import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import { extractLatestIssueBootstrap, loadLatestGuardrailState, type LoadedGuardrailState } from '../utils/guardrail-evidence.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 import { assessIssueBootstrapContinuity } from '../utils/issue-bootstrap-continuity.js';
@@ -11,7 +11,6 @@ import {
 } from '../utils/repo-boundary.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 type GuardStatus = 'PASS' | 'BLOCK';
-const execAsync = promisify(exec);
 
 interface EditGuardArgs {
   issue_id?: string;
@@ -55,10 +54,6 @@ interface EditGuardResult {
   };
 }
 
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
-}
 
 function normalizeDeclaredTargets(targets: string[]): string[] {
   return targets
@@ -148,15 +143,18 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
 
   if (repo_path) {
     try {
-      const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
-      const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
-      const gitCommonRepoRoot = dirname(gitCommonDir);
-      result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
+      const checkout = await resolveGitCheckoutIdentity(repo_path);
+      if (!checkout) {
+        throw new Error('failed to resolve git checkout identity');
+      }
+      const gitWorktreeRoot = checkout.worktreeRoot;
+      const gitCommonRepoRoot = checkout.commonRepoRoot;
+      result.evidence.current_branch = await gitText(repo_path, ['rev-parse', '--abbrev-ref', 'HEAD']);
       result.evidence.git_worktree_root = gitWorktreeRoot;
       result.evidence.git_common_repo_root = gitCommonRepoRoot;
 
       if (result.target_project) {
-        const gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
+        const gitRemoteOrigin = await gitText(repo_path, ['config', '--get', 'remote.origin.url']).catch(() => null);
         const repoIdentity = validateGuardrailRepoIdentity({
 	          projectId: result.target_project.id,
 	          projectYamlPath: result.target_project.project_yaml_path,
