@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgenticOS Capability Hub</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212f;
+      --muted: #5e6a7d;
+      --line: #d8dee9;
+      --panel: #f7f9fb;
+      --panel-strong: #eef3f8;
+      --accent: #176b87;
+      --accent-2: #7c5c11;
+      --ok: #1f7a4d;
+      --warn: #986b00;
+      --gap: #9a2f36;
+      --white: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--white);
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 24px 56px;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      padding: 18px 0 26px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 8px 0 12px;
+      font-size: 42px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 860px;
+      color: var(--muted);
+      font-size: 18px;
+      margin: 0;
+    }
+
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    nav a {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 11px;
+      background: var(--panel);
+      font-size: 14px;
+      color: var(--ink);
+    }
+
+    section { padding-top: 34px; }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: var(--panel);
+      min-height: 104px;
+    }
+
+    .metric .value {
+      display: block;
+      font-size: 28px;
+      font-weight: 750;
+      margin-bottom: 4px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .module {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--white);
+      min-height: 180px;
+    }
+
+    .module p {
+      margin: 0 0 12px;
+      color: var(--muted);
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--panel-strong);
+      color: var(--ink);
+    }
+
+    .tag.ok { color: var(--ok); }
+    .tag.warn { color: var(--warn); }
+    .tag.gap { color: var(--gap); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--panel-strong);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .path-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .path-list li {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: var(--panel);
+    }
+
+    .path-list strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .path-list span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+      background: var(--panel-strong);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    footer {
+      margin-top: 44px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 860px) {
+      .summary-grid,
+      .module-grid,
+      .path-list {
+        grid-template-columns: 1fr;
+      }
+
+      h1 { font-size: 32px; }
+      .shell { padding: 20px 16px 42px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="eyebrow">AgenticOS design navigation</div>
+      <h1>Capability Matrix And Design Hub</h1>
+      <p class="lead">
+        A human-readable landing page for the current AgenticOS capability model.
+        Use it to jump from product promises to module-level design, implementation
+        mapping, issue correspondence, and known gaps.
+      </p>
+      <nav aria-label="Primary documentation links">
+        <a href="../README.md">README</a>
+        <a href="../mcp-server/README.md">MCP README</a>
+        <a href="../standards/knowledge/capabilities/README.md">Agent Markdown Index</a>
+        <a href="../standards/knowledge/agenticos-capability-matrix-and-design-map-2026-06-10.md">Traceability Matrix</a>
+        <a href="../standards/knowledge/agenticos-design-system-overview-2026-06-10.md">Design Overview</a>
+      </nav>
+    </header>
+
+    <section id="snapshot">
+      <h2>Current Snapshot</h2>
+      <div class="summary-grid">
+        <div class="metric">
+          <span class="value">10</span>
+          <span class="label">capability domains with three-layer Markdown designs</span>
+        </div>
+        <div class="metric">
+          <span class="value">280</span>
+          <span class="label">GitHub issues reviewed in the latest refresh</span>
+        </div>
+        <div class="metric">
+          <span class="value">272</span>
+          <span class="label">closed issues used as design and implementation evidence</span>
+        </div>
+        <div class="metric">
+          <span class="value">8</span>
+          <span class="label">open issues that remain as active gaps</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="modules">
+      <h2>Capability Modules</h2>
+      <div class="module-grid">
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/project-lifecycle.md">Project Lifecycle</a></h3>
+          <p>Create, resolve, normalize, and manage project/topic identity across local and Git-backed modes.</p>
+          <div class="tag-row"><span class="tag ok">Implemented</span><span class="tag gap">#521 #516 #514</span></div>
+          <a href="../standards/knowledge/capabilities/project-lifecycle.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/context-switching.md">Context Switching</a></h3>
+          <p>Switch into projects and switch out to the original entry workdir without claiming impossible cwd mutation.</p>
+          <div class="tag-row"><span class="tag ok">Released v0.4.37</span><span class="tag gap">#517</span></div>
+          <a href="../standards/knowledge/capabilities/context-switching.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/continuity-memory.md">Continuity Memory</a></h3>
+          <p>Capture conversations, decisions, state, cases, knowledge, and distillation lifecycle signals.</p>
+          <div class="tag-row"><span class="tag ok">Implemented</span><span class="tag gap">#517 #516 #514</span></div>
+          <a href="../standards/knowledge/capabilities/continuity-memory.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/task-topic-management.md">Task And Topic Management</a></h3>
+          <p>Represent durable topic/project work as structured task files with state synchronization.</p>
+          <div class="tag-row"><span class="tag ok">Implemented</span></div>
+          <a href="../standards/knowledge/capabilities/task-topic-management.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/guardrails-git-flow.md">Guardrails And Git Flow</a></h3>
+          <p>Keep implementation work issue-scoped, worktree-isolated, testable, reviewable, and rollback-friendly.</p>
+          <div class="tag-row"><span class="tag ok">Implemented</span><span class="tag gap">#547 #522 #519 #514</span></div>
+          <a href="../standards/knowledge/capabilities/guardrails-git-flow.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/bootstrap-agent-support.md">Bootstrap And Agent Support</a></h3>
+          <p>Install, verify, and repair MCP/Skill support for Claude Code, Codex, Cursor, Gemini CLI, and Hermes Agent.</p>
+          <div class="tag-row"><span class="tag ok">Skill v8</span><span class="tag warn">restart/reload required</span></div>
+          <a href="../standards/knowledge/capabilities/bootstrap-agent-support.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/standard-kit.md">Standard Kit</a></h3>
+          <p>Apply downstream adapter, context, and guardrail surfaces consistently across managed projects.</p>
+          <div class="tag-row"><span class="tag ok">Implemented</span></div>
+          <a href="../standards/knowledge/capabilities/standard-kit.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/evaluation-review.md">Evaluation And Review</a></h3>
+          <p>Run non-code evaluation, delegation validation, coverage evidence, and multi-agent review.</p>
+          <div class="tag-row"><span class="tag ok">Implemented</span></div>
+          <a href="../standards/knowledge/capabilities/evaluation-review.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/channel-integrations.md">Channel Integrations</a></h3>
+          <p>Keep optional Discord/thread routing separate from the core MCP and Hermes Agent activation model.</p>
+          <div class="tag-row"><span class="tag ok">Optional</span><span class="tag warn">credential-gated</span></div>
+          <a href="../standards/knowledge/capabilities/channel-integrations.md">Open three-layer design</a>
+        </article>
+        <article class="module">
+          <h3><a href="../standards/knowledge/capabilities/release-homebrew.md">Release And Homebrew</a></h3>
+          <p>Ship reproducible GitHub releases and verify local Homebrew install, activation, and version freshness.</p>
+          <div class="tag-row"><span class="tag warn">manual recovery used</span><span class="tag gap">#547 #522</span></div>
+          <a href="../standards/knowledge/capabilities/release-homebrew.md">Open three-layer design</a>
+        </article>
+      </div>
+    </section>
+
+    <section id="traceability">
+      <h2>Issue To Design Traceability</h2>
+      <p>
+        The repository has 8 open issues in total. The table below lists the 7
+        product or operations gaps; <code>#533</code> is this documentation hub
+        issue and is intentionally excluded from the product-gap rows.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Active Gap</th>
+            <th>Capability Area</th>
+            <th>Why It Matters</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>#514</code></td>
+            <td>Guardrails, lifecycle, continuity</td>
+            <td>Unifies checkout identity resolution across record, save, preflight, edit guard, and scope check.</td>
+          </tr>
+          <tr>
+            <td><code>#516</code></td>
+            <td>Context and continuity</td>
+            <td>Persists active session project binding across MCP server reconnects.</td>
+          </tr>
+          <tr>
+            <td><code>#517</code></td>
+            <td>Status, switch, continuity</td>
+            <td>Makes freshness and drift warnings more visible where agents actually decide what to do next.</td>
+          </tr>
+          <tr>
+            <td><code>#519</code></td>
+            <td>Guardrail developer experience</td>
+            <td>Adds one orchestration entrypoint for issue start instead of requiring agents to remember a long sequence.</td>
+          </tr>
+          <tr>
+            <td><code>#521</code></td>
+            <td>Project lifecycle</td>
+            <td>Separates human display names from canonical ids and slugs.</td>
+          </tr>
+          <tr>
+            <td><code>#522</code></td>
+            <td>Release/Homebrew</td>
+            <td>Adds early visibility when Homebrew tap credentials are missing.</td>
+          </tr>
+          <tr>
+            <td><code>#547</code></td>
+            <td>Release/Homebrew</td>
+            <td>Fixes GitHub Release token validation and source formula drift after manual v0.4.37 recovery.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="reading-paths">
+      <h2>Recommended Reading Paths</h2>
+      <ul class="path-list">
+        <li>
+          <strong>For product/design review</strong>
+          <span>Start with the <a href="../standards/knowledge/agenticos-design-system-overview-2026-06-10.md">design overview</a>, then scan the module grid above.</span>
+        </li>
+        <li>
+          <strong>For implementation work</strong>
+          <span>Use the <a href="../standards/knowledge/capabilities/README.md">agent Markdown index</a>, then follow each module's implementation mapping to files and tests.</span>
+        </li>
+        <li>
+          <strong>For release or install debugging</strong>
+          <span>Read <a href="../standards/knowledge/capabilities/release-homebrew.md">Release And Homebrew</a> and <a href="../mcp-server/README.md">MCP README</a> bootstrap sections.</span>
+        </li>
+      </ul>
+    </section>
+
+    <footer>
+      Generated for AgenticOS issue #533. Latest issue refresh: 2026-06-11,
+      280 issues reviewed, 272 closed, 8 open.
+    </footer>
+  </div>
+</body>
+</html>

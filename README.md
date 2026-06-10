@@ -30,6 +30,18 @@ instead of raw filesystem guessing.
 For full documentation, agent-specific setup, and advanced configuration,
 see [mcp-server/README.md](mcp-server/README.md).
 
+## Capability Design Hub
+
+For a product-level map of what AgenticOS can do, how the design fits together,
+and which issues remain open, start with the
+[Capability Hub](docs/agenticos-capability-hub.html).
+
+Agent-facing design references:
+
+- [Capability design index](standards/knowledge/capabilities/README.md)
+- [Capability matrix and traceability map](standards/knowledge/agenticos-capability-matrix-and-design-map-2026-06-10.md)
+- [Design system overview](standards/knowledge/agenticos-design-system-overview-2026-06-10.md)
+
 ## Quick Start (from source)
 
 Requires: node.js >= 20.0.0
