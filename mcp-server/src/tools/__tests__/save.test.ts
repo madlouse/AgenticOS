@@ -899,7 +899,7 @@ describe('saveState', () => {
             branch_strategy: 'github_flow',
           },
           execution: {
-            source_repo_roots: ['.'],
+            source_repo_roots: ['/declared/elsewhere'],
           },
         });
       }
@@ -930,7 +930,7 @@ describe('saveState', () => {
     const result = await saveState({ message: 'wrong repo root' });
 
     expect(result).toContain('could not persist tracked continuity');
-    expect(result).toContain('git common repo root');
+    expect(result).toContain('is not one of declared execution.source_repo_roots');
     expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
     expect(updateClaudeMdStateMock).not.toHaveBeenCalled();
   });
@@ -1056,6 +1056,89 @@ describe('saveState', () => {
     expect(addCommand).toContain('git -C "/repo/worktrees/issue-244" add -A --');
     expect(addCommand).toContain('".project.yaml"');
     expect(addCommand).toContain('".context/state.yaml"');
+    expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
+  });
+
+  it('allows private_continuity saves from an isolated worktree outside the git common repo root', async () => {
+    const worktreePath = '/repo/worktrees/hermes-agent-kit/hermes-agent-kit-346-topic';
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry({
+      projects: [
+        {
+          id: 'test-project',
+          name: 'Test Project',
+          path: '/repo/projects/test-project',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    clearSessionProjectBinding();
+    bindSessionProject({
+      projectId: 'test-project',
+      projectName: 'Test Project',
+      projectPath: '/repo/projects/test-project',
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path === `${worktreePath}/.project.yaml`) {
+        return JSON.stringify({
+          meta: {
+            id: 'test-project',
+            name: 'Test Project',
+          },
+          source_control: {
+            topology: 'github_versioned',
+            context_publication_policy: 'private_continuity',
+            github_repo: 'example/test-project',
+            branch_strategy: 'github_flow',
+          },
+          execution: {
+            source_repo_roots: ['.'],
+          },
+        });
+      }
+      if (path === `${worktreePath}/.context/state.yaml`) {
+        return JSON.stringify({ session: {} });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) {
+          cb(null, `${worktreePath}\n`, '');
+          return;
+        }
+        if (cmd.includes('rev-parse --git-common-dir')) {
+          cb(null, '/repo/projects/test-project/.git\n', '');
+          return;
+        }
+        if (cmd.includes('remote get-url origin')) {
+          cb(null, 'git@github.com:example/test-project.git\n', '');
+          return;
+        }
+        if (cmd.includes(' commit ')) {
+          cb(new Error('nothing to commit'), '', 'nothing to commit');
+          return;
+        }
+        cb(null, '', '');
+      }
+    );
+
+    const result = await saveState({
+      project: 'test-project',
+      project_path: worktreePath,
+      repo_path: worktreePath,
+      message: 'isolated worktree continuity save',
+    });
+
+    expect(result).not.toContain('escapes repo root');
+    expect(result).not.toContain('is not one of declared execution.source_repo_roots');
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain(`git -C "${worktreePath}" add -A --`);
     expect(result).toContain('tracked continuity contract evaluated; no new continuity changes were committed');
   });
 
@@ -1898,7 +1981,7 @@ describe('saveState', () => {
     expect(addCommand).toContain('"AGENTS.md"');
   });
 
-  it('returns partial save when tracked continuity paths escape git worktree root', async () => {
+  it('fails closed when tracked continuity paths escape the git worktree root', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry({
       projects: [{
         id: 'test-project',
@@ -1942,8 +2025,9 @@ describe('saveState', () => {
 
     const result = await saveState({ message: 'escape path' });
 
-    expect(result).toContain('Partial save completed');
-    expect(result).toContain('Path escapes git worktree root');
+    expect(result).toContain('could not persist tracked continuity');
+    expect(result).toContain('escapes repo root');
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
   });
 
   it('blocks save on gitBindingPath when canonical-main guard omits reason', async () => {
