@@ -34,13 +34,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // This fixture lives under src/__tests__/fixtures in source form and
 // build/__tests__/fixtures in compiled form, so it needs four parent hops.
 const MONOREPO_ROOT = join(__dirname, '..', '..', '..', '..');
-const BUILD_INDEX = join(MONOREPO_ROOT, 'mcp-server', 'build', 'index.js');
-const PKG_JSON = join(MONOREPO_ROOT, 'mcp-server', 'package.json');
+const BIN_WRAPPER = join(MONOREPO_ROOT, 'mcp-server', 'bin', 'agenticos-mcp');
 
 /**
  * MCP protocol version this server implements.
  */
 export const MCP_PROTOCOL_VERSION = '2025-11-25';
+const MCP_RESPONSE_TIMEOUT_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // Binary resolution
@@ -48,8 +48,9 @@ export const MCP_PROTOCOL_VERSION = '2025-11-25';
 
 let _MCP_BINARY: string;
 try {
-  // Follow symlinks so the binary path is resolved
-  _MCP_BINARY = realpathSync(BUILD_INDEX);
+  // Follow symlinks so the package bin wrapper path is resolved. The wrapper
+  // preserves ESM package scope for Homebrew/npm-style extensionless commands.
+  _MCP_BINARY = realpathSync(BIN_WRAPPER);
 } catch {
   // build/ not present — use the installed binary on PATH
   _MCP_BINARY = 'agenticos-mcp';
@@ -101,7 +102,7 @@ export type McpProcess = ReturnType<typeof spawn> & {
 async function sendMessage(
   proc: McpProcess,
   msg: JsonRpcPayload,
-  timeoutMs = 5000,
+  timeoutMs = MCP_RESPONSE_TIMEOUT_MS,
 ): Promise<JsonRpcResponse> {
   const id = Math.floor(Math.random() * 999_999);
   const fullMsg: JsonRpcPayload = { jsonrpc: '2.0', id, ...msg };

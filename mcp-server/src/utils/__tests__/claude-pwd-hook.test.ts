@@ -138,13 +138,25 @@ describe('claude-pwd-hook', () => {
         path: ' /tmp/project ',
       },
     })).toBe('/tmp/project');
+    expect(extractProjectPathFromClaudeHookPayload({
+      tool_response: {
+        project_workdir: ' /tmp/project-workdir ',
+        path: '/tmp/fallback',
+      },
+    })).toBe('/tmp/project-workdir');
+    expect(extractProjectPathFromClaudeHookPayload({
+      tool_response: {
+        explicit_workdir: ' /tmp/explicit ',
+        path: '/tmp/fallback',
+      },
+    })).toBe('/tmp/explicit');
 
     expect(extractProjectPathFromClaudeHookPayload({
       tool_response: {
         content: [
           {
             type: 'text',
-            text: '✅ Switched to project "AgenticOS"\n\nPath: /tmp/from-text\nStatus: active',
+            text: '✅ Switched to project "AgenticOS"\n\nproject_workdir: /tmp/from-text\nexplicit_workdir: /tmp/explicit-text\nPath: /tmp/fallback\nStatus: active',
           },
         ],
       },
@@ -167,12 +179,13 @@ describe('claude-pwd-hook', () => {
     expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { target_workdir: '  ' } })).toBeNull();
     expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { content: [{ type: 'text', text: 'origin_cwd: /tmp/origin' }] } })).toBeNull();
     expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { target_workdir: ' /tmp/origin ' } })).toBe('/tmp/origin');
+    expect(extractTargetWorkdirFromClaudeHookPayload({ tool_response: { explicit_workdir: ' /tmp/explicit-origin ' } })).toBe('/tmp/explicit-origin');
     expect(extractTargetWorkdirFromClaudeHookPayload({
       tool_response: {
         content: [
           {
             type: 'text',
-            text: '✅ Exited AgenticOS project context "AgenticOS"\norigin_cwd: /tmp/origin\ntarget_workdir: /tmp/origin',
+            text: '✅ Exited AgenticOS project context "AgenticOS"\norigin_cwd: /tmp/origin\ntarget_workdir: /tmp/origin\nexplicit_workdir: /tmp/explicit-origin',
           },
         ],
       },

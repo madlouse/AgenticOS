@@ -11,9 +11,11 @@ import {
   runBootstrapCli,
 } from '../bootstrap-cli.js';
 import {
+  HERMES_CWD_APPLICATOR_PLUGIN_VERSION,
   renderHermesCwdApplicatorManifest,
   renderHermesCwdApplicatorPlugin,
 } from '../hermes-cwd-applicator.js';
+import { AGENTICOS_SKILL_TEMPLATE_VERSION } from '../agent-skill.js';
 
 function createDeps() {
   const files = new Map<string, string>();
@@ -235,19 +237,19 @@ describe('bootstrap cli', () => {
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('AgenticOS Activation');
     expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml')).toContain('agenticos-cwd-applicator');
     expect(harness.files.get('/Users/tester/.hermes/config.yaml')).toContain('agenticos-cwd-applicator');
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: installed v0.1.1 and enabled agenticos-cwd-applicator'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v5'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes(`OK hermes-agent: installed v${HERMES_CWD_APPLICATOR_PLUGIN_VERSION} and enabled agenticos-cwd-applicator`))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes(`OK hermes-agent-skill: installed v${AGENTICOS_SKILL_TEMPLATE_VERSION}`))).toBe(true);
   });
 
   it('upgrades stale Hermes Agent Skill and cwd applicator during apply', () => {
     const harness = createDeps();
     harness.files.set(
       '/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml',
-      renderHermesCwdApplicatorManifest().replace('version: "0.1.1"', 'version: "0.1.0"'),
+      renderHermesCwdApplicatorManifest().replace(`version: "${HERMES_CWD_APPLICATOR_PLUGIN_VERSION}"`, 'version: "0.1.0"'),
     );
     harness.files.set(
       '/Users/tester/.hermes/plugins/agenticos-cwd-applicator/__init__.py',
-      renderHermesCwdApplicatorPlugin().replace('PLUGIN_VERSION = "0.1.1"', 'PLUGIN_VERSION = "0.1.0"'),
+      renderHermesCwdApplicatorPlugin().replace(`PLUGIN_VERSION = "${HERMES_CWD_APPLICATOR_PLUGIN_VERSION}"`, 'PLUGIN_VERSION = "0.1.0"'),
     );
     harness.files.set('/Users/tester/.hermes/config.yaml', 'plugins:\n  enabled:\n    - agenticos-cwd-applicator\n');
     harness.files.set('/Users/tester/.hermes/skills/work/agenticos/SKILL.md', [
@@ -269,9 +271,11 @@ describe('bootstrap cli', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml')).toContain('version: "0.1.1"');
-    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/__init__.py')).toContain('PLUGIN_VERSION = "0.1.1"');
-    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('template_version: 5');
+    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml')).toContain(`version: "${HERMES_CWD_APPLICATOR_PLUGIN_VERSION}"`);
+    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/__init__.py')).toContain(`PLUGIN_VERSION = "${HERMES_CWD_APPLICATOR_PLUGIN_VERSION}"`);
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain(`template_version: ${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('project_workdir');
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('explicit_workdir');
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('Claude Code must use per-call cwd guidance');
   });
 

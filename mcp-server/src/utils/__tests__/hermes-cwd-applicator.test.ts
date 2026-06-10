@@ -44,6 +44,9 @@ describe('hermes cwd applicator bootstrap', () => {
     expect(renderHermesCwdApplicatorPlugin()).toContain('agenticos_switch_out');
     expect(renderHermesCwdApplicatorPlugin()).toContain('TERMINAL_CWD');
     expect(renderHermesCwdApplicatorPlugin()).toContain('set_session_cwd');
+    expect(renderHermesCwdApplicatorPlugin()).toContain('project_workdir');
+    expect(renderHermesCwdApplicatorPlugin()).toContain('explicit_workdir');
+    expect(renderHermesCwdApplicatorPlugin()).toContain('target_workdir');
     expect(renderHermesCwdApplicatorPlugin()).toContain('Recommended explicit workdir for tool calls');
   });
 

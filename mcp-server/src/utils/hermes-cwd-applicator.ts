@@ -2,7 +2,7 @@ import { dirname, join } from 'path';
 import yaml from 'yaml';
 
 export const HERMES_CWD_APPLICATOR_PLUGIN_NAME = 'agenticos-cwd-applicator';
-export const HERMES_CWD_APPLICATOR_PLUGIN_VERSION = '0.1.1';
+export const HERMES_CWD_APPLICATOR_PLUGIN_VERSION = '0.1.2';
 
 export type HermesCwdApplicatorStatus =
   | 'current'
@@ -109,11 +109,17 @@ def _matches_tool(tool_name: str, suffix: str) -> bool:
 
 
 def _extract_switch_workdir(result: Any) -> str | None:
-    direct = _find_string_value(result, {"path", "project_path", "workdir"})
+    direct = _find_string_value(result, {"project_workdir", "explicit_workdir", "path", "project_path", "workdir"})
     if direct:
         return direct
     text = _flatten_text(result)
-    return _match_line(text, r"^Path:\\s*(.+)$") or _match_line(
+    return _match_line(text, r"^project_workdir:\\s*(.+)$") or _match_line(
+        text,
+        r"^explicit_workdir:\\s*(.+)$",
+    ) or _match_line(
+        text,
+        r"^Path:\\s*(.+)$",
+    ) or _match_line(
         text,
         r"^🧰 Project path:\\s*(.+)$",
     ) or _match_line(
@@ -123,11 +129,14 @@ def _extract_switch_workdir(result: Any) -> str | None:
 
 
 def _extract_switch_out_workdir(result: Any) -> str | None:
-    direct = _find_string_value(result, {"target_workdir", "targetWorkdir", "workdir"})
+    direct = _find_string_value(result, {"target_workdir", "targetWorkdir", "explicit_workdir", "workdir"})
     if direct:
         return direct
     text = _flatten_text(result)
-    return _match_line(text, r"^target_workdir:\\s*(.+)$")
+    return _match_line(text, r"^target_workdir:\\s*(.+)$") or _match_line(
+        text,
+        r"^explicit_workdir:\\s*(.+)$",
+    )
 
 
 def _find_string_value(value: Any, keys: set[str]) -> str | None:
