@@ -6,7 +6,12 @@
  *
  * The two-tier threshold system:
  * - Aggregate floor: 60% lines, 60% functions, 50% branches, 60% statements
- * - Changed-scope gate: 100% for files modified in this PR
+ * - Changed-scope gate: every executable line ADDED or MODIFIED in this PR must
+ *   be covered. When per-file changed-line ranges are supplied the gate is
+ *   diff-line-based (only the lines you touched must be covered, not the whole
+ *   file). When no line ranges are supplied it falls back to the legacy
+ *   whole-file 100% target — so a file with pre-existing coverage debt does not
+ *   have to retire that debt just because one function in it changed.
  */
 
 export interface CoverageFileEntry {
@@ -36,6 +41,12 @@ export interface CoverageEvidence {
   threshold_changed_scope: { lines: number; functions: number; branches: number; statements: number };
   is_pr: boolean;
   changed_files: string[];
+  /**
+   * Per-file added/modified executable line numbers (from the PR diff). When
+   * present the changed-scope gate is evaluated line-by-line. Absent (or a file
+   * missing a key) means no per-line data — the legacy whole-file gate applies.
+   */
+  changed_line_ranges?: Record<string, number[]>;
   aggregate: CoverageSummary;
   files: CoverageFileEntry[];
   aggregate_pass: boolean;
@@ -48,6 +59,12 @@ export interface CoverageEvidence {
 export interface CoverageEvidenceOptions {
   aggregateFloor?: Partial<CoverageEvidence['threshold_aggregate']>;
   changedScopeTarget?: Partial<CoverageEvidence['threshold_changed_scope']>;
+  /**
+   * Per-file added/modified executable line numbers from the PR diff, keyed by
+   * the same path strings used in `changedFiles`. When provided, the
+   * changed-scope gate only requires those lines to be covered.
+   */
+  changedLineRanges?: Record<string, number[]>;
   metadata?: {
     branch?: string;
     commit?: string;
@@ -126,7 +143,12 @@ function collectChangedScopeFailures(
   files: CoverageFileEntry[],
   changedFiles: string[],
   changedScopeTarget: CoverageEvidence['threshold_changed_scope'],
+  changedLineRanges?: Record<string, number[]>,
 ): string[] {
+  // When changedLineRanges is supplied (even if empty), the gate is diff-line
+  // based: only the added/modified executable lines need coverage. Otherwise it
+  // falls back to the legacy whole-file pct target.
+  const lineBased = changedLineRanges !== undefined;
   const failures: string[] = [];
   for (const changedFile of changedFiles) {
     const entry = findCoverageEntry(files, changedFile);
@@ -134,6 +156,18 @@ function collectChangedScopeFailures(
       failures.push(`${changedFile}: file missing from coverage report`);
       continue;
     }
+
+    if (lineBased) {
+      const changedLines = changedLineRanges![changedFile] ?? [];
+      if (changedLines.length === 0) continue; // no added/modified executable lines → nothing to cover
+      const uncovered = new Set(entry.uncovered_lines ?? []);
+      const uncoveredChanged = changedLines.filter((line) => uncovered.has(line));
+      if (uncoveredChanged.length > 0) {
+        failures.push(`${entry.path}: uncovered changed lines: ${uncoveredChanged.join(', ')}`);
+      }
+      continue;
+    }
+
     if (entry.pct_lines < changedScopeTarget.lines) {
       failures.push(`${entry.path}: lines ${entry.pct_lines}% < ${changedScopeTarget.lines}%`);
     }
@@ -217,6 +251,24 @@ export function generateCoverageEvidence(
       if (hits > 0) fileCoveredFunctions += 1;
     }
 
+    // Derive per-line hit counts from the statement map (the shape Vitest's v8
+    // reporter emits). This drives both the line percentage and the exact set
+    // of uncovered line numbers used by the diff-line-based changed-scope gate.
+    const lineHits = new Map<number, number>();
+    for (const [statementId, location] of Object.entries(statementMap)) {
+      const startLine = location.start?.line;
+      const endLine = location.end?.line ?? startLine;
+      if (typeof startLine !== 'number' || typeof endLine !== 'number') continue;
+      const hits = s[statementId] ?? 0;
+      for (let line = startLine; line <= endLine; line += 1) {
+        lineHits.set(line, Math.max(lineHits.get(line) ?? 0, hits));
+      }
+    }
+    const uncoveredLines = [...lineHits.entries()]
+      .filter(([, hits]) => hits === 0)
+      .map(([line]) => line)
+      .sort((a, b) => a - b);
+
     let fileLines = 0;
     let fileCoveredLines = 0;
     if (lh.length > 0) {
@@ -225,16 +277,6 @@ export function generateCoverageEvidence(
         if (hits > 0) fileCoveredLines += 1;
       }
     } else {
-      const lineHits = new Map<number, number>();
-      for (const [statementId, location] of Object.entries(statementMap)) {
-        const startLine = location.start?.line;
-        const endLine = location.end?.line ?? startLine;
-        if (typeof startLine !== 'number' || typeof endLine !== 'number') continue;
-        const hits = s[statementId] ?? 0;
-        for (let line = startLine; line <= endLine; line += 1) {
-          lineHits.set(line, Math.max(lineHits.get(line) ?? 0, hits));
-        }
-      }
       fileLines = lineHits.size;
       fileCoveredLines = [...lineHits.values()].filter((hits) => hits > 0).length;
     }
@@ -244,12 +286,13 @@ export function generateCoverageEvidence(
     const pctFunctions = fileFunctions > 0 ? Math.round((fileCoveredFunctions / fileFunctions) * 100) : 100;
     const pctLines = fileLines > 0 ? Math.round((fileCoveredLines / fileLines) * 100) : 100;
 
-    const entry = {
+    const entry: CoverageFileEntry = {
       path,
       pct_statements: pctStatements,
       pct_branches: pctBranches,
       pct_functions: pctFunctions,
       pct_lines: pctLines,
+      uncovered_lines: uncoveredLines,
     };
     files.push(entry);
     filesByPath.set(path, entry);
@@ -285,7 +328,7 @@ export function generateCoverageEvidence(
   const aggregatePass = aggregateFailures.length === 0;
 
   const changedScopeFailures = isPr && changedFiles.length > 0
-    ? collectChangedScopeFailures([...filesByPath.values()], changedFiles, changedScopeTarget)
+    ? collectChangedScopeFailures([...filesByPath.values()], changedFiles, changedScopeTarget, options.changedLineRanges)
     : [];
 
   const changedScopePass = changedScopeFailures.length === 0;
@@ -298,6 +341,7 @@ export function generateCoverageEvidence(
     threshold_changed_scope: changedScopeTarget,
     is_pr: isPr,
     changed_files: changedFiles,
+    ...(options.changedLineRanges !== undefined ? { changed_line_ranges: options.changedLineRanges } : {}),
     aggregate,
     files,
     aggregate_pass: aggregatePass,
@@ -379,7 +423,10 @@ export function validateCoverageEvidence(evidence: unknown): {
     } else {
       validateCanonicalThresholds('threshold_changed_scope', candidate.threshold_changed_scope, DEFAULT_CHANGED_SCOPE_TARGET, errors);
       const changedScopeTarget = mergeCanonicalThresholds(candidate.threshold_changed_scope, DEFAULT_CHANGED_SCOPE_TARGET);
-      for (const f of collectChangedScopeFailures(files, changedFiles, changedScopeTarget)) {
+      const changedLineRanges = candidate.changed_line_ranges && typeof candidate.changed_line_ranges === 'object'
+        ? candidate.changed_line_ranges
+        : undefined;
+      for (const f of collectChangedScopeFailures(files, changedFiles, changedScopeTarget, changedLineRanges)) {
         errors.push(`changed-scope: ${f}`);
       }
     }

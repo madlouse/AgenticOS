@@ -350,3 +350,79 @@ describe('generateCoverageEvidence', () => {
     expect(result.errors).toContain('coverage-evidence.json: missing or invalid changed_scope_failures array');
   });
 });
+
+describe('diff-line-based changed-scope gate', () => {
+  // A file with three covered lines (5,6,7) and one uncovered line (10) — i.e.
+  // 75% line coverage (meets the aggregate floor) but pre-existing debt at 10.
+  const coverageWithDebt = {
+    'src/widget.ts': {
+      statementMap: {
+        '1': { start: { line: 5 }, end: { line: 5 } },
+        '2': { start: { line: 6 }, end: { line: 6 } },
+        '3': { start: { line: 7 }, end: { line: 7 } },
+        '4': { start: { line: 10 }, end: { line: 10 } },
+      },
+      s: { '1': 1, '2': 1, '3': 1, '4': 0 },
+      b: {},
+      f: {},
+    },
+  };
+
+  it('passes when only already-covered lines were changed, ignoring pre-existing debt elsewhere', () => {
+    const evidence = generateCoverageEvidence(coverageWithDebt, true, ['src/widget.ts'], {
+      changedLineRanges: { 'src/widget.ts': [5] },
+    });
+
+    expect(evidence.changed_scope_pass).toBe(true);
+    expect(evidence.changed_scope_failures).toEqual([]);
+    // The whole-file line percentage is still only 75%, but the gate ignores it.
+    expect(evidence.files[0].pct_lines).toBe(75);
+    expect(evidence.files[0].uncovered_lines).toEqual([10]);
+  });
+
+  it('fails and reports the specific uncovered changed lines', () => {
+    const evidence = generateCoverageEvidence(coverageWithDebt, true, ['src/widget.ts'], {
+      changedLineRanges: { 'src/widget.ts': [5, 10] },
+    });
+
+    expect(evidence.changed_scope_pass).toBe(false);
+    expect(evidence.changed_scope_failures).toContain('src/widget.ts: uncovered changed lines: 10');
+  });
+
+  it('passes a changed file whose diff added no executable lines', () => {
+    const evidence = generateCoverageEvidence(coverageWithDebt, true, ['src/widget.ts'], {
+      changedLineRanges: {},
+    });
+
+    expect(evidence.changed_scope_pass).toBe(true);
+  });
+
+  it('stores changed_line_ranges so validation re-derives the same line-based result', () => {
+    const evidence = generateCoverageEvidence(coverageWithDebt, true, ['src/widget.ts'], {
+      changedLineRanges: { 'src/widget.ts': [10] },
+    });
+
+    expect(evidence.changed_line_ranges).toEqual({ 'src/widget.ts': [10] });
+
+    const validation = validateCoverageEvidence(evidence);
+    expect(validation.pass).toBe(false);
+    expect(validation.errors).toContain('changed-scope: src/widget.ts: uncovered changed lines: 10');
+  });
+
+  it('validation passes when the stored changed lines are all covered', () => {
+    const evidence = generateCoverageEvidence(coverageWithDebt, true, ['src/widget.ts'], {
+      changedLineRanges: { 'src/widget.ts': [5] },
+    });
+
+    const validation = validateCoverageEvidence(evidence);
+    expect(validation.pass).toBe(true);
+  });
+
+  it('still applies the whole-file gate when no changed-line ranges are provided', () => {
+    const evidence = generateCoverageEvidence(coverageWithDebt, true, ['src/widget.ts']);
+
+    expect(evidence.changed_line_ranges).toBeUndefined();
+    expect(evidence.changed_scope_pass).toBe(false);
+    expect(evidence.changed_scope_failures).toContain('src/widget.ts: lines 75% < 100%');
+  });
+});
