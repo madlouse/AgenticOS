@@ -1,16 +1,13 @@
-import { exec } from 'child_process';
 import { readFile } from 'fs/promises';
-import { dirname, resolve } from 'path';
-import { promisify } from 'util';
 import yaml from 'yaml';
+import { gitText } from '../utils/exec-git.js';
+import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { matchesRuntimeReviewExcludedPath, resolveRuntimeReviewSurfacePaths } from '../utils/runtime-review-surface.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 import { classifyUnrelatedCommitSubjects } from '../utils/issue-commit-scope.js';
 import { type ProjectYamlSchema } from '../utils/yaml-schemas.js';
-
-const execAsync = promisify(exec);
 
 interface PrScopeCheckArgs {
   issue_id?: string;
@@ -36,11 +33,6 @@ interface PrScopeCheckResult {
   expected_issue_scope: string;
   block_reasons: string[];
   persistence?: GuardrailPersistenceResult;
-}
-
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
 }
 
 async function loadProjectYaml(projectYamlPath: string): Promise<ProjectYamlSchema> {
@@ -180,10 +172,13 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   let gitWorktreeRoot: string | null = null;
 
   try {
-    gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
-    const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
-    gitCommonRepoRoot = dirname(gitCommonDir);
-    gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
+    const checkout = await resolveGitCheckoutIdentity(repo_path);
+    if (!checkout) {
+      throw new Error('failed to resolve git checkout identity');
+    }
+    gitWorktreeRoot = checkout.worktreeRoot;
+    gitCommonRepoRoot = checkout.commonRepoRoot;
+    gitRemoteOrigin = await gitText(repo_path, ['config', '--get', 'remote.origin.url']).catch(() => null);
 
     const repoIdentity = validateGuardrailRepoIdentity({
       projectId: projectResolution.targetProject!.id,
@@ -200,8 +195,8 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
       result.block_reasons.push(repoIdentity.message);
     }
 
-    await runGit(repo_path, `rev-parse ${remote_base_branch}`);
-    result.branch_fork_point = await runGit(repo_path, `merge-base HEAD ${remote_base_branch}`);
+    await gitText(repo_path, ['rev-parse', remote_base_branch]);
+    result.branch_fork_point = await gitText(repo_path, ['merge-base', 'HEAD', remote_base_branch]);
     result.branch_ancestry_verified = true;
   } catch {
     result.block_reasons.push(`current branch is not comparable to ${remote_base_branch}`);
@@ -240,10 +235,10 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
   }
 
   const subjects = normalizeLines(
-    await runGit(repo_path, `log --format=%s ${remote_base_branch}..HEAD`).catch(() => ''),
+    await gitText(repo_path, ['log', '--format=%s', `${remote_base_branch}..HEAD`]).catch(() => ''),
   );
   const changedFiles = normalizeLines(
-    await runGit(repo_path, `diff --name-only ${remote_base_branch}...HEAD`).catch(() => ''),
+    await gitText(repo_path, ['diff', '--name-only', `${remote_base_branch}...HEAD`]).catch(() => ''),
   );
   const projectYaml = await loadProjectYaml(projectResolution.targetProject!.projectYamlPath);
   let runtimeSurfacePaths;

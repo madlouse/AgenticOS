@@ -1,15 +1,13 @@
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
-import { exec } from 'child_process';
-import { dirname, join, resolve } from 'path';
-import { promisify } from 'util';
+import { join } from 'path';
 import yaml from 'yaml';
+import { gitText } from '../utils/exec-git.js';
+import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import { persistIssueBootstrapEvidence, type GuardrailPersistenceResult, type IssueBootstrapAdditionalContextEntry } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
-
-const execAsync = promisify(exec);
 
 type BootstrapStatus = 'RECORDED' | 'BLOCK';
 type WorkspaceType = 'main' | 'isolated_worktree';
@@ -59,14 +57,9 @@ interface IssueBootstrapResult {
   persistence?: GuardrailPersistenceResult;
 }
 
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
-}
-
 async function detectWorkspaceType(repoPath: string): Promise<WorkspaceType> {
   try {
-    const output = await runGit(repoPath, 'worktree list --porcelain');
+    const output = await gitText(repoPath, ['worktree', 'list', '--porcelain']);
     const worktreeLines = output
       .split('\n')
       .filter((line) => line.startsWith('worktree '))
@@ -183,12 +176,15 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
 
   if (repo_path && result.target_project) {
     try {
-      const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
-      const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
-      const gitCommonRepoRoot = dirname(gitCommonDir);
-      result.evidence.current_branch = await runGit(repo_path, 'rev-parse --abbrev-ref HEAD');
+      const checkout = await resolveGitCheckoutIdentity(repo_path);
+      if (!checkout) {
+        throw new Error('failed to resolve git checkout identity for issue bootstrap');
+      }
+      const gitWorktreeRoot = checkout.worktreeRoot;
+      const gitCommonRepoRoot = checkout.commonRepoRoot;
+      result.evidence.current_branch = await gitText(repo_path, ['rev-parse', '--abbrev-ref', 'HEAD']);
       result.evidence.workspace_type = await detectWorkspaceType(repo_path);
-      const gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => null);
+      const gitRemoteOrigin = await gitText(repo_path, ['config', '--get', 'remote.origin.url']).catch(() => null);
 
       const repoIdentity = validateGuardrailRepoIdentity({
         projectId: projectResolution.targetProject!.id,

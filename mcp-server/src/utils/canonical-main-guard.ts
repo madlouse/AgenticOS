@@ -1,8 +1,5 @@
-import { exec } from 'child_process';
 import { resolve } from 'path';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { gitText as runGit } from './exec-git.js';
 
 export interface CanonicalMainGuardResult {
   blocked: boolean;
@@ -10,11 +7,6 @@ export interface CanonicalMainGuardResult {
   git_worktree_root?: string;
   current_branch?: string;
   workspace_type?: 'main' | 'isolated_worktree';
-}
-
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
 }
 
 function detectWorkspaceTypeFromPorcelain(output: string, gitWorktreeRoot: string): 'main' | 'isolated_worktree' {
@@ -31,9 +23,9 @@ function detectWorkspaceTypeFromPorcelain(output: string, gitWorktreeRoot: strin
 
 export async function detectCanonicalMainWriteProtection(repoPath: string): Promise<CanonicalMainGuardResult> {
   try {
-    const gitWorktreeRoot = await runGit(repoPath, 'rev-parse --show-toplevel');
-    const currentBranch = await runGit(repoPath, 'rev-parse --abbrev-ref HEAD');
-    const worktreeList = await runGit(repoPath, 'worktree list --porcelain');
+    const gitWorktreeRoot = await runGit(repoPath, ['rev-parse', '--show-toplevel']);
+    const currentBranch = await runGit(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    const worktreeList = await runGit(repoPath, ['worktree', 'list', '--porcelain']);
     const workspaceType = detectWorkspaceTypeFromPorcelain(worktreeList, gitWorktreeRoot);
 
     if (currentBranch === 'main' && workspaceType === 'main') {

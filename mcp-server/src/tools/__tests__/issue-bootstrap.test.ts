@@ -22,6 +22,26 @@ vi.mock('util', () => ({
   promisify: vi.fn(() => execAsyncMock),
 }));
 
+// issue-bootstrap now runs git through execFile-based exec-git helpers (and
+// resolveGitCheckoutIdentity). The shim reconstructs the equivalent
+// `git -C "<repo>" <args>` command string and delegates to the existing
+// execAsync mock so command-string matchers keep working.
+vi.mock('../../utils/exec-git.js', () => ({
+  gitText: async (repoPath: string, args: string[]) => {
+    const { stdout } = await execAsyncMock(`git -C "${repoPath}" ${args.join(' ')}`);
+    return String(stdout || '').trim();
+  },
+  execGit: async (repoPath: string, args: string[], options?: { allowFailure?: boolean }) => {
+    try {
+      const { stdout, stderr } = await execAsyncMock(`git -C "${repoPath}" ${args.join(' ')}`);
+      return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
+    } catch (e: any) {
+      if (options?.allowFailure) return { ok: false, stdout: String(e?.stdout || ''), stderr: String(e?.stderr || '') };
+      throw e;
+    }
+  },
+}));
+
 vi.mock('fs/promises', () => ({
   readFile: readFileMock,
 }));
@@ -183,5 +203,24 @@ describe('runIssueBootstrap', () => {
 
     expect(result.status).toBe('RECORDED');
     expect(result.block_reasons).toEqual([]);
+  });
+
+  it('blocks when the git checkout identity cannot be resolved', async () => {
+    // Every git invocation fails, so resolveGitCheckoutIdentity returns null.
+    execAsyncMock.mockRejectedValue(new Error('fatal: not a git repository'));
+
+    const result = JSON.parse(await runIssueBootstrap({
+      issue_id: '179',
+      issue_title: 'Implement bootstrap evidence',
+      context_reset_performed: true,
+      project_hot_load_performed: true,
+      issue_payload_attached: true,
+      repo_path: '/repo',
+      project_path: '/workspace/projects/agenticos/standards',
+    })) as { status: string; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('failed to resolve git checkout identity');
+    expect(persistIssueBootstrapEvidenceMock).not.toHaveBeenCalled();
   });
 });
