@@ -297,7 +297,7 @@ export function buildHelpLines(): string[] {
     '  `--first-run` is a convenience mode: it implies `--apply`, `--install-skills`, enables shell persistence, and on macOS also enables launchctl persistence.',
     '  `--persist-shell-env` also writes export AGENTICOS_HOME=... to the detected shell profile.',
     '  `--persist-launchctl-env` also runs `launchctl setenv` on macOS for GUI/session inheritance.',
-    '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to provide cwd guidance after agenticos_switch.',
+    '  `--auto-configure-hooks` adds the Claude Code PostToolUse hook used to provide per-call cwd guidance after agenticos_switch and agenticos_switch_out.',
     '  `--install-skills` installs or updates the AgenticOS activation Skill for agents that support local skills.',
     '  `--force-skills` allows `--install-skills` to overwrite a user-modified AgenticOS Skill.',
     '  `--verify-hermes-discord` makes optional Discord channel project routing prerequisites blocking during `--verify`.',

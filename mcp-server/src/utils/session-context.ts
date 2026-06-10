@@ -37,7 +37,7 @@ export interface PwdAlignmentResult {
   success: boolean;
   agentType: 'claude-code' | 'codex' | 'other';
   instruction: string | null;
-  instructionKind: 'current-session' | 'new-session' | 'manual-cd' | null;
+  instructionKind: 'per-call' | 'new-session' | 'manual-cd' | null;
   warning: string | null;
   observedMcpProcessPwd: string;
 }
@@ -233,8 +233,8 @@ export async function alignPwd(projectPath: string): Promise<PwdAlignmentResult>
   const quotedProjectPath = shellQuote(projectPath);
 
   if (agentType === 'claude-code') {
-    instruction = `cd ${quotedProjectPath}`;
-    instructionKind = 'current-session';
+    instruction = `cd ${quotedProjectPath} && <command>`;
+    instructionKind = 'per-call';
   } else if (agentType === 'codex') {
     instruction = `codex -C ${quotedProjectPath}`;
     instructionKind = 'new-session';

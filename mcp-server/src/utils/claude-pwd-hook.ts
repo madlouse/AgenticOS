@@ -109,17 +109,16 @@ export function renderClaudePwdHookResponse(
   const label = action === 'switch_out'
     ? 'AgenticOS switch-out target workdir'
     : 'AgenticOS switched project path';
-  const commandIntro = action === 'switch_out'
-    ? 'If the client shell PWD differs, restore it with:'
-    : 'If the client shell PWD differs, enter it with:';
+  const commandAction = action === 'switch_out' ? 'restore workdir' : 'enter project workdir';
   return {
     hookSpecificOutput: {
       hookEventName: 'PostToolUse',
       additionalContext: [
         `${label}: ${targetPath}`,
         'Apply this path as the explicit workdir for subsequent filesystem operations.',
-        'This hook provides cwd guidance only; it cannot mutate a parent shell PWD.',
-        `${commandIntro} cd ${shellQuote(targetPath)}`,
+        'This hook provides cwd guidance only; it cannot mutate Claude Code parent/session PWD.',
+        `For Bash, ${commandAction} per command by prefixing: cd ${shellQuote(targetPath)} && <command>`,
+        'For file/edit tools, use absolute paths rooted at this workdir when tool-specific workdir is unavailable.',
       ].join('\n'),
     },
   };

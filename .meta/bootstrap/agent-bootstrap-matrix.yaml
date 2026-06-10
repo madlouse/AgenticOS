@@ -36,10 +36,17 @@ supported_agents:
       install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --apply
       verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --verify
       purpose: route project switch/status/pwd prompts through AgenticOS MCP before filesystem guessing
+    cwd_application:
+      support: official
+      mechanism: post-tool-use-per-call-guidance
+      install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --apply
+      verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --verify
+      purpose: provide per-command cwd prefixes and absolute-path guidance after agenticos_switch and agenticos_switch_out
     verification:
       - run `claude mcp list`
       - run `/mcp` inside Claude Code
       - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --install-skills --verify` when natural-language routing is required
+      - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent claude-code --auto-configure-hooks --verify` when switch-in/switch-out cwd guidance is required
       - confirm `agenticos` is present and call `agenticos_list`
     transport_debug:
       - if `agenticos` is missing from `claude mcp list`, MCP registration failed
@@ -49,6 +56,7 @@ supported_agents:
       - if `claude mcp get agenticos` does not show `AGENTICOS_HOME`, treat the registration as incomplete and re-add it with explicit env injection
     routing_debug:
       - if tools are available but project-intent prompts do not trigger routing, verify the AgenticOS activation Skill is installed and reload/restart Claude Code
+      - Claude Code does not persistently change parent/session cwd from MCP output; after switch-in or switch-out, use per-command `cd '<workdir>' && ...` prefixes or absolute paths
       - load the project `CLAUDE.md` and `AGENTS.md`
       - call the relevant `agenticos_*` tool explicitly before treating the problem as transport failure
     repair:
@@ -70,6 +78,10 @@ supported_agents:
       install_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --apply
       verify_command: agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --verify
       purpose: route project switch/status/pwd prompts through AgenticOS MCP before filesystem guessing
+    cwd_application:
+      support: official
+      mechanism: explicit-tool-workdir
+      purpose: after agenticos_switch use the returned project path as tool workdir; after agenticos_switch_out use target_workdir as tool workdir
     verification:
       - run `codex mcp list`
       - run `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --agent codex --install-skills --verify` when natural-language routing is required
@@ -84,6 +96,7 @@ supported_agents:
     routing_debug:
       - Codex transport success does not guarantee natural-language project-intent routing
       - if routing is weak, verify the AgenticOS activation Skill is installed and restart or reload Codex skills
+      - Codex cannot change the current session cwd through MCP output; subsequent shell/file operations must pass the returned explicit workdir
       - if routing is weak, use explicit `agenticos_*` tool calls and ensure project instructions are loaded
     repair:
       - run `codex mcp list`

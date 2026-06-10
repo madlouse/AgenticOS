@@ -430,7 +430,7 @@ describe('switchProject — agenticos_switch tests', () => {
       }
     });
 
-    it('uses current-session alignment hints for Claude Code after switch-out', async () => {
+    it('uses per-call alignment hints for Claude Code after switch-out', async () => {
       const previousClaudeCode = process.env.CLAUDE_CODE;
       process.env.CLAUDE_CODE = '1';
       const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/entry/start');
@@ -443,8 +443,9 @@ describe('switchProject — agenticos_switch tests', () => {
         const result = await switchOutProject();
 
         expect(result).toContain('Observed MCP process PWD: /entry/start (matches target workdir)');
-        expect(result).toContain('Client alignment hint:');
-        expect(result).toContain("cd '/entry/start'");
+        expect(result).toContain('Claude Code shell cwd is per-call');
+        expect(result).toContain('Use target_workdir as explicit workdir');
+        expect(result).toContain("cd '/entry/start' && <command>");
       } finally {
         cwdSpy.mockRestore();
         if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;

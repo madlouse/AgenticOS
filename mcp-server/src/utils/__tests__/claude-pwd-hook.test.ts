@@ -184,15 +184,16 @@ describe('claude-pwd-hook', () => {
 
     expect(response.hookSpecificOutput.hookEventName).toBe('PostToolUse');
     expect(response.hookSpecificOutput.additionalContext).toContain('/tmp/work space');
-    expect(response.hookSpecificOutput.additionalContext).toContain("cd '/tmp/work space'");
+    expect(response.hookSpecificOutput.additionalContext).toContain("cd '/tmp/work space' && <command>");
     expect(response.hookSpecificOutput.additionalContext).toContain('cwd guidance only');
+    expect(response.hookSpecificOutput.additionalContext).toContain('cannot mutate Claude Code parent/session PWD');
   });
 
   it('renders switch-out restore guidance', () => {
     const response = renderClaudePwdHookResponse('/tmp/origin', 'switch_out');
 
     expect(response.hookSpecificOutput.additionalContext).toContain('switch-out target workdir');
-    expect(response.hookSpecificOutput.additionalContext).toContain("restore it with: cd '/tmp/origin'");
+    expect(response.hookSpecificOutput.additionalContext).toContain("restore workdir per command by prefixing: cd '/tmp/origin' && <command>");
   });
 
   it('does not render hook output for unsafe project paths', () => {

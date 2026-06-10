@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'url';
 import { fileURLToPath } from 'url';
 import { realpathSync } from 'fs';
+import { basename } from 'path';
 
 /**
  * Detect whether the current process was invoked directly as the entry point.
@@ -41,7 +42,14 @@ export function isDirectExecution(argv: string[] = process.argv, moduleUrl: stri
   } catch {
     resolvedModuleUrl = fileURLToPath(moduleUrl);
   }
-  return pathToFileURL(resolvedEntry).href === pathToFileURL(resolvedModuleUrl).href;
+  if (pathToFileURL(resolvedEntry).href === pathToFileURL(resolvedModuleUrl).href) {
+    return true;
+  }
+
+  // Homebrew and npm expose package bins as extensionless symlinks such as
+  // `agenticos-mcp`. Some Node/macOS combinations preserve the symlink as the
+  // ESM module URL, which can make path equality miss the actual bin entry.
+  return basename(entry) === 'agenticos-mcp' && basename(resolvedModuleUrl) === 'index.js';
 }
 
 export function buildHelpLines(version: string): string[] {

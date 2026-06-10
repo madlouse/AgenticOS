@@ -2,7 +2,7 @@ import { dirname, join } from 'path';
 import yaml from 'yaml';
 
 export const HERMES_CWD_APPLICATOR_PLUGIN_NAME = 'agenticos-cwd-applicator';
-export const HERMES_CWD_APPLICATOR_PLUGIN_VERSION = '0.1.0';
+export const HERMES_CWD_APPLICATOR_PLUGIN_VERSION = '0.1.1';
 
 export type HermesCwdApplicatorStatus =
   | 'current'
@@ -116,6 +116,9 @@ def _extract_switch_workdir(result: Any) -> str | None:
     return _match_line(text, r"^Path:\\s*(.+)$") or _match_line(
         text,
         r"^🧰 Project path:\\s*(.+)$",
+    ) or _match_line(
+        text,
+        r"^🧰 Recommended explicit workdir for tool calls:\\s*(.+)$",
     )
 
 

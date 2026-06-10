@@ -1,0 +1,25 @@
+#!/usr/bin/env node
+import { spawn } from 'child_process';
+import { realpathSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const self = realpathSync(fileURLToPath(import.meta.url));
+const entry = join(dirname(dirname(self)), 'build', 'index.js');
+const child = spawn(process.execPath, [entry, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+
+child.on('exit', (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
+  }
+  process.exit(code ?? 0);
+});
+
+child.on('error', (error) => {
+  console.error(error);
+  process.exit(1);
+});

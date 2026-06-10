@@ -10,6 +10,10 @@ import {
   resolveSelectedAgents,
   runBootstrapCli,
 } from '../bootstrap-cli.js';
+import {
+  renderHermesCwdApplicatorManifest,
+  renderHermesCwdApplicatorPlugin,
+} from '../hermes-cwd-applicator.js';
 
 function createDeps() {
   const files = new Map<string, string>();
@@ -231,8 +235,44 @@ describe('bootstrap cli', () => {
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('AgenticOS Activation');
     expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml')).toContain('agenticos-cwd-applicator');
     expect(harness.files.get('/Users/tester/.hermes/config.yaml')).toContain('agenticos-cwd-applicator');
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: installed v0.1.0 and enabled agenticos-cwd-applicator'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v4'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent: installed v0.1.1 and enabled agenticos-cwd-applicator'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: installed v5'))).toBe(true);
+  });
+
+  it('upgrades stale Hermes Agent Skill and cwd applicator during apply', () => {
+    const harness = createDeps();
+    harness.files.set(
+      '/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml',
+      renderHermesCwdApplicatorManifest().replace('version: "0.1.1"', 'version: "0.1.0"'),
+    );
+    harness.files.set(
+      '/Users/tester/.hermes/plugins/agenticos-cwd-applicator/__init__.py',
+      renderHermesCwdApplicatorPlugin().replace('PLUGIN_VERSION = "0.1.1"', 'PLUGIN_VERSION = "0.1.0"'),
+    );
+    harness.files.set('/Users/tester/.hermes/config.yaml', 'plugins:\n  enabled:\n    - agenticos-cwd-applicator\n');
+    harness.files.set('/Users/tester/.hermes/skills/work/agenticos/SKILL.md', [
+      '---',
+      'name: agenticos',
+      'metadata:',
+      '  agenticos:',
+      '    managed: true',
+      '    template_version: 4',
+      '---',
+      '<!-- agenticos-skill-managed-sha256: 0000000000000000000000000000000000000000000000000000000000000000 -->',
+      '# AgenticOS Activation',
+      '',
+    ].join('\n'));
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'hermes-agent', '--install-skills', '--force-skills', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/plugin.yaml')).toContain('version: "0.1.1"');
+    expect(harness.files.get('/Users/tester/.hermes/plugins/agenticos-cwd-applicator/__init__.py')).toContain('PLUGIN_VERSION = "0.1.1"');
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('template_version: 5');
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('Claude Code must use per-call cwd guidance');
   });
 
   it('verifies Hermes Agent activation Skill state independently of optional Discord channel readiness', () => {

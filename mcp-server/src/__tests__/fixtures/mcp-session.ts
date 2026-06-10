@@ -105,7 +105,6 @@ async function sendMessage(
 ): Promise<JsonRpcResponse> {
   const id = Math.floor(Math.random() * 999_999);
   const fullMsg: JsonRpcPayload = { jsonrpc: '2.0', id, ...msg };
-  proc.stdin.write(JSON.stringify(fullMsg) + '\n');
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -130,6 +129,7 @@ async function sendMessage(
     };
 
     proc.stdout.on('data', handler);
+    proc.stdin.write(JSON.stringify(fullMsg) + '\n');
   });
 }
 
