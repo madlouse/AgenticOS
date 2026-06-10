@@ -2030,6 +2030,21 @@ describe('saveState', () => {
     expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
   });
 
+  it('returns partial save when a local_private project path escapes the git worktree root', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles();
+    childProcessMock.exec.mockImplementation((cmd: string, cb: Function) => {
+      if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/other/worktree\n', ''); return; }
+      if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '/other/worktree/.git\n', ''); return; }
+      cb(new Error('Unexpected command: ' + cmd), '', '');
+    });
+
+    const result = await saveState({ message: 'escape path local private' });
+
+    expect(result).toContain('Partial save completed');
+    expect(result).toContain('Path escapes git worktree root');
+  });
+
   it('blocks save on gitBindingPath when canonical-main guard omits reason', async () => {
     detectCanonicalMainWriteProtectionMock.mockResolvedValue({
       blocked: true,
