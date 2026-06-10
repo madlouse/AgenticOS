@@ -11,6 +11,7 @@ import {
   isValidContextPublicationPolicy,
   isValidGitRepositoryProvider,
   isValidGitReviewSystem,
+  validateAgentContextPaths,
   validateContextPublicationPolicy,
   validateManagedProjectTopology,
   validateProjectKind,
@@ -117,6 +118,21 @@ describe('validateContextPublicationPolicy', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain('context_publication_policy');
+    }
+  });
+
+  it('rejects a non-local_private policy for local_directory_only projects', () => {
+    const result = validateContextPublicationPolicy('Local Mismatch', {
+      source_control: {
+        topology: 'local_directory_only',
+        context_publication_policy: 'private_continuity',
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('local_directory_only');
+      expect(result.message).toContain('local_private');
     }
   });
 
@@ -418,5 +434,67 @@ describe('managed project topology contract', () => {
     if (!result.ok) {
       expect(result.message).toContain('unsupported');
     }
+  });
+});
+
+describe('validateAgentContextPaths', () => {
+  it('accepts a project with no agent_context (defaults apply)', () => {
+    expect(validateAgentContextPaths('P', {})).toEqual({ ok: true });
+    expect(validateAgentContextPaths('P', { agent_context: null })).toEqual({ ok: true });
+  });
+
+  it('accepts simple project-relative context paths', () => {
+    expect(validateAgentContextPaths('P', {
+      agent_context: {
+        quick_start: 'standards/.context/quick-start.md',
+        current_state: 'standards/.context/state.yaml',
+        conversations: 'standards/.context/conversations/',
+        knowledge: 'knowledge/',
+        tasks: 'tasks/',
+        artifacts: 'artifacts/',
+        last_record_marker: 'standards/.context/.last_record',
+      },
+    })).toEqual({ ok: true });
+  });
+
+  it('treats empty or missing individual fields as defaulted', () => {
+    expect(validateAgentContextPaths('P', { agent_context: { quick_start: '   ' } })).toEqual({ ok: true });
+  });
+
+  it('rejects a non-object agent_context', () => {
+    const result = validateAgentContextPaths('P', { agent_context: 'standards/.context' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('must be a mapping');
+  });
+
+  it('rejects an absolute path', () => {
+    const result = validateAgentContextPaths('P', { agent_context: { current_state: '/etc/passwd' } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('agent_context.current_state');
+    if (!result.ok) expect(result.message).toContain('not absolute');
+  });
+
+  it('rejects a Windows-style absolute path', () => {
+    const result = validateAgentContextPaths('P', { agent_context: { knowledge: 'C:\\windows' } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('not absolute');
+  });
+
+  it('rejects parent-directory traversal', () => {
+    const result = validateAgentContextPaths('P', { agent_context: { conversations: '../../etc/' } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('parent-directory traversal');
+  });
+
+  it('rejects shell metacharacters (command substitution)', () => {
+    const result = validateAgentContextPaths('P', { agent_context: { tasks: 'tasks/$(touch x)/' } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('shell metacharacters');
+  });
+
+  it('rejects a non-string value', () => {
+    const result = validateAgentContextPaths('P', { agent_context: { tasks: 42 } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('must be a string');
   });
 });
