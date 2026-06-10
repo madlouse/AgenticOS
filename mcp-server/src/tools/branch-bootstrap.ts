@@ -1,15 +1,13 @@
-import { exec } from 'child_process';
 import { access, mkdir } from 'fs/promises';
-import { basename, dirname, join, resolve } from 'path';
-import { promisify } from 'util';
+import { basename, join } from 'path';
+import { gitText } from '../utils/exec-git.js';
+import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import { getAgenticOSHome } from '../utils/registry.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
 import { resolveProjectWorktreeRoot } from '../utils/worktree-topology.js';
 import { isGitBackedTopology } from '../utils/project-contract.js';
-
-const execAsync = promisify(exec);
 
 interface BranchBootstrapArgs {
   issue_id?: string;
@@ -31,11 +29,6 @@ interface BranchBootstrapResult {
   notes: string[];
   block_reasons: string[];
   persistence?: GuardrailPersistenceResult;
-}
-
-async function runGit(repoPath: string, args: string): Promise<string> {
-  const { stdout } = await execAsync(`git -C "${repoPath}" ${args}`);
-  return stdout.trim();
 }
 
 function sanitizeSegment(value: string): string {
@@ -232,15 +225,18 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   const worktreeRoot = effectiveWorktreeRoot as string;
 
   try {
-    const gitWorktreeRoot = await runGit(repo_path, 'rev-parse --show-toplevel');
-    const gitCommonDir = resolve(gitWorktreeRoot, await runGit(repo_path, 'rev-parse --git-common-dir'));
-    gitCommonRepoRoot = dirname(gitCommonDir);
-    gitRemoteOrigin = await runGit(repo_path, 'config --get remote.origin.url').catch(() => '');
+    const checkout = await resolveGitCheckoutIdentity(repo_path);
+    if (!checkout) {
+      throw new Error('failed to resolve git checkout identity');
+    }
+    const gitWorktreeRoot = checkout.worktreeRoot;
+    gitCommonRepoRoot = checkout.commonRepoRoot;
+    gitRemoteOrigin = await gitText(repo_path, ['config', '--get', 'remote.origin.url']).catch(() => '');
     const repoName = sanitizeSegment(basename(gitCommonRepoRoot)) || sanitizeSegment(basename(repo_path)) || 'repo';
 
     result.branch_name = `${sanitizedBranchType}/${sanitizedIssueId}-${sanitizedSlug}`;
     result.worktree_path = join(worktreeRoot, `${repoName}-${sanitizedIssueId}-${sanitizedSlug}`);
-    result.base_commit = await runGit(repo_path, `rev-parse ${remote_base_branch}`);
+    result.base_commit = await gitText(repo_path, ['rev-parse', remote_base_branch]);
 
     const repoIdentity = validateGuardrailRepoIdentity({
       projectId: managedTargetProject.id,
@@ -291,7 +287,7 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
   }
 
   try {
-    await runGit(repo_path, `show-ref --verify --quiet refs/heads/${result.branch_name}`);
+    await gitText(repo_path, ['show-ref', '--verify', '--quiet', `refs/heads/${result.branch_name}`]);
     result.block_reasons.push(`branch already exists: ${result.branch_name}`);
   } catch {
     // Expected when the branch does not yet exist.
@@ -334,9 +330,9 @@ export async function runBranchBootstrap(args: BranchBootstrapArgs): Promise<str
 
   try {
     await mkdir(worktreeRoot, { recursive: true });
-    await runGit(
+    await gitText(
       repo_path,
-      `worktree add "${result.worktree_path}" -b ${result.branch_name} ${result.base_commit}`,
+      ['worktree', 'add', result.worktree_path, '-b', result.branch_name, result.base_commit],
     );
   } catch (error) {
     result.block_reasons.push(error instanceof Error ? error.message : 'failed to create isolated worktree');

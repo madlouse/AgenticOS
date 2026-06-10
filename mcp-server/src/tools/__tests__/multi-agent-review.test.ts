@@ -21,6 +21,21 @@ vi.mock('child_process', () => ({
   exec: execMock,
 }));
 
+// gh now runs through execFile-based ghText; the shim reconstructs the
+// equivalent `gh <args>` command string and delegates to the existing execAsync
+// mock so its command matchers keep working. (The `command claude` subprocess
+// still uses execAsync directly.)
+vi.mock('../../utils/exec-git.js', () => ({
+  ghText: async (args: string[], options?: unknown) => {
+    const { stdout } = await execAsyncMock(`gh ${args.join(' ')}`, options);
+    return String(stdout || '').trim();
+  },
+  execGh: async (args: string[], options?: unknown) => {
+    const { stdout, stderr } = await execAsyncMock(`gh ${args.join(' ')}`, options);
+    return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
+  },
+}));
+
 vi.mock('crypto', () => ({
   randomUUID: randomUUIDMock,
 }));

@@ -1,7 +1,7 @@
-import { exec } from 'child_process';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
+import { gitText } from './exec-git.js';
 import { analyzeCanonicalRepoSync, type CanonicalRepoSyncDetails } from './canonical-checkout-sync.js';
 import { resolveManagedProjectContextPaths } from './agent-context-paths.js';
 import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from './distill.js';
@@ -66,18 +66,6 @@ interface DirectoryEntry {
 const DEFAULT_STALE_AFTER_DAYS = 14;
 const TRACKED_EXTENSIONS = new Set(['.md', '.markdown', '.yaml', '.yml', '.json']);
 
-function execCommand(command: string): Promise<string> {
-  return new Promise((resolvePromise, reject) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        /* c8 ignore next -- stderr/stdout/error.message fallback shape depends on child_process internals. */
-        reject(new Error(stderr || stdout || error.message));
-        return;
-      }
-      resolvePromise(stdout);
-    });
-  });
-}
 
 function normalizeIso(value: unknown): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) return null;
@@ -181,7 +169,7 @@ async function resolveRepoSync(args: KnowledgeEvolutionArgs): Promise<CanonicalR
   if (args.repoSync) return args.repoSync;
   if (!args.repoPath) return null;
   try {
-    const statusOutput = await execCommand(`git -C "${args.repoPath}" status --short --branch --untracked-files=all`);
+    const statusOutput = await gitText(args.repoPath, ['status', '--short', '--branch', '--untracked-files=all']);
     return analyzeCanonicalRepoSync({
       statusOutput,
       remoteBaseBranch: 'origin/main',

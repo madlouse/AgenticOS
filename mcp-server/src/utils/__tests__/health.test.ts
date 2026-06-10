@@ -20,6 +20,29 @@ vi.mock('child_process', () => ({
   spawn: spawnMock,
 }));
 
+// health now runs git through execFile-based exec-git helpers (and
+// resolveGitCheckoutIdentity), while npm/which still use the callback exec mock.
+// The shim reconstructs the equivalent `git -C "<repo>" <args>` command string
+// and delegates to the same exec mock so its command matchers keep working.
+vi.mock('../exec-git.js', () => ({
+  gitText: (repoPath: string, args: string[]) => new Promise((res, rej) => {
+    execMock(`git -C "${repoPath}" ${args.join(' ')}`, (err: any, stdout?: string) => {
+      if (err) { rej(err); return; }
+      res(String(stdout || '').trim());
+    });
+  }),
+  execGit: (repoPath: string, args: string[], options?: { allowFailure?: boolean }) => new Promise((res, rej) => {
+    execMock(`git -C "${repoPath}" ${args.join(' ')}`, (err: any, stdout?: string, stderr?: string) => {
+      if (err) {
+        if (options?.allowFailure) { res({ ok: false, stdout: String(stdout || ''), stderr: String(stderr || '') }); return; }
+        rej(err);
+        return;
+      }
+      res({ ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') });
+    });
+  }),
+}));
+
 const standardKitMock = vi.hoisted(() => ({
   checkStandardKitUpgrade: vi.fn(),
 }));
