@@ -126,10 +126,17 @@ export async function validateGitBackedContinuityRepoBinding(args: {
     return reasons;
   }
 
+  // In an isolated worktree the common repo root points at the canonical main
+  // checkout while declared relative roots resolve against the worktree
+  // projectPath, so either root may legitimately match the declaration.
   const normalizedCommonRepoRoot = normalizePath(gitCommonRepoRoot);
-  if (!declaredSourceRepoRoots.includes(normalizedCommonRepoRoot)) {
+  const normalizedWorktreeRoot = normalizePath(gitWorktreeRoot);
+  if (
+    !declaredSourceRepoRoots.includes(normalizedCommonRepoRoot) &&
+    !declaredSourceRepoRoots.includes(normalizedWorktreeRoot)
+  ) {
     reasons.push(
-      `git common repo root "${gitCommonRepoRoot}" is not one of declared execution.source_repo_roots for "${projectName}": ${declaredSourceRepoRoots.join(', ')}`,
+      `git repo root "${gitWorktreeRoot}" (common root "${gitCommonRepoRoot}") is not one of declared execution.source_repo_roots for "${projectName}": ${declaredSourceRepoRoots.join(', ')}`,
     );
   }
 
@@ -221,11 +228,14 @@ export async function saveState(args: any): Promise<string> {
 
     let contextPolicyPlan;
     try {
+      // Boundary-check continuity paths against the worktree root: in an
+      // isolated worktree the project tree (and every staged path) lives under
+      // the worktree, not under the git common repo root.
       contextPolicyPlan = resolveContextPolicyPlan({
         projectName: project.name,
         projectPath,
         projectYaml,
-        repoRoot: gitCommonRepoRoot,
+        repoRoot: gitWorktreeRoot,
       });
     } catch (error: any) {
       return `❌ ${error.message}`;
