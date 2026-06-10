@@ -23,7 +23,8 @@ On macOS, `--first-run` also enables `launchctl` persistence for GUI/session inh
 It also installs the AgenticOS activation Skill for local-skill-capable agents — Codex, Claude Code, Cursor, Gemini CLI, and Hermes Agent — so switch/status/pwd/switch-out prompts route to AgenticOS MCP before filesystem guessing.
 `agenticos_switch` returns stable `structuredContent.project_workdir` / `structuredContent.explicit_workdir` fields plus text fallback lines, and `agenticos_switch_out` returns stable `structuredContent.target_workdir` / `structuredContent.explicit_workdir` fields plus text fallback lines, so clients do not need to scrape emoji guidance.
 With `--auto-configure-hooks`, Claude Code receives switch-in/switch-out per-call cwd guidance hooks and Hermes Agent receives the `agenticos-cwd-applicator` plugin so Hermes runtime tools apply AgenticOS workdirs automatically after `agenticos_switch` and `agenticos_switch_out`.
-Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, cwd applicator state, and optional persistence layers without mutating them.
+Codex applies the returned path as explicit tool `workdir`; Cursor and Gemini CLI must use per-call workdir when available or absolute paths when not.
+Use `agenticos-config --validate` and `agenticos-bootstrap --workspace "$AGENTICOS_HOME" --all --install-skills --auto-configure-hooks --verify` to audit the Homebrew/runtime bootstrap state, activation Skill state, switch-in/switch-out workdir effect matrix, cwd applicator state, and optional persistence layers without mutating them.
 `--apply` and `--first-run` also record bootstrap metadata in `$AGENTICOS_HOME/.agent-workspace/bootstrap-state.yaml`.
 
 After any local upgrade, reinstall, or source rebuild of `agenticos-mcp`, restart the current AI client before assuming its MCP tools reflect the new server behavior.
@@ -224,11 +225,16 @@ or restore workdir to Hermes' runtime cwd. The plugin prefers
 human-readable output lines kept as fallback compatibility.
 It does not install Hermes, configure Discord, or prove gateway readiness.
 
-Codex, Claude Code, and Hermes Agent apply AgenticOS workdirs differently:
-Codex must pass the returned path as explicit tool `workdir`; Claude Code must
-use the hook output as per-command cwd guidance or use absolute paths; Hermes
-Agent uses `agenticos-cwd-applicator` to update its runtime cwd carrier when
-Hermes supports that plugin hook.
+Codex, Claude Code, Hermes Agent, Cursor, and Gemini CLI apply AgenticOS
+workdirs differently. Codex must pass the returned path as explicit tool
+`workdir`. Claude Code must use the hook output as per-command cwd guidance or
+use absolute paths. Hermes Agent uses `agenticos-cwd-applicator` to update its
+runtime cwd carrier when Hermes supports that plugin hook. Cursor and Gemini CLI
+must use per-call workdir when their runtime exposes it, otherwise use absolute
+paths and avoid claiming persistent parent-shell cwd mutation. Bootstrap
+verification reports `*-switch-workdir` rows so stale installs and missing hooks
+or applicators fail visibly instead of pretending that `switch` changed a parent
+cwd.
 
 Verify Skill state without Discord:
 

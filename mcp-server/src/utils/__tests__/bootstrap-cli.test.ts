@@ -80,6 +80,7 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.join('\n')).toContain('agenticos-bootstrap');
     expect(buildHelpLines().join('\n')).toContain('--auto-configure-hooks');
     expect(buildHelpLines().join('\n')).toContain('--install-skills');
+    expect(buildHelpLines().join('\n')).toContain('Switch workdir effects are client-side');
     expect(buildHelpLines().join('\n')).toContain('--verify-hermes-discord');
     expect(buildHelpLines().join('\n')).toContain('hermes-agent');
     expect(parseCliArgs(['--all', '--auto-configure-hooks']).all).toBe(true);
@@ -222,6 +223,10 @@ describe('bootstrap cli', () => {
     expect(text).toContain('hermes-agent-skill: install/update /Users/tester/.hermes/skills/work/agenticos/SKILL.md');
     expect(text).toContain('overwrite user-modified managed Skill files');
     expect(text).toContain('hermes-discord: enforce optional Discord channel project routing');
+    expect(text).toContain('Switch workdir effects:');
+    expect(text).toContain('cursor-switch-workdir');
+    expect(text).toContain('gemini-cli-switch-workdir');
+    expect(text).toContain('hermes-agent-switch-workdir');
   });
 
   it('applies Hermes Agent activation and cwd applicator bootstrap without requiring Discord channel readiness', () => {
@@ -239,6 +244,7 @@ describe('bootstrap cli', () => {
     expect(harness.files.get('/Users/tester/.hermes/config.yaml')).toContain('agenticos-cwd-applicator');
     expect(harness.stdout.some((line) => line.includes(`OK hermes-agent: installed v${HERMES_CWD_APPLICATOR_PLUGIN_VERSION} and enabled agenticos-cwd-applicator`))).toBe(true);
     expect(harness.stdout.some((line) => line.includes(`OK hermes-agent-skill: installed v${AGENTICOS_SKILL_TEMPLATE_VERSION}`))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-switch-workdir'))).toBe(true);
   });
 
   it('upgrades stale Hermes Agent Skill and cwd applicator during apply', () => {
@@ -276,7 +282,9 @@ describe('bootstrap cli', () => {
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain(`template_version: ${AGENTICOS_SKILL_TEMPLATE_VERSION}`);
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('project_workdir');
     expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('explicit_workdir');
-    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('Claude Code must use per-call cwd guidance');
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('target_workdir');
+    expect(harness.files.get('/Users/tester/.hermes/skills/work/agenticos/SKILL.md')).toContain('Claude Code must use its installed PostToolUse cwd guidance hook');
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-switch-workdir'))).toBe(true);
   });
 
   it('verifies Hermes Agent activation Skill state independently of optional Discord channel readiness', () => {
@@ -295,6 +303,8 @@ describe('bootstrap cli', () => {
     expect(exitCode).toBe(0);
     expect(harness.stdout.some((line) => line.includes('OK hermes-agent: Hermes cwd applicator verified'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK hermes-agent-skill: Skill state: current'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK hermes-agent-switch-workdir'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('agenticos-cwd-applicator'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('Discord'))).toBe(false);
   });
 
@@ -323,6 +333,7 @@ describe('bootstrap cli', () => {
 
     expect(exitCode).toBe(1);
     expect(harness.stdout.some((line) => line.includes('FAIL hermes-agent: Hermes cwd applicator state: missing'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('FAIL hermes-agent-switch-workdir'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('Recovery: agenticos-bootstrap --agent hermes-agent --install-skills --apply'))).toBe(true);
   });
 
@@ -637,7 +648,7 @@ describe('bootstrap cli', () => {
     expect(stringHarness.stdout.some((line) => line.includes('FAIL codex-skill: skill path string lock'))).toBe(true);
   });
 
-  it('warns but does not fail when Claude hook is missing and auto configure is not requested', () => {
+  it('fails the switch workdir effect when Claude hook is missing and auto configure is not requested', () => {
     const harness = createDeps();
 
     const exitCode = runBootstrapCli(
@@ -645,8 +656,10 @@ describe('bootstrap cli', () => {
       harness.deps,
     );
 
-    expect(exitCode).toBe(0);
+    expect(exitCode).toBe(1);
     expect(harness.stdout.some((line) => line.includes('WARN claude-pwd-hook'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('FAIL claude-code-switch-workdir'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('requires both switch-in and switch-out cwd guidance hooks'))).toBe(true);
     const bootstrapState = yaml.parse(harness.files.get('/tmp/workspace/.agent-workspace/bootstrap-state.yaml') || '');
     expect(bootstrapState.claude_pwd_hook.fatal).toBe(false);
   });
@@ -674,6 +687,7 @@ describe('bootstrap cli', () => {
     expect(settings.hooks.PostToolUse).toHaveLength(2);
     expect(settings.hooks.PostToolUse[1].matcher).toBe('mcp__agenticos__agenticos_switch_out');
     expect(harness.stdout.some((line) => line.includes('updated /Users/tester/.claude/settings.json'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('OK claude-code-switch-workdir'))).toBe(true);
   });
 
   it('fails apply when Claude settings cannot be merged', () => {
@@ -1020,6 +1034,54 @@ describe('bootstrap cli', () => {
       modifiedHarness.deps,
     )).toBe(1);
     expect(modifiedHarness.stdout.some((line) => line.includes('--force-skills --apply'))).toBe(true);
+  });
+
+  it('verifies switch-in and switch-out workdir effects across the supported agent matrix', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.cursor/mcp.json', JSON.stringify({
+      mcpServers: {
+        agenticos: {
+          env: { AGENTICOS_HOME: '/tmp/workspace' },
+        },
+      },
+    }));
+
+    expect(runBootstrapCli(
+      [
+        '--workspace',
+        '/tmp/workspace',
+        '--all',
+        '--install-skills',
+        '--auto-configure-hooks',
+        '--apply',
+      ],
+      harness.deps,
+    )).toBe(0);
+
+    harness.stdout.length = 0;
+    expect(runBootstrapCli(
+      [
+        '--workspace',
+        '/tmp/workspace',
+        '--all',
+        '--install-skills',
+        '--auto-configure-hooks',
+        '--verify',
+      ],
+      harness.deps,
+    )).toBe(0);
+
+    const output = harness.stdout.join('\n');
+    expect(output).toContain('Switch workdir effects:');
+    expect(output).toContain('OK codex-switch-workdir');
+    expect(output).toContain('OK claude-code-switch-workdir');
+    expect(output).toContain('OK cursor-switch-workdir');
+    expect(output).toContain('OK gemini-cli-switch-workdir');
+    expect(output).toContain('OK hermes-agent-switch-workdir');
+    expect(output).toContain('explicit per-tool workdir');
+    expect(output).toContain('PostToolUse cwd guidance hooks');
+    expect(output).toContain('agenticos-cwd-applicator');
+    expect(output).toContain('no persistent parent cwd mutation is claimed');
   });
 
   it('verifies shell profile through the default shell path', () => {

@@ -145,7 +145,8 @@ describe('agent skill bootstrap', () => {
     expect(content).toContain('Hermes Agent');
     expect(content).toContain('Hermes cwd applicator');
     expect(content).toContain('codex -C <project_path>');
-    expect(content).toContain('Claude Code must use per-call cwd guidance');
+    expect(content).toContain('Claude Code must use its installed PostToolUse cwd guidance hook');
+    expect(content).toContain('For Cursor and Gemini CLI');
     expect(content).toContain('does not persistently change Claude Code');
     expect(content).toContain('切换到');
     expect(content).toContain('切出');
