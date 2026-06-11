@@ -51,6 +51,7 @@ export interface ProjectYamlSourceControl {
   branch_strategy?: string;
   repository?: {
     provider?: 'github' | 'gitlab' | 'gitee' | 'generic';
+    host?: string;
     remote?: string;
     slug?: string;
     default_base_branch?: string;

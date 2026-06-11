@@ -273,6 +273,7 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(gitlab.topology).toBe('git_versioned');
     expect(gitlab.repository).toEqual({
       provider: 'gitlab',
+      host: null,
       remote: 'origin',
       slug: 'group/subgroup/gitlab-project',
       default_base_branch: null,
@@ -289,6 +290,7 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(shorthand.status).toBe('CREATED');
     expect(shorthand.repository).toEqual({
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: 'madlouse/github-shorthand',
       default_base_branch: null,
@@ -316,6 +318,7 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     }));
     expect(generic.repository).toEqual({
       provider: 'generic',
+      host: null,
       remote: 'origin',
       slug: null,
       default_base_branch: null,

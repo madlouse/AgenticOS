@@ -11,6 +11,8 @@ import {
   isValidContextPublicationPolicy,
   isValidGitRepositoryProvider,
   isValidGitReviewSystem,
+  isValidRepositoryHost,
+  normalizeRepositoryHost,
   validateAgentContextPaths,
   validateContextPublicationPolicy,
   validateManagedProjectTopology,
@@ -36,6 +38,14 @@ describe('git repository contract helpers', () => {
     expect(isSupportedGitBranchStrategy('issue_branch_review_merge')).toBe(true);
     expect(isSupportedGitBranchStrategy('github_flow')).toBe(true);
     expect(isSupportedGitBranchStrategy('trunk')).toBe(false);
+    expect(normalizeRepositoryHost(' GitLab.Daikuan.Qihoo.Net ')).toBe('gitlab.daikuan.qihoo.net');
+    expect(isValidRepositoryHost('gitlab.daikuan.qihoo.net')).toBe(true);
+    expect(isValidRepositoryHost('localhost')).toBe(true);
+    expect(isValidRepositoryHost('gitlab.example.com:8443')).toBe(false);
+    expect(isValidRepositoryHost('https://gitlab.example.com')).toBe(false);
+    expect(isValidRepositoryHost('gitlab.example.com/group')).toBe(false);
+    expect(isValidRepositoryHost('-bad.example.com')).toBe(false);
+    expect(isValidRepositoryHost('')).toBe(false);
   });
 
   it('resolves explicit, legacy, invalid, and missing repository contracts', () => {
@@ -49,10 +59,25 @@ describe('git repository contract helpers', () => {
       },
     })).toEqual({
       provider: 'gitee',
+      host: null,
       remote: 'origin',
       slug: 'owner/repo',
       default_base_branch: 'origin/main',
       review_system: 'pull_request',
+    });
+    expect(resolveSourceControlRepository({
+      repository: {
+        provider: 'gitlab',
+        host: 'GitLab.Example.Com ',
+        slug: 'group/repo',
+      },
+    })).toEqual({
+      provider: 'gitlab',
+      host: 'gitlab.example.com',
+      remote: 'origin',
+      slug: 'group/repo',
+      default_base_branch: null,
+      review_system: 'merge_request',
     });
     expect(resolveSourceControlRepository({
       repository: {
@@ -63,6 +88,7 @@ describe('git repository contract helpers', () => {
       },
     })).toEqual({
       provider: 'generic',
+      host: null,
       remote: 'origin',
       slug: null,
       default_base_branch: null,
@@ -76,6 +102,7 @@ describe('git repository contract helpers', () => {
       github_repo: 'Legacy/Repo',
     })).toEqual({
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: 'legacy/repo',
       default_base_branch: null,

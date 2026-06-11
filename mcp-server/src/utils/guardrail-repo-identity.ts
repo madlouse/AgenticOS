@@ -1,5 +1,6 @@
 import { resolve, sep } from 'path';
 import {
+  normalizeRepositoryHost,
   normalizeRepositorySlug,
   type GitRepositoryContract,
 } from './project-contract.js';
@@ -37,6 +38,7 @@ function pathIsWithinDeclaredRoot(candidatePath: string, declaredRoot: string): 
 function legacyGithubRepository(githubRepo: string): GitRepositoryContract {
   return {
     provider: 'github',
+    host: null,
     remote: 'origin',
     slug: normalizeRepositorySlug(githubRepo),
     default_base_branch: null,
@@ -51,8 +53,17 @@ function hostForProvider(provider: GitRepositoryContract['provider']): string | 
   return null;
 }
 
-export function extractRepositorySlugFromRemoteOrigin(value: string, provider: GitRepositoryContract['provider']): string | null {
-  const host = hostForProvider(provider);
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function extractRepositorySlugFromRemoteOrigin(
+  value: string,
+  provider: GitRepositoryContract['provider'],
+  declaredHost?: string | null,
+): string | null {
+  const normalizedDeclaredHost = declaredHost ? normalizeRepositoryHost(declaredHost) : null;
+  const host = normalizedDeclaredHost || hostForProvider(provider);
   if (!host) {
     return null;
   }
@@ -61,21 +72,24 @@ export function extractRepositorySlugFromRemoteOrigin(value: string, provider: G
   if (!trimmed) {
     return null;
   }
-  const escapedHost = host.replace(/\./g, '\\.');
+  const escapedHost = escapeRegExp(host);
 
-  const sshMatch = trimmed.match(new RegExp(`^[^@\\s]+@${escapedHost}:(.+?)(?:\\.git)?$`, 'i'));
-  if (sshMatch) {
-    return normalizeRepositorySlug(sshMatch[1]);
+  // ssh:// URLs must match before the scp-style form: in
+  // ssh://git@host:2222/group/repo.git the scp pattern would otherwise read
+  // "2222/group/repo" as the slug.
+  const sshUrlMatch = trimmed.match(new RegExp(`^ssh://[^@\\s]+@${escapedHost}(?::\\d+)?/(.+?)(?:\\.git)?$`, 'i'));
+  if (sshUrlMatch) {
+    return normalizeRepositorySlug(sshUrlMatch[1]);
   }
 
-  const httpsMatch = trimmed.match(new RegExp(`^https?://${escapedHost}/(.+?)(?:\\.git)?$`, 'i'));
+  const httpsMatch = trimmed.match(new RegExp(`^https?://${escapedHost}(?::\\d+)?/(.+?)(?:\\.git)?$`, 'i'));
   if (httpsMatch) {
     return normalizeRepositorySlug(httpsMatch[1]);
   }
 
-  const sshUrlMatch = trimmed.match(new RegExp(`^ssh://[^@\\s]+@${escapedHost}/(.+?)(?:\\.git)?$`, 'i'));
-  if (sshUrlMatch) {
-    return normalizeRepositorySlug(sshUrlMatch[1]);
+  const scpMatch = trimmed.match(new RegExp(`^[^@/\\s]+@${escapedHost}:(.+?)(?:\\.git)?$`, 'i'));
+  if (scpMatch) {
+    return normalizeRepositorySlug(scpMatch[1]);
   }
 
   return null;
@@ -90,7 +104,8 @@ function repositoryMismatchMessage(args: {
   if (args.declaredGithubRepo) {
     return `git remote origin "${args.gitRemoteOrigin || 'missing'}" does not match declared source_control.github_repo "${args.declaredGithubRepo}" for target project "${args.projectId}"`;
   }
-  return `git remote origin "${args.gitRemoteOrigin || 'missing'}" does not match declared source_control.repository ${args.repository.provider}:${args.repository.slug || '(no slug)'} for target project "${args.projectId}"`;
+  const hostSuffix = args.repository.host ? ` (host ${args.repository.host})` : '';
+  return `git remote origin "${args.gitRemoteOrigin || 'missing'}" does not match declared source_control.repository ${args.repository.provider}:${args.repository.slug || '(no slug)'}${hostSuffix} for target project "${args.projectId}"`;
 }
 
 function validateRepositoryRemote(args: {
@@ -104,7 +119,7 @@ function validateRepositoryRemote(args: {
     return null;
   }
   const expectedSlug = repository.slug ? normalizeRepositorySlug(repository.slug) : null;
-  const actualSlug = extractRepositorySlugFromRemoteOrigin(args.gitRemoteOrigin || '', repository.provider);
+  const actualSlug = extractRepositorySlugFromRemoteOrigin(args.gitRemoteOrigin || '', repository.provider, repository.host);
   if (!expectedSlug || actualSlug !== expectedSlug) {
     return repositoryMismatchMessage({
       projectId: args.projectId,
