@@ -143,6 +143,20 @@ describe('initProject', () => {
         },
       }),
     ).rejects.toThrow('repository.provider');
+
+    await expect(
+      initProject({
+        name: 'Bad Host',
+        description: 'A test project',
+        topology: 'git_versioned',
+        context_publication_policy: 'private_continuity',
+        repository: {
+          provider: 'gitlab',
+          host: 'https://gitlab.example.com',
+          slug: 'group/repo',
+        },
+      }),
+    ).rejects.toThrow('repository.host');
   });
 
   it('fails when github_repo is not OWNER/REPO', async () => {

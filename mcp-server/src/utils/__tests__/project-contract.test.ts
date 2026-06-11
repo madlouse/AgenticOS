@@ -452,6 +452,50 @@ describe('managed project topology contract', () => {
     }
   });
 
+  it('accepts git_versioned repositories with a declared self-hosted host', () => {
+    expect(validateManagedProjectTopology('Self-Hosted Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        repository: {
+          provider: 'gitlab',
+          host: 'gitlab.daikuan.qihoo.net',
+          remote: 'origin',
+          slug: 'group/repo',
+          review_system: 'merge_request',
+        },
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    })).toEqual({ ok: true, topology: 'git_versioned' });
+  });
+
+  it('rejects git_versioned repositories with an invalid declared host', () => {
+    const result = validateManagedProjectTopology('Bad Host Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        repository: {
+          provider: 'gitlab',
+          host: 'gitlab.example.com:8443',
+          remote: 'origin',
+          slug: 'group/repo',
+          review_system: 'merge_request',
+        },
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('invalid source_control.repository.host');
+      expect(result.message).toContain('gitlab.example.com:8443');
+    }
+  });
+
   it('rejects unsupported topology values', () => {
     const result = validateManagedProjectTopology('Repo Project', {
       source_control: { topology: 'workspace' },
