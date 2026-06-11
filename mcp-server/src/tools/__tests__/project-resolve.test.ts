@@ -273,12 +273,35 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(gitlab.topology).toBe('git_versioned');
     expect(gitlab.repository).toEqual({
       provider: 'gitlab',
+      host: null,
       remote: 'origin',
       slug: 'group/subgroup/gitlab-project',
       default_base_branch: null,
       review_system: 'pull_request',
     });
     expect(yaml.parse(await readFile(join(gitlab.path, '.project.yaml'), 'utf-8')).source_control.branch_strategy).toBe('issue_branch_review_merge');
+
+    const selfHosted = parseResult(await runProjectEnsure({
+      project: 'Self-Hosted GitLab Project',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+      repository: {
+        provider: 'gitlab',
+        host: 'GitLab.Daikuan.Qihoo.Net',
+        slug: 'group/self-hosted-project',
+        review_system: 'merge_request',
+      },
+    }));
+    expect(selfHosted.status).toBe('CREATED');
+    expect(selfHosted.repository).toEqual({
+      provider: 'gitlab',
+      host: 'gitlab.daikuan.qihoo.net',
+      remote: 'origin',
+      slug: 'group/self-hosted-project',
+      default_base_branch: null,
+      review_system: 'merge_request',
+    });
+    expect(yaml.parse(await readFile(join(selfHosted.path, '.project.yaml'), 'utf-8')).source_control.repository.host).toBe('gitlab.daikuan.qihoo.net');
 
     const shorthand = parseResult(await runProjectEnsure({
       project: 'GitHub Shorthand',
@@ -289,6 +312,7 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(shorthand.status).toBe('CREATED');
     expect(shorthand.repository).toEqual({
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: 'madlouse/github-shorthand',
       default_base_branch: null,
@@ -316,6 +340,7 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     }));
     expect(generic.repository).toEqual({
       provider: 'generic',
+      host: null,
       remote: 'origin',
       slug: null,
       default_base_branch: null,
@@ -420,6 +445,20 @@ describe('AgenticOS project resolve/ensure MCP API', () => {
     expect(missingGithubRepo.status).toBe('ERROR');
     expect(missingGithubRepo.code).toBe('UNKNOWN');
     expect(missingGithubRepo.error).toContain('github_repo is required');
+
+    const invalidHost = parseResult(await runProjectEnsure({
+      project: 'Bad Repository Host',
+      topology: 'git_versioned',
+      context_publication_policy: 'private_continuity',
+      repository: {
+        provider: 'gitlab',
+        host: 'gitlab.example.com:8443',
+        slug: 'group/repo',
+      },
+    }));
+    expect(invalidHost.status).toBe('ERROR');
+    expect(invalidHost.code).toBe('INVALID_INPUT');
+    expect(invalidHost.error).toContain('repository.host');
 
     const missingRepository = parseResult(await runProjectEnsure({
       project: 'Missing Repository',

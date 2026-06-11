@@ -70,7 +70,8 @@ function buildRepositoryMismatchMessage(args: {
   if (args.declaredGithubRepo) {
     return `git remote origin "${args.remoteOrigin || 'missing'}" does not match declared source_control.github_repo "${args.declaredGithubRepo}" for "${args.projectName}"`;
   }
-  return `git remote origin "${args.remoteOrigin || 'missing'}" does not match declared source_control.repository ${args.repository.provider}:${args.repository.slug || '(no slug)'} for "${args.projectName}"`;
+  const hostSuffix = args.repository.host ? ` (host ${args.repository.host})` : '';
+  return `git remote origin "${args.remoteOrigin || 'missing'}" does not match declared source_control.repository ${args.repository.provider}:${args.repository.slug || '(no slug)'}${hostSuffix} for "${args.projectName}"`;
 }
 
 export async function validateGitBackedContinuityRepoBinding(args: {
@@ -118,7 +119,7 @@ export async function validateGitBackedContinuityRepoBinding(args: {
   if (repository && repository.provider !== 'generic') {
     try {
       const { stdout } = await execGit(gitWorktreeRoot, ['remote', 'get-url', 'origin']);
-      const actualRepo = extractRepositorySlugFromRemoteOrigin(stdout, repository.provider);
+      const actualRepo = extractRepositorySlugFromRemoteOrigin(stdout, repository.provider, repository.host);
       const expectedRepo = repository.slug ? normalizeRepositorySlug(repository.slug) : null;
       if (!expectedRepo || actualRepo !== expectedRepo) {
         reasons.push(

@@ -11,6 +11,8 @@ import {
   isValidContextPublicationPolicy,
   isValidGitRepositoryProvider,
   isValidGitReviewSystem,
+  isValidRepositoryHost,
+  normalizeRepositoryHost,
   validateAgentContextPaths,
   validateContextPublicationPolicy,
   validateManagedProjectTopology,
@@ -36,6 +38,14 @@ describe('git repository contract helpers', () => {
     expect(isSupportedGitBranchStrategy('issue_branch_review_merge')).toBe(true);
     expect(isSupportedGitBranchStrategy('github_flow')).toBe(true);
     expect(isSupportedGitBranchStrategy('trunk')).toBe(false);
+    expect(normalizeRepositoryHost(' GitLab.Daikuan.Qihoo.Net ')).toBe('gitlab.daikuan.qihoo.net');
+    expect(isValidRepositoryHost('gitlab.daikuan.qihoo.net')).toBe(true);
+    expect(isValidRepositoryHost('localhost')).toBe(true);
+    expect(isValidRepositoryHost('gitlab.example.com:8443')).toBe(false);
+    expect(isValidRepositoryHost('https://gitlab.example.com')).toBe(false);
+    expect(isValidRepositoryHost('gitlab.example.com/group')).toBe(false);
+    expect(isValidRepositoryHost('-bad.example.com')).toBe(false);
+    expect(isValidRepositoryHost('')).toBe(false);
   });
 
   it('resolves explicit, legacy, invalid, and missing repository contracts', () => {
@@ -49,10 +59,25 @@ describe('git repository contract helpers', () => {
       },
     })).toEqual({
       provider: 'gitee',
+      host: null,
       remote: 'origin',
       slug: 'owner/repo',
       default_base_branch: 'origin/main',
       review_system: 'pull_request',
+    });
+    expect(resolveSourceControlRepository({
+      repository: {
+        provider: 'gitlab',
+        host: 'GitLab.Example.Com ',
+        slug: 'group/repo',
+      },
+    })).toEqual({
+      provider: 'gitlab',
+      host: 'gitlab.example.com',
+      remote: 'origin',
+      slug: 'group/repo',
+      default_base_branch: null,
+      review_system: 'merge_request',
     });
     expect(resolveSourceControlRepository({
       repository: {
@@ -63,6 +88,7 @@ describe('git repository contract helpers', () => {
       },
     })).toEqual({
       provider: 'generic',
+      host: null,
       remote: 'origin',
       slug: null,
       default_base_branch: null,
@@ -76,6 +102,7 @@ describe('git repository contract helpers', () => {
       github_repo: 'Legacy/Repo',
     })).toEqual({
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: 'legacy/repo',
       default_base_branch: null,
@@ -422,6 +449,50 @@ describe('managed project topology contract', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain('source_control.repository.slug');
+    }
+  });
+
+  it('accepts git_versioned repositories with a declared self-hosted host', () => {
+    expect(validateManagedProjectTopology('Self-Hosted Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        repository: {
+          provider: 'gitlab',
+          host: 'gitlab.daikuan.qihoo.net',
+          remote: 'origin',
+          slug: 'group/repo',
+          review_system: 'merge_request',
+        },
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    })).toEqual({ ok: true, topology: 'git_versioned' });
+  });
+
+  it('rejects git_versioned repositories with an invalid declared host', () => {
+    const result = validateManagedProjectTopology('Bad Host Repo', {
+      source_control: {
+        topology: 'git_versioned',
+        repository: {
+          provider: 'gitlab',
+          host: 'gitlab.example.com:8443',
+          remote: 'origin',
+          slug: 'group/repo',
+          review_system: 'merge_request',
+        },
+        branch_strategy: 'issue_branch_review_merge',
+      },
+      execution: {
+        source_repo_roots: ['.'],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('invalid source_control.repository.host');
+      expect(result.message).toContain('gitlab.example.com:8443');
     }
   });
 

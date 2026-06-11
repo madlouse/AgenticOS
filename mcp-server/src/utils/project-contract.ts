@@ -15,6 +15,7 @@ export type GitReviewSystem = 'pull_request' | 'merge_request' | 'none';
 
 export interface GitRepositoryContract {
   provider: GitRepositoryProvider;
+  host: string | null;
   remote: string;
   slug: string | null;
   default_base_branch: string | null;
@@ -28,6 +29,7 @@ interface SourceControlContract {
   branch_strategy?: string;
   repository?: {
     provider?: string;
+    host?: string;
     remote?: string;
     slug?: string;
     default_base_branch?: string;
@@ -53,6 +55,18 @@ export function isGitBackedTopology(value: unknown): value is GitBackedProjectTo
 
 export function normalizeRepositorySlug(value: string): string {
   return value.trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '').toLowerCase();
+}
+
+// Hostname only (e.g. gitlab.example.com) — ports belong to the remote URL,
+// not the declared identity, so the matcher can accept any port for the host.
+const REPOSITORY_HOST_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+
+export function normalizeRepositoryHost(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function isValidRepositoryHost(value: unknown): value is string {
+  return typeof value === 'string' && REPOSITORY_HOST_PATTERN.test(normalizeRepositoryHost(value));
 }
 
 export function isValidGitRepositoryProvider(value: unknown): value is GitRepositoryProvider {
@@ -82,6 +96,7 @@ function normalizeOptionalRepositoryField(value: unknown): string | null {
 function repositoryFromLegacyGithubRepo(githubRepo: string): GitRepositoryContract {
   return {
     provider: 'github',
+    host: null,
     remote: 'origin',
     slug: normalizeRepositorySlug(githubRepo),
     default_base_branch: null,
@@ -98,11 +113,13 @@ export function resolveSourceControlRepository(contract: SourceControlContract |
   const providerValue = normalizeOptionalRepositoryField(rawRepository?.provider)?.toLowerCase() || null;
   if (providerValue && isValidGitRepositoryProvider(providerValue)) {
     const remote = normalizeOptionalRepositoryField(rawRepository?.remote) || 'origin';
+    const rawHost = normalizeOptionalRepositoryField(rawRepository?.host);
     const rawSlug = normalizeOptionalRepositoryField(rawRepository?.slug);
     const reviewSystem = normalizeOptionalRepositoryField(rawRepository?.review_system)?.toLowerCase() || null;
     const provider = providerValue;
     return {
       provider,
+      host: rawHost ? normalizeRepositoryHost(rawHost) : null,
       remote,
       slug: rawSlug ? normalizeRepositorySlug(rawSlug) : null,
       default_base_branch: normalizeOptionalRepositoryField(rawRepository?.default_base_branch),
@@ -133,6 +150,13 @@ function validateSourceControlRepository(projectName: string, contract: SourceCo
     return {
       ok: false,
       message: `Project "${projectName}" is marked git_versioned with provider="${repository.provider}" but missing source_control.repository.slug.`,
+    };
+  }
+
+  if (repository.host !== null && !isValidRepositoryHost(repository.host)) {
+    return {
+      ok: false,
+      message: `Project "${projectName}" declares invalid source_control.repository.host "${repository.host}". Use a hostname such as "gitlab.example.com" without scheme, port, or path.`,
     };
   }
 

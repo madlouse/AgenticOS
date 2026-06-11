@@ -151,6 +151,7 @@ describe('validateGuardrailRepoIdentity', () => {
       projectYamlPath: '/workspace/project/.project.yaml',
       declaredRepository: {
         provider: 'gitlab',
+        host: null,
         remote: 'origin',
         slug: 'group/subgroup/repo',
         default_base_branch: 'origin/main',
@@ -173,6 +174,7 @@ describe('validateGuardrailRepoIdentity', () => {
       projectYamlPath: '/workspace/project/.project.yaml',
       declaredRepository: {
         provider: 'gitee',
+        host: null,
         remote: 'origin',
         slug: 'owner/expected',
         default_base_branch: null,
@@ -195,6 +197,7 @@ describe('validateGuardrailRepoIdentity', () => {
       projectYamlPath: '/workspace/project/.project.yaml',
       declaredRepository: {
         provider: 'generic',
+        host: null,
         remote: 'origin',
         slug: null,
         default_base_branch: null,
@@ -231,6 +234,7 @@ describe('validateGuardrailRepoIdentity', () => {
       projectYamlPath: '/workspace/project/.project.yaml',
       declaredRepository: {
         provider: 'gitlab',
+        host: null,
         remote: 'origin',
         slug: null,
         default_base_branch: null,
@@ -253,6 +257,7 @@ describe('validateGuardrailRepoIdentity', () => {
       projectYamlPath: '/workspace/project/.project.yaml',
       declaredRepository: {
         provider: 'gitee',
+        host: null,
         remote: 'origin',
         slug: 'owner/repo',
         default_base_branch: null,
@@ -302,10 +307,115 @@ describe('validateGuardrailRepoIdentity', () => {
     expect(result.message).toContain('does not match declared source_control.github_repo');
   });
 
+  it('passes when a self-hosted gitlab host matches an scp-style remote', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'hermes-360teams',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitlab',
+        host: 'gitlab.daikuan.qihoo.net',
+        remote: 'origin',
+        slug: 'huangjianting-jk/hermes-360teams',
+        default_base_branch: 'main',
+        review_system: 'merge_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'git@gitlab.daikuan.qihoo.net:huangjianting-jk/hermes-360teams.git',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.matchedBy).toBe('git_common_repo_root');
+  });
+
+  it('passes when a self-hosted gitlab host matches an ssh remote with a non-standard port', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'hermes-360teams',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitlab',
+        host: 'gitlab.daikuan.qihoo.net',
+        remote: 'origin',
+        slug: 'huangjianting-jk/hermes-360teams',
+        default_base_branch: 'main',
+        review_system: 'merge_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'ssh://git@gitlab.daikuan.qihoo.net:2222/huangjianting-jk/hermes-360teams.git',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.matchedBy).toBe('git_common_repo_root');
+  });
+
+  it('passes when a self-hosted host matches an https remote with a port', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'hermes-360teams',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitlab',
+        host: 'gitlab.daikuan.qihoo.net',
+        remote: 'origin',
+        slug: 'huangjianting-jk/hermes-360teams',
+        default_base_branch: 'main',
+        review_system: 'merge_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'https://gitlab.daikuan.qihoo.net:8443/huangjianting-jk/hermes-360teams.git',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.matchedBy).toBe('git_common_repo_root');
+  });
+
+  it('fails when the declared self-hosted host does not match the remote host', () => {
+    const result = validateGuardrailRepoIdentity({
+      projectId: 'hermes-360teams',
+      projectYamlPath: '/workspace/project/.project.yaml',
+      declaredRepository: {
+        provider: 'gitlab',
+        host: 'gitlab.daikuan.qihoo.net',
+        remote: 'origin',
+        slug: 'huangjianting-jk/hermes-360teams',
+        default_base_branch: 'main',
+        review_system: 'merge_request',
+      },
+      declaredSourceRepoRoots: ['/workspace/source'],
+      sourceRepoRootsDeclared: true,
+      gitWorktreeRoot: '/workspace/source',
+      gitCommonRepoRoot: '/workspace/source',
+      gitRemoteOrigin: 'git@gitlab.com:huangjianting-jk/hermes-360teams.git',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('source_control.repository gitlab:huangjianting-jk/hermes-360teams (host gitlab.daikuan.qihoo.net)');
+  });
+
   it('extracts provider-specific repository slugs from common remote URL formats', () => {
     expect(extractRepositorySlugFromRemoteOrigin('git@gitlab.com:group/sub/repo.git', 'gitlab')).toBe('group/sub/repo');
     expect(extractRepositorySlugFromRemoteOrigin('https://gitee.com/owner/repo.git', 'gitee')).toBe('owner/repo');
     expect(extractRepositorySlugFromRemoteOrigin('ssh://git@github.com/owner/repo.git', 'github')).toBe('owner/repo');
     expect(extractRepositorySlugFromRemoteOrigin('file:///tmp/repo.git', 'generic')).toBeNull();
+  });
+
+  it('extracts repository slugs from self-hosted remotes when a host is declared', () => {
+    expect(extractRepositorySlugFromRemoteOrigin('git@gitlab.daikuan.qihoo.net:group/repo.git', 'gitlab', 'gitlab.daikuan.qihoo.net')).toBe('group/repo');
+    expect(extractRepositorySlugFromRemoteOrigin('ssh://git@gitlab.daikuan.qihoo.net:2222/group/repo.git', 'gitlab', 'gitlab.daikuan.qihoo.net')).toBe('group/repo');
+    expect(extractRepositorySlugFromRemoteOrigin('https://gitlab.daikuan.qihoo.net:8443/group/repo.git', 'gitlab', 'gitlab.daikuan.qihoo.net')).toBe('group/repo');
+    expect(extractRepositorySlugFromRemoteOrigin('https://gitlab.daikuan.qihoo.net/group/repo', 'gitlab', 'GitLab.Daikuan.Qihoo.Net')).toBe('group/repo');
+    // declared host replaces the provider default instead of widening it
+    expect(extractRepositorySlugFromRemoteOrigin('git@gitlab.com:group/repo.git', 'gitlab', 'gitlab.daikuan.qihoo.net')).toBeNull();
+  });
+
+  it('does not misread an ssh URL port as part of the repository slug', () => {
+    expect(extractRepositorySlugFromRemoteOrigin('ssh://git@github.com:22/owner/repo.git', 'github')).toBe('owner/repo');
   });
 });

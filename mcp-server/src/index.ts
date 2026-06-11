@@ -54,6 +54,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: 'Required when topology is git_versioned unless github_repo shorthand is supplied.',
             properties: {
               provider: { type: 'string', enum: ['github', 'gitlab', 'gitee', 'generic'] },
+              host: { type: 'string', description: 'Optional self-hosted instance hostname such as gitlab.example.com. Defaults to the provider host (github.com, gitlab.com, gitee.com).' },
               remote: { type: 'string', description: 'Git remote name. Defaults to origin.' },
               slug: { type: 'string', description: 'Slash-delimited repository path such as OWNER/REPO. Optional for provider=generic.' },
               default_base_branch: { type: 'string', description: 'Optional remote base ref such as origin/main.' },
@@ -116,6 +117,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: 'Git repository metadata for git_versioned projects.',
             properties: {
               provider: { type: 'string', enum: ['github', 'gitlab', 'gitee', 'generic'] },
+              host: { type: 'string', description: 'Optional self-hosted instance hostname such as gitlab.example.com.' },
               remote: { type: 'string' },
               slug: { type: 'string' },
               default_base_branch: { type: 'string' },

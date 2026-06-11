@@ -11,6 +11,8 @@ import {
   isGitBackedTopology,
   isValidGitRepositoryProvider,
   isValidGitReviewSystem,
+  isValidRepositoryHost,
+  normalizeRepositoryHost,
   normalizeRepositorySlug,
   validateContextPublicationPolicy,
   validateProjectKind,
@@ -62,6 +64,7 @@ function resolveRepositoryArg(topology: ProjectTopology, args: any, githubRepo?:
   if (topology === 'github_versioned') {
     return {
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: normalizeRepositorySlug(githubRepo!),
       default_base_branch: null,
@@ -75,6 +78,7 @@ function resolveRepositoryArg(topology: ProjectTopology, args: any, githubRepo?:
   if (!rawRepository && githubRepo) {
     return {
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: normalizeRepositorySlug(githubRepo),
       default_base_branch: null,
@@ -90,6 +94,10 @@ function resolveRepositoryArg(topology: ProjectTopology, args: any, githubRepo?:
     throw new Error('repository.provider must be "github", "gitlab", "gitee", or "generic" when topology is "git_versioned".');
   }
   const provider = providerValue as GitRepositoryProvider;
+  const hostValue = typeof rawRepository.host === 'string' ? rawRepository.host.trim() : '';
+  if (hostValue && !isValidRepositoryHost(hostValue)) {
+    throw new Error('repository.host must be a hostname such as "gitlab.example.com" without scheme, port, or path.');
+  }
   const slugValue = typeof rawRepository.slug === 'string' ? rawRepository.slug.trim() : '';
   if (provider !== 'generic' && !isValidRepositorySlug(slugValue)) {
     throw new Error('repository.slug must use a slash-delimited repository path such as "OWNER/REPO" when provider is not "generic".');
@@ -107,6 +115,7 @@ function resolveRepositoryArg(topology: ProjectTopology, args: any, githubRepo?:
 
   return {
     provider,
+    host: hostValue ? normalizeRepositoryHost(hostValue) : null,
     remote: remoteValue,
     slug: slugValue ? normalizeRepositorySlug(slugValue) : null,
     default_base_branch: defaultBaseBranch,
@@ -221,6 +230,7 @@ function buildProjectYaml(args: {
   const repositoryYaml = repository
     ? {
         provider: repository.provider,
+        ...(repository.host ? { host: repository.host } : {}),
         remote: repository.remote,
         ...(repository.slug ? { slug: repository.slug } : {}),
         ...(repository.default_base_branch ? { default_base_branch: repository.default_base_branch } : {}),

@@ -8,6 +8,8 @@ import {
   isArchivedReferenceProject,
   isValidGitRepositoryProvider,
   isValidGitReviewSystem,
+  isValidRepositoryHost,
+  normalizeRepositoryHost,
   normalizeRepositorySlug,
   resolveSourceControlRepository,
   validateContextPublicationPolicy,
@@ -200,6 +202,7 @@ function normalizeRepositoryArg(topology: ProjectTopology, rawRepository: unknow
     return githubRepo
       ? {
           provider: 'github',
+          host: null,
           remote: 'origin',
           slug: normalizeRepositorySlug(githubRepo),
           default_base_branch: null,
@@ -210,6 +213,7 @@ function normalizeRepositoryArg(topology: ProjectTopology, rawRepository: unknow
   if (!rawRepository && githubRepo) {
     return {
       provider: 'github',
+      host: null,
       remote: 'origin',
       slug: normalizeRepositorySlug(githubRepo),
       default_base_branch: null,
@@ -225,6 +229,10 @@ function normalizeRepositoryArg(topology: ProjectTopology, rawRepository: unknow
     throw new ProjectResolveError('INVALID_INPUT', 'repository.provider must be "github", "gitlab", "gitee", or "generic".');
   }
   const provider = providerValue as GitRepositoryProvider;
+  const hostValue = normalizeOptionalString(repository.host, 'repository.host');
+  if (hostValue && !isValidRepositoryHost(hostValue)) {
+    throw new ProjectResolveError('INVALID_INPUT', 'repository.host must be a hostname such as "gitlab.example.com" without scheme, port, or path.');
+  }
   const slugValue = normalizeOptionalString(repository.slug, 'repository.slug');
   if (provider !== 'generic' && (!slugValue || !isValidRepositorySlug(slugValue))) {
     throw new ProjectResolveError('INVALID_INPUT', 'repository.slug must use a slash-delimited repository path when provider is not "generic".');
@@ -236,6 +244,7 @@ function normalizeRepositoryArg(topology: ProjectTopology, rawRepository: unknow
     : defaultReviewSystemForProvider(provider);
   return {
     provider,
+    host: hostValue ? normalizeRepositoryHost(hostValue) : null,
     remote,
     slug: slugValue ? normalizeRepositorySlug(slugValue) : null,
     default_base_branch: normalizeOptionalString(repository.default_base_branch, 'repository.default_base_branch') || null,
