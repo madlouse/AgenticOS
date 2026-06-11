@@ -10,6 +10,9 @@ const distillationLedgerMock = vi.hoisted(() => ({
   loadPendingCaptureEntries: vi.fn(),
   markCapturesDistilledToState: vi.fn(),
 }));
+// Mock only the git-I/O half of continuity-commit-status; the real note builder
+// runs so the record response wiring (#555) is exercised end-to-end.
+const detectUncommittedContinuityMock = vi.hoisted(() => vi.fn());
 
 // Mock modules
 vi.mock('fs/promises', () => ({
@@ -53,6 +56,11 @@ vi.mock('../../utils/distillation-ledger.js', () => ({
   loadPendingCaptureEntries: distillationLedgerMock.loadPendingCaptureEntries,
   markCapturesDistilledToState: distillationLedgerMock.markCapturesDistilledToState,
 }));
+
+vi.mock('../../utils/continuity-commit-status.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/continuity-commit-status.js')>();
+  return { ...actual, detectUncommittedContinuity: detectUncommittedContinuityMock };
+});
 
 import { recordSession } from '../record.js';
 import * as fsPromises from 'fs/promises';
@@ -171,6 +179,10 @@ describe('recordSession', () => {
       path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
       markedCount: 0,
     });
+    // Default: continuity reads back as clean (no save-prompt note) so existing
+    // assertions are unaffected; individual tests opt into the dirty case.
+    detectUncommittedContinuityMock.mockReset();
+    detectUncommittedContinuityMock.mockResolvedValue([]);
     mockProjectFiles();
   });
 
@@ -270,6 +282,37 @@ describe('recordSession', () => {
       'test-project',
       expect.objectContaining({ last_recorded: expect.any(String) }),
     );
+  });
+
+  it('flags uncommitted continuity with a save prompt after a full-mode record (#555)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    detectUncommittedContinuityMock.mockResolvedValue(['.context/state.yaml', 'CLAUDE.md']);
+
+    const result = await recordSession({ summary: 'work that left state uncommitted' });
+
+    expect(result).toContain('✅ Session recorded for "Test Project"');
+    expect(result).toContain('Tracked continuity is written but NOT committed');
+    expect(result).toContain('   - .context/state.yaml');
+    expect(result).toContain('   - CLAUDE.md');
+    expect(result).toContain('Run agenticos_save to persist it to git');
+    // The check runs against the resolved project tree.
+    expect(detectUncommittedContinuityMock).toHaveBeenCalledWith(
+      '/test/path',
+      expect.arrayContaining([
+        expect.objectContaining({ displayPath: '.context/state.yaml' }),
+        expect.objectContaining({ displayPath: 'CLAUDE.md' }),
+      ]),
+    );
+  });
+
+  it('omits the save prompt when continuity reads back as committed/clean (#555)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    detectUncommittedContinuityMock.mockResolvedValue([]);
+
+    const result = await recordSession({ summary: 'work then saved' });
+
+    expect(result).toContain('✅ Session recorded for "Test Project"');
+    expect(result).not.toContain('NOT committed');
   });
 
   it('creates conversation file with correct date-based filename', async () => {

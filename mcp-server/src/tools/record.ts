@@ -20,6 +20,10 @@ import {
   markCapturesDistilledToState,
   recordCapturedDistillationEntry,
 } from '../utils/distillation-ledger.js';
+import {
+  buildUncommittedContinuityNote,
+  detectUncommittedContinuity,
+} from '../utils/continuity-commit-status.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 
 function parseArray(val: unknown): string[] {
@@ -217,6 +221,16 @@ export async function recordSession(args: any): Promise<string> {
     now,
   });
 
+  // Continuity was written to the project tree but record never commits (it is
+  // the no-git path). Surface uncommitted continuity explicitly so the operator
+  // knows it is not yet durable and must run agenticos_save (#555 / G2). This is
+  // a governance prompt, never a silent auto-commit.
+  const uncommittedContinuity = await detectUncommittedContinuity(projectPath, [
+    { absPath: statePath, displayPath: contextPolicyPlan.trackedContextDisplayPaths.state },
+    { absPath: `${projectPath}/CLAUDE.md`, displayPath: 'CLAUDE.md' },
+  ]);
+  const commitHygieneNote = buildUncommittedContinuityNote(uncommittedContinuity) ?? '';
+
   const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
   const drainNote = drainedCaptures.length > 0
     ? `\n♻️ Drained ${drainedCaptures.length} pending capture-only record(s) into tracked state\n`
@@ -227,5 +241,6 @@ export async function recordSession(args: any): Promise<string> {
     `📊 State: ${contextPolicyPlan.trackedContextDisplayPaths.state} (updated)\n` +
     `📋 CLAUDE.md: Current State synced\n` +
     drainNote +
+    commitHygieneNote +
     (routingNotes.length > 0 ? `\n${routingNotes.join('\n')}\n` : '');
 }
