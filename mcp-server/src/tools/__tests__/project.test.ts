@@ -46,6 +46,8 @@ vi.mock('../../utils/registry.js', () => ({
   patchProjectMetadata: vi.fn(),
   getAgenticOSHome: vi.fn(() => '/home/testuser/AgenticOS'),
   resolvePath: vi.fn((p: string) => p),
+  projectDisplayLabel: (project: { name: string; display_name?: string }) =>
+    (project.display_name?.trim() ? project.display_name.trim() : project.name),
 }));
 
 vi.mock('../../utils/distill.js', () => ({
@@ -2025,6 +2027,57 @@ describe('listProjects', () => {
     expect(result).toContain('Kind: project');
     // Active project should have indicator
     expect(result).toContain('project-a');
+  });
+
+  it('lists a project by its display_name while keeping the canonical name and id (#521)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'hermes-agent-kit',
+          name: 'hermes-agent-kit',
+          display_name: 'Hermes Agent Kit',
+          path: '/path/hermes',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({}));
+
+    const result = await listProjects();
+
+    // Human label is shown as the heading…
+    expect(result).toContain('**Hermes Agent Kit** (hermes-agent-kit)');
+    // …and the canonical name is still surfaced, not hidden.
+    expect(result).toContain('Canonical name: hermes-agent-kit');
+  });
+
+  it('does not show a canonical-name line when display_name is absent (#521)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({}));
+
+    const result = await listProjects();
+
+    expect(result).toContain('**AgenticOS** (agenticos)');
+    expect(result).not.toContain('Canonical name:');
   });
 
   it('fails closed when list reads an invalid project kind', async () => {

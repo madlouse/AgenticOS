@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { execFile } from 'child_process';
 import yaml from 'yaml';
-import { getAgenticOSHome, loadRegistry, patchProjectMetadata } from '../utils/registry.js';
+import { getAgenticOSHome, loadRegistry, patchProjectMetadata, projectDisplayLabel } from '../utils/registry.js';
 import { generateClaudeMd, generateAgentsMd, updateClaudeMdState, upgradeClaudeMd, CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from '../utils/distill.js';
 import { adoptStandardKit, checkStandardKitUpgrade } from '../utils/standard-kit.js';
 import { writeFile } from 'fs/promises';
@@ -738,7 +738,7 @@ export async function switchProject(args: any): Promise<string> {
   } catch {}
   const driftBlock = driftSummary.length > 0 ? `${driftSummary.join('\n')}\n` : '';
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}${driftBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  return `✅ Switched to project "${projectDisplayLabel(found)}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}${driftBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function switchOutProject(_args: any = {}): Promise<string> {
@@ -810,7 +810,10 @@ export async function listProjects(): Promise<string> {
       return `❌ ${error.message}`;
     }
     const active = p.id === sessionProject?.projectId ? '🟢 ' : '';
-    lines.push(`${active}**${p.name}** (${p.id})`);
+    lines.push(`${active}**${projectDisplayLabel(p)}** (${p.id})`);
+    if (p.display_name?.trim() && p.display_name.trim() !== p.name) {
+      lines.push(`  Canonical name: ${p.name}`);
+    }
     lines.push(`  Path: ${p.path}`);
     lines.push(`  Status: ${p.status}`);
     lines.push(`  Kind: ${projectKind}`);
@@ -884,7 +887,10 @@ export async function getStatus(args: any = {}): Promise<string> {
   }
 
   const lines: string[] = [];
-  lines.push(`# Status: ${project.name}\n`);
+  lines.push(`# Status: ${projectDisplayLabel(project)}\n`);
+  if (project.display_name?.trim() && project.display_name.trim() !== project.name) {
+    lines.push(`🏷️ Canonical name: ${project.name} (${project.id})`);
+  }
   lines.push(`🧭 Project kind: ${projectKind}`);
   const sessionState = getSessionContextState();
   if (sessionState.activeProject) {
