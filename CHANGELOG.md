@@ -10,6 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.39] — 2026-06-11
+
+### Added
+- mcp-server: `agenticos_issue_start` orchestration entrypoint drives the
+  fixed guardrail startup chain (preflight → branch_bootstrap →
+  issue_bootstrap → preflight) in one call and returns the worktree plus
+  evidence; individual guardrail tools remain available (#519).
+- mcp-server: registry projects gain an optional `display_name` distinct
+  from the canonical `name`/`id`; `agenticos_list`, the `agenticos_switch`
+  greeting, and the `agenticos_status` header show the human label while
+  surfacing the canonical name, and identity resolution stays id-based
+  (#521).
+- mcp-server: `agenticos_switch` and `agenticos_status` guard against
+  canonical-main drift by surfacing when the canonical checkout is behind
+  or diverged from its remote base (#556).
+- mcp-server: session project binding persists across MCP reconnects so a
+  server restart no longer silently drops the bound project (#516).
+
+### Fixed
+- mcp-server: guardrail preflight and PR scope check now name a shallow
+  git object store as the cause when fork-point resolution fails — with an
+  explicit `git fetch --unshallow` recovery action — instead of the generic
+  "not comparable to origin/main" message (#564).
+- mcp-server: `standard_kit_adopt`/upgrade preserves the
+  `<!-- agenticos-template: vN -->` version marker through CLAUDE.md /
+  AGENTS.md merges, so adopt no longer reports an upgrade that left the
+  generated file stale (#551).
+
 ## [0.4.38] — 2026-06-11
 
 ### Added
