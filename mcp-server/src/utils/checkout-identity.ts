@@ -83,6 +83,24 @@ export interface GitCheckoutIdentity {
 }
 
 /**
+ * Whether the checkout's shared object store is shallow (grafted history).
+ * A shallow store makes `git merge-base HEAD <remote-base>` fail even though
+ * both refs resolve, which guardrail commands depend on for fork-point
+ * resolution — and because every isolated worktree shares the same store, one
+ * external depth-limited fetch degrades all concurrent sessions (#564).
+ * Callers use this to name the real cause and the `git fetch --unshallow`
+ * recovery in BLOCK reasons instead of a generic comparability failure.
+ */
+export async function isShallowCheckout(fromDir: string): Promise<boolean> {
+  try {
+    const { stdout } = await execGit(fromDir, ['rev-parse', '--is-shallow-repository']);
+    return stdout.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve the git worktree root, common dir, and common repo root for a
  * directory in one place. Returns null when `fromDir` is not inside a git
  * repository (callers treat that as "no git-backed continuity").
