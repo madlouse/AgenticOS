@@ -173,6 +173,7 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
   }
 
   let startupContextPaths: string[] = [];
+  let resolvedWorktreeRoot: string | null = null;
 
   if (repo_path && result.target_project) {
     try {
@@ -181,6 +182,7 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
         throw new Error('failed to resolve git checkout identity for issue bootstrap');
       }
       const gitWorktreeRoot = checkout.worktreeRoot;
+      resolvedWorktreeRoot = gitWorktreeRoot;
       const gitCommonRepoRoot = checkout.commonRepoRoot;
       result.evidence.current_branch = await gitText(repo_path, ['rev-parse', '--abbrev-ref', 'HEAD']);
       result.evidence.workspace_type = await detectWorkspaceType(repo_path);
@@ -232,6 +234,7 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
   result.persistence = await persistIssueBootstrapEvidence({
     repo_path,
     project_path: result.target_project?.path || project_path,
+    worktree_path: resolvedWorktreeRoot,
     payload: {
       issue_id,
       issue_title,

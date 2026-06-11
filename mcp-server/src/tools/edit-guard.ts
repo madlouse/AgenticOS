@@ -1,7 +1,7 @@
 import { resolve } from 'path';
 import { gitText } from '../utils/exec-git.js';
 import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
-import { extractLatestIssueBootstrap, loadLatestGuardrailState, type LoadedGuardrailState } from '../utils/guardrail-evidence.js';
+import { extractLatestIssueBootstrap, loadScopedGuardrailState, type LoadedGuardrailState } from '../utils/guardrail-evidence.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 import { assessIssueBootstrapContinuity } from '../utils/issue-bootstrap-continuity.js';
 import {
@@ -185,8 +185,10 @@ export async function runEditGuard(args: EditGuardArgs): Promise<string> {
   let state: StateYamlSchema = {};
   if (result.target_project) {
     try {
-      const loadedGuardrailState = await loadLatestGuardrailState({
+      const loadedGuardrailState = await loadScopedGuardrailState({
         project_id: result.target_project.id,
+        issue_id,
+        worktree_path: result.evidence.git_worktree_root,
         committed_state_path: result.target_project.state_path,
       });
       state = loadedGuardrailState.state as StateYamlSchema;

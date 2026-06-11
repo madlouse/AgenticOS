@@ -197,6 +197,20 @@ export interface StateYamlGuardrailEvidenceState {
   [key: string]: unknown;
 }
 
+/**
+ * A single concurrency partition keyed by (issue_id, worktree_path). Each parallel
+ * issue session in its own isolated worktree gets its own partition so guardrail and
+ * issue-bootstrap evidence is never clobbered by a concurrent session.
+ */
+export interface StateYamlGuardrailPartition {
+  issue_id?: string | null;
+  worktree_path?: string | null;
+  updated_at?: string;
+  guardrail_evidence?: StateYamlGuardrailEvidenceState;
+  issue_bootstrap?: StateYamlIssueBootstrapState;
+  [key: string]: unknown;
+}
+
 /** The full shape of a standards/.context/state.yaml file. */
 export interface StateYamlSchema {
   issue_bootstrap?: StateYamlIssueBootstrapState;
@@ -205,6 +219,7 @@ export interface StateYamlSchema {
   current_task?: StateYamlCurrentTask;
   loaded_context?: StateYamlLoadedContext;
   guardrail_evidence?: StateYamlGuardrailEvidenceState;
+  partitions?: Record<string, StateYamlGuardrailPartition>;
   entry_surface_refresh?: ProjectYamlEntrySurfaceRefresh;
   [key: string]: unknown;
 }

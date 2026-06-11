@@ -38,6 +38,9 @@ vi.mock('../../utils/registry.js', () => ({
 
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   extractLatestIssueBootstrap: (state: any) => state?.issue_bootstrap?.latest || null,
+  // edit guard now reads partition-scoped guardrail state; route it to the same mock
+  // so existing scenarios drive the gate's evidence read unchanged.
+  loadScopedGuardrailState: loadLatestGuardrailStateMock,
   loadLatestGuardrailState: loadLatestGuardrailStateMock,
 }));
 

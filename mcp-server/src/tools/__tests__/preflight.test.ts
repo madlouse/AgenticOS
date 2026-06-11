@@ -49,6 +49,9 @@ const resolveGuardrailProjectTargetMock = vi.hoisted(() => vi.fn());
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistGuardrailEvidence: persistGuardrailEvidenceMock,
   extractLatestIssueBootstrap: (state: any) => state?.issue_bootstrap?.latest || null,
+  // preflight now reads partition-scoped guardrail state; route it to the same mock
+  // so existing scenarios drive the gate's evidence read unchanged.
+  loadScopedGuardrailState: loadLatestGuardrailStateMock,
   loadLatestGuardrailState: loadLatestGuardrailStateMock,
 }));
 

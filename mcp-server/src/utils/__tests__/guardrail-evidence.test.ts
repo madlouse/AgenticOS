@@ -34,6 +34,7 @@ import { loadRegistry } from '../registry.js';
 import {
   extractLatestIssueBootstrap,
   loadLatestGuardrailState,
+  loadScopedGuardrailState,
   persistGuardrailEvidence,
   persistIssueBootstrapEvidence,
 } from '../guardrail-evidence.js';
@@ -1040,5 +1041,392 @@ describe('loadLatestGuardrailState', () => {
         },
       },
     } as any)?.issue_id).toBe('294');
+  });
+});
+
+describe('guardrail concurrency partition isolation', () => {
+  const RUNTIME_STATE_PATH = '/runtime/.agent-workspace/projects/agenticos/guardrail-state.yaml';
+  // Worktree roots for two parallel issue sessions, mirroring real concurrent work
+  // such as #508/#509 each running in its own isolated worktree.
+  const WORKTREE_508 = '/workspace/worktrees/agenticos/agenticos-508';
+  const WORKTREE_509 = '/workspace/worktrees/agenticos/agenticos-509';
+
+  // In-memory filesystem so sequential persists accumulate into one shared runtime
+  // state file (faithful to how concurrent sessions share guardrail-state.yaml).
+  let files: Map<string, string>;
+  let lockDirs: Set<string>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    files = new Map();
+    lockDirs = new Set();
+
+    yamlMock.parse.mockImplementation((content: string) => {
+      try {
+        return JSON.parse(content);
+      } catch {
+        return undefined;
+      }
+    });
+    yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'agenticos',
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/workspace/projects/agenticos',
+          status: 'active',
+          created: '2026-03-23',
+          last_accessed: '2026-03-23T00:00:00.000Z',
+        },
+      ],
+    });
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({ blocked: false });
+    accessMock.mockResolvedValue(undefined);
+    statMock.mockResolvedValue({ mtimeMs: Date.now() });
+
+    mkdirMock.mockImplementation(async (path: string) => {
+      const text = String(path);
+      if (text.endsWith('/guardrail-state.lock')) {
+        if (lockDirs.has(text)) {
+          throw new Error('EEXIST');
+        }
+        lockDirs.add(text);
+      }
+      return undefined;
+    });
+    rmMock.mockImplementation(async (path: string) => {
+      const text = String(path);
+      lockDirs.delete(text);
+      files.delete(text);
+      return undefined;
+    });
+    writeFileMock.mockImplementation(async (path: string, content: string) => {
+      files.set(String(path), String(content));
+      return undefined;
+    });
+    renameMock.mockImplementation(async (from: string, to: string) => {
+      const content = files.get(String(from));
+      files.delete(String(from));
+      if (content !== undefined) {
+        files.set(String(to), content);
+      }
+      return undefined;
+    });
+    readFileMock.mockImplementation(async (path: string) => {
+      const text = String(path);
+      if (text.endsWith('/.project.yaml')) {
+        return defaultProjectYaml();
+      }
+      if (files.has(text)) {
+        return files.get(text)!;
+      }
+      throw new Error(`missing: ${text}`);
+    });
+  });
+
+  function readRuntimeState(): any {
+    const content = files.get(RUNTIME_STATE_PATH);
+    return content ? JSON.parse(content) : null;
+  }
+
+  it('writes guardrail evidence into a (issue_id, worktree_path) partition alongside the legacy slot', async () => {
+    const result = await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      issue_id: '508',
+      worktree_path: WORKTREE_508,
+      payload: {
+        issue_id: '508',
+        result: { status: 'PASS' },
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    const state = readRuntimeState();
+    // Legacy single slot is still mirrored for back-compat readers.
+    expect(state.guardrail_evidence.preflight.issue_id).toBe('508');
+    // Isolated partition keyed by issue + worktree.
+    const partitionKey = `issue=508::worktree=${WORKTREE_508}`;
+    expect(state.partitions[partitionKey].issue_id).toBe('508');
+    expect(state.partitions[partitionKey].worktree_path).toBe(WORKTREE_508);
+    expect(state.partitions[partitionKey].guardrail_evidence.preflight.issue_id).toBe('508');
+    expect(state.partitions[partitionKey].guardrail_evidence.preflight.result.status).toBe('PASS');
+  });
+
+  it('writes issue bootstrap evidence into the matching partition alongside the legacy slot', async () => {
+    const result = await persistIssueBootstrapEvidence({
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      worktree_path: WORKTREE_508,
+      payload: {
+        issue_id: '508',
+        issue_title: 'Session A',
+        repo_path: WORKTREE_508,
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    const state = readRuntimeState();
+    expect(state.issue_bootstrap.latest.issue_id).toBe('508');
+    const partitionKey = `issue=508::worktree=${WORKTREE_508}`;
+    expect(state.partitions[partitionKey].issue_bootstrap.latest.issue_id).toBe('508');
+    expect(state.partitions[partitionKey].issue_bootstrap.latest.issue_title).toBe('Session A');
+  });
+
+  it('keeps each concurrent session evidence isolated so a later writer does not trigger a false BLOCK', async () => {
+    // Session A (#508) records bootstrap + PASS preflight in its worktree.
+    await persistIssueBootstrapEvidence({
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      worktree_path: WORKTREE_508,
+      payload: { issue_id: '508', issue_title: 'Session A', repo_path: WORKTREE_508, current_branch: 'fix/508' },
+    });
+    await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      issue_id: '508',
+      worktree_path: WORKTREE_508,
+      payload: { issue_id: '508', result: { status: 'PASS' } },
+    });
+
+    // Session B (#509) then records its own bootstrap + preflight, clobbering the
+    // shared legacy slot — this is exactly the sequence that used to lose A's evidence.
+    await persistIssueBootstrapEvidence({
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      worktree_path: WORKTREE_509,
+      payload: { issue_id: '509', issue_title: 'Session B', repo_path: WORKTREE_509, current_branch: 'fix/509' },
+    });
+    await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      issue_id: '509',
+      worktree_path: WORKTREE_509,
+      payload: { issue_id: '509', result: { status: 'PASS' } },
+    });
+
+    // Session A's scoped read still returns A's own evidence, not B's.
+    const scopedA = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: WORKTREE_508,
+    });
+    expect(scopedA.state.issue_bootstrap?.latest?.issue_id).toBe('508');
+    expect(scopedA.state.issue_bootstrap?.latest?.current_branch).toBe('fix/508');
+    expect((scopedA.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+    expect((scopedA.state.guardrail_evidence?.preflight as any)?.result?.status).toBe('PASS');
+
+    // Session B's scoped read returns B's evidence.
+    const scopedB = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '509',
+      worktree_path: WORKTREE_509,
+    });
+    expect(scopedB.state.issue_bootstrap?.latest?.issue_id).toBe('509');
+    expect((scopedB.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('509');
+
+    // The legacy single slot reflects only the last writer (#509) — documenting why
+    // the global latest is unsafe for concurrent sessions and why partitions are needed.
+    const latest = await loadLatestGuardrailState({ project_id: 'agenticos' });
+    expect(latest.state.issue_bootstrap?.latest?.issue_id).toBe('509');
+    expect((latest.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('509');
+  });
+
+  it('does not match another worktree partition for the same issue id', async () => {
+    await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      issue_id: '508',
+      worktree_path: WORKTREE_508,
+      payload: { issue_id: '508', result: { status: 'PASS' } },
+    });
+
+    // Same issue id but a different worktree path has no partition yet, so the scoped
+    // read falls back to the legacy slot rather than borrowing the other worktree's.
+    const scoped = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: '/workspace/worktrees/agenticos/agenticos-508-other',
+    });
+    // Fallback returns the legacy mirror (same evidence here), proving the lookup is
+    // partition-keyed and does not throw when a partition is absent.
+    expect((scoped.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+  });
+
+  it('skips partition writes when the scope is incomplete and falls back to legacy reads', async () => {
+    // No worktree_path => incomplete scope => legacy-only persistence.
+    await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      issue_id: '508',
+      payload: { issue_id: '508', result: { status: 'PASS' } },
+    });
+
+    const state = readRuntimeState();
+    expect(state.guardrail_evidence.preflight.issue_id).toBe('508');
+    expect(state.partitions).toBeUndefined();
+
+    // A scoped read with an incomplete scope falls back to legacy merged behavior.
+    const scoped = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: undefined,
+    });
+    expect((scoped.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+  });
+
+  it('normalizes worktree paths so equivalent paths resolve to the same partition', async () => {
+    await persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: '/workspace/projects/agenticos/mcp-server',
+      issue_id: '508',
+      worktree_path: WORKTREE_508,
+      payload: { issue_id: '508', result: { status: 'PASS' } },
+    });
+
+    // A non-normalized but equivalent worktree path resolves to the same partition.
+    const scoped = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: `${WORKTREE_508}/./`,
+    });
+    expect((scoped.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+  });
+});
+
+describe('loadScopedGuardrailState fallbacks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    yamlMock.parse.mockImplementation((content: string) => {
+      try {
+        return JSON.parse(content);
+      } catch {
+        return undefined;
+      }
+    });
+  });
+
+  it('returns partition-scoped evidence and reads committed state when committed_state_path is provided', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/guardrail-state.yaml')) {
+        return JSON.stringify({
+          // Legacy slot belongs to a different (later) issue.
+          guardrail_evidence: { preflight: { issue_id: '999' } },
+          issue_bootstrap: { latest: { issue_id: '999' } },
+          partitions: {
+            'issue=508::worktree=/wt/508': {
+              issue_id: '508',
+              worktree_path: '/wt/508',
+              guardrail_evidence: { preflight: { issue_id: '508', result: { status: 'PASS' } } },
+              issue_bootstrap: { latest: { issue_id: '508' } },
+            },
+          },
+        });
+      }
+      if (String(path).endsWith('/standards/.context/state.yaml')) {
+        return JSON.stringify({ guardrail_evidence: { branch_bootstrap: { issue_id: '508' } } });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+
+    const loaded = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: '/wt/508',
+      committed_state_path: '/workspace/projects/agenticos/standards/.context/state.yaml',
+    });
+
+    expect(loaded.source).toBe('runtime');
+    expect((loaded.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+    expect(loaded.state.issue_bootstrap?.latest?.issue_id).toBe('508');
+  });
+
+  it('falls back to legacy merged state when the requested partition is absent', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/guardrail-state.yaml')) {
+        return JSON.stringify({
+          guardrail_evidence: { preflight: { issue_id: '508' } },
+          issue_bootstrap: { latest: { issue_id: '508' } },
+        });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+
+    const loaded = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: '/wt/missing',
+    });
+
+    expect(loaded.source).toBe('runtime');
+    expect((loaded.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+  });
+
+  it('treats a whitespace worktree path as an incomplete scope and falls back to legacy', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/guardrail-state.yaml')) {
+        return JSON.stringify({ guardrail_evidence: { preflight: { issue_id: '508' } } });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+
+    const loaded = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: '   ',
+    });
+
+    expect((loaded.state.guardrail_evidence?.preflight as any)?.issue_id).toBe('508');
+  });
+
+  it('treats a null issue id as an incomplete scope and falls back to legacy', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/guardrail-state.yaml')) {
+        return JSON.stringify({ issue_bootstrap: { latest: { issue_id: '508' } } });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+
+    const loaded = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: null,
+      worktree_path: '/wt/508',
+    });
+
+    expect(loaded.state.issue_bootstrap?.latest?.issue_id).toBe('508');
+  });
+
+  it('falls back to committed state when runtime state is absent', async () => {
+    readFileMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/guardrail-state.yaml')) {
+        throw new Error(`missing: ${path}`);
+      }
+      if (String(path).endsWith('/standards/.context/state.yaml')) {
+        return JSON.stringify({ issue_bootstrap: { latest: { issue_id: '508' } } });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+
+    const loaded = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: '/wt/508',
+      committed_state_path: '/workspace/projects/agenticos/standards/.context/state.yaml',
+    });
+
+    expect(loaded.source).toBe('committed');
+    expect(loaded.state.issue_bootstrap?.latest?.issue_id).toBe('508');
+  });
+
+  it('returns an empty result when neither runtime nor committed state exists', async () => {
+    readFileMock.mockRejectedValue(new Error('missing'));
+
+    const loaded = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '508',
+      worktree_path: '/wt/508',
+    });
+
+    expect(loaded.source).toBeNull();
+    expect(loaded.state).toEqual({});
   });
 });
