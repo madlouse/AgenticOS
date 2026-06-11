@@ -37,6 +37,7 @@ import {
 import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../utils/worktree-topology.js';
 import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 import { assessKnowledgeEvolutionHealth, buildKnowledgeEvolutionStatusLines } from '../utils/knowledge-evolution-health.js';
+import { assessCanonicalMainDrift, buildCanonicalMainDriftStatusLines } from '../utils/canonical-main-drift.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -724,7 +725,20 @@ export async function switchProject(args: any): Promise<string> {
   } catch {}
   const freshnessBlock = freshnessSummary.length > 0 ? `\n${freshnessSummary.join('\n')}\n` : '';
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  // Canonical-main drift guard (#556): on entering the canonical main checkout,
+  // surface a behind-origin baseline and any real (non-runtime) working-tree
+  // changes that belong in an isolated issue worktree. No-ops elsewhere.
+  let driftSummary: string[] = [];
+  try {
+    driftSummary = buildCanonicalMainDriftStatusLines(await assessCanonicalMainDrift({
+      repoPath: sessionPath,
+      projectPath: sessionPath,
+      projectYaml,
+    }));
+  } catch {}
+  const driftBlock = driftSummary.length > 0 ? `${driftSummary.join('\n')}\n` : '';
+
+  return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}${driftBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function switchOutProject(_args: any = {}): Promise<string> {
@@ -937,6 +951,15 @@ export async function getStatus(args: any = {}): Promise<string> {
       repoPath: resolved.projectPath,
       projectYaml: resolved.projectYaml,
       state,
+    })));
+  } catch {}
+  // Canonical-main drift guard (#556): warn when status is run on a behind /
+  // dirty canonical main checkout. No-ops on isolated worktrees and feature branches.
+  try {
+    lines.push(...buildCanonicalMainDriftStatusLines(await assessCanonicalMainDrift({
+      repoPath: resolved.projectPath,
+      projectPath: resolved.projectPath,
+      projectYaml: resolved.projectYaml,
     })));
   } catch {}
 
