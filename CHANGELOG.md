@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.38] — 2026-06-11
+
+### Added
+- mcp-server: optional `source_control.repository.host` contract field so
+  projects on self-hosted GitLab/Gitee/GitHub instances pass guardrail
+  remote-identity matching instead of downgrading to provider "generic";
+  the declared host is preferred over the provider default, ssh:// and
+  https remotes tolerate non-standard ports, and the field round-trips
+  through `agenticos_init`, `agenticos_project_ensure`, and
+  `.project.yaml` (#553).
+- mcp-server: full-mode `agenticos_record` now ends with an explicit
+  save-prompt note when just-written continuity surfaces
+  (`.context/state.yaml`, `CLAUDE.md`) are uncommitted, so durable
+  persistence via `agenticos_save` is not silently skipped (#555).
+
+### Fixed
+- mcp-server: `agenticos_worktree_cleanup` now detects squash-merged
+  branches by checking merged PR state against `origin/<base>` (with the
+  ancestor check as fallback when `gh` is unavailable) and never
+  auto-removes dirty worktrees, surfacing them as "Skipped (dirty)" for
+  manual review (#554).
+
 ## [0.4.37] — 2026-06-10
 
 ### Added
