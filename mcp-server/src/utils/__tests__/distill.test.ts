@@ -239,6 +239,39 @@ Old guardrail text
       await unlink(tempPath);
     }
   });
+
+  it('upgradeClaudeMd lifts a stale section-marked file to the current version (#551)', async () => {
+    // The #551 shape: section bodies present and marked, but a stale (v13) marker.
+    const existingContent = `<!-- agenticos-template: v13 -->
+# CLAUDE.md — Hermes
+
+<!-- agenticos-section: canonical-policy -->
+## Canonical Policy
+Stale policy body
+<!-- /agenticos-section -->
+
+<!-- agenticos-section: project-notes -->
+## Project Notes
+- keep this project-specific note
+<!-- /agenticos-section -->
+`;
+    const tempPath = join(tmpdir(), `test-claude-md-551-${Date.now()}.md`);
+    await writeFile(tempPath, existingContent, 'utf-8');
+
+    try {
+      const result = upgradeClaudeMd(tempPath, 'Hermes', 'Hermes project');
+
+      // The detector must now read it as current, not stale.
+      expect(extractTemplateVersion(result)).toBe(16);
+      expect(result).toContain('<!-- agenticos-template: v16 -->');
+      // Project-specific content is still preserved through the upgrade.
+      expect(result).toContain('keep this project-specific note');
+      // And it is genuinely different from the stale input (a real write happens).
+      expect(result).not.toBe(existingContent);
+    } finally {
+      await unlink(tempPath);
+    }
+  });
 });
 
 describe('merge sections edge cases', () => {
@@ -291,6 +324,26 @@ Old runtime notes
     // Non-standard section should be preserved
     expect(result).toContain('Custom Project Section');
     expect(result).toContain('Project-specific bullet');
+  });
+
+  it('mergeSections keeps the current version marker + title header (#551 regression)', () => {
+    const template = generateClaudeMd('Test', '');
+    const existing = `<!-- agenticos-template: v13 -->
+# CLAUDE.md — Test
+
+<!-- agenticos-section: canonical-policy -->
+## Canonical Policy
+Old policy content
+<!-- /agenticos-section -->
+`;
+
+    const result = mergeSections(template, existing);
+
+    // Without the header the merged file carries no template marker, so the
+    // detector reports it stale forever and adopt "upgrades" to still-stale content.
+    expect(result).toContain('<!-- agenticos-template: v16 -->');
+    expect(extractTemplateVersion(result)).toBe(16);
+    expect(result).toContain('# CLAUDE.md — Test');
   });
 
   it('mergeSections replaces all standard sections', () => {
