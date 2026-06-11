@@ -2,6 +2,11 @@ import { existsSync } from 'fs';
 import { isAbsolute, normalize, relative } from 'path';
 import { execFile } from 'child_process';
 import { getAgenticOSHome } from './registry.js';
+import {
+  clearPersistedSessionBinding,
+  persistSessionBinding,
+  restoreSessionBinding,
+} from './session-binding-store.js';
 
 export interface SessionProjectBinding {
   projectId: string;
@@ -79,11 +84,31 @@ export function bindSessionProject(
   currentSessionProject = fullBinding;
   expectedSessionWorkdir = fullBinding.projectPath;
   sessionSwitchedOutAt = null;
+  // Persist so the binding survives an MCP server reconnect (#516).
+  persistSessionBinding({
+    projectId: fullBinding.projectId,
+    projectName: fullBinding.projectName,
+    projectPath: fullBinding.projectPath,
+    boundAt: fullBinding.boundAt,
+  });
   return fullBinding;
 }
 
 export function getSessionProjectBinding(): SessionProjectBinding | null {
-  return currentSessionProject;
+  if (currentSessionProject) return currentSessionProject;
+  // An explicit switch-out in this process means "no active project" — do not
+  // resurrect it from the sidecar (the sidecar was already cleared on switch-out).
+  if (sessionSwitchedOutAt) return null;
+  // Lazy restore after an MCP reconnect: in-memory state was wiped but this
+  // session's binding was persisted to the runtime sidecar. Rehydrate it so
+  // agenticos_status / agenticos_record resolve the project without an explicit arg.
+  const restored = restoreSessionBinding();
+  if (restored) {
+    currentSessionProject = { ...restored };
+    expectedSessionWorkdir = restored.projectPath;
+    return currentSessionProject;
+  }
+  return null;
 }
 
 export function getSessionContextState(): SessionContextState {
@@ -110,10 +135,26 @@ export function switchOutSessionProject(): SwitchOutSessionResult {
   previousSessionProject = null;
   expectedSessionWorkdir = result.targetWorkdir;
   sessionSwitchedOutAt = new Date().toISOString();
+  // A deliberate switch-out ends the binding; drop the persisted sidecar so a
+  // later reconnect does not restore it.
+  clearPersistedSessionBinding();
   return result;
 }
 
 export function clearSessionProjectBinding(): void {
+  currentSessionProject = null;
+  previousSessionProject = null;
+  sessionOriginContext = null;
+  expectedSessionWorkdir = null;
+  sessionSwitchedOutAt = null;
+  clearPersistedSessionBinding();
+}
+
+/**
+ * Test seam: wipe only the in-memory session state, leaving any persisted
+ * sidecar intact, to simulate an MCP server reconnect (#516).
+ */
+export function __resetInMemorySessionForTests(): void {
   currentSessionProject = null;
   previousSessionProject = null;
   sessionOriginContext = null;
