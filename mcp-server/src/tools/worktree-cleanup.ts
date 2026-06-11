@@ -78,14 +78,50 @@ function parseWorktreeListPorcelain(output: string): ParsedWorktreeRecord[] {
   return records;
 }
 
-async function isBranchMerged(repoPath: string, branchName: string | null, baseBranch: string): Promise<boolean> {
+async function isBranchMerged(repoPath: string, branchName: string | null, compareRef: string): Promise<boolean> {
   if (!branchName) return false;
   try {
-    await runGit(repoPath, ['merge-base', '--is-ancestor', branchName, baseBranch]);
+    await runGit(repoPath, ['merge-base', '--is-ancestor', branchName, compareRef]);
     return true;
   } catch {
     return false;
   }
+}
+
+/** OWNER/REPO from the origin remote, or null if it cannot be determined. */
+async function detectRepoSlug(repoPath: string): Promise<string | null> {
+  try {
+    const url = await runGit(repoPath, ['remote', 'get-url', 'origin']);
+    const match = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?\/?$/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the branch's PR is merged. Returns true/false, or null when the PR
+ * state cannot be determined (gh missing/unauthed/offline) — callers fall back
+ * to the ancestor-merge check. This is what makes squash-merged worktrees (whose
+ * tips are not ancestors of main) detectable as done.
+ */
+async function isBranchMergedViaPr(slug: string | null, branchName: string | null): Promise<boolean | null> {
+  if (!slug || !branchName) return null;
+  try {
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['pr', 'list', '-R', slug, '--head', branchName, '--state', 'merged', '--json', 'number', '--limit', '1'],
+      { timeout: 15000 },
+    );
+    const parsed = JSON.parse(stdout || '[]');
+    return Array.isArray(parsed) && parsed.length > 0;
+  } catch {
+    return null;
+  }
+}
+
+function isDirtyWorktreeRemovalError(message: string): boolean {
+  return /contains modified or untracked files|use .*--force|is dirty/i.test(message);
 }
 
 export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<string> {
@@ -121,8 +157,14 @@ export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<str
     const worktrees = parseWorktreeListPorcelain(worktreeOutput);
     const canonicalRoot = normalizePath(await runGit(repo_path, ['rev-parse', '--show-toplevel']));
 
-    // Determine base branch for merge detection
+    // Determine base branch for merge detection and compare against origin so
+    // detection is not fooled by a stale local main.
     const baseBranch = await runGit(repo_path, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => 'main');
+    await runGit(repo_path, ['fetch', 'origin', baseBranch]).catch(() => {});
+    const compareRef = await runGit(repo_path, ['rev-parse', '--verify', '--quiet', `origin/${baseBranch}`])
+      .then(() => `origin/${baseBranch}`)
+      .catch(() => baseBranch);
+    const repoSlug = await detectRepoSlug(repo_path);
 
     // Find worktrees to remove
     for (const wt of worktrees) {
@@ -140,25 +182,43 @@ export async function runWorktreeCleanup(args: WorktreeCleanupArgs): Promise<str
         continue;
       }
 
-      // Check if worktree branch is merged into base branch
-      const isMerged = await isBranchMerged(repo_path, wt.branch, baseBranch);
+      // A worktree is "done" when its branch is an ancestor of origin/base
+      // (regular merge) OR its PR is merged (squash merge, where the tip is not
+      // an ancestor). The PR check is what unblocks squash-merge workflows.
+      const ancestorMerged = await isBranchMerged(repo_path, wt.branch, compareRef);
+      const prMerged = ancestorMerged ? false : await isBranchMergedViaPr(repoSlug, wt.branch);
+      const done = ancestorMerged || prMerged === true;
 
-      if (isMerged) {
-        if (dry_run) {
-          result.notes.push(`[DRY_RUN] Would remove: ${wt.path} (branch: ${wt.branch})`);
-        } else {
-          try {
-            await runGit(repo_path, ['worktree', 'remove', wt.path]);
-            result.removed_worktrees.push(wt.path);
-            result.notes.push(`Removed worktree: ${wt.path}`);
-          } catch (error) {
-            result.errors.push(`Failed to remove ${wt.path}: ${error instanceof Error ? error.message : 'unknown error'}`);
-            result.remaining_worktrees.push(wt.path);
-          }
-        }
-      } else {
+      if (!done) {
         result.remaining_worktrees.push(wt.path);
-        result.notes.push(`Skipped (not merged): ${wt.path} (branch: ${wt.branch})`);
+        const reason = prMerged === null
+          ? 'not merged (PR state unknown — gh unavailable)'
+          : 'not merged';
+        result.notes.push(`Skipped (${reason}): ${wt.path} (branch: ${wt.branch})`);
+        continue;
+      }
+
+      const doneVia = ancestorMerged ? 'merged' : 'PR merged (squash)';
+      if (dry_run) {
+        result.notes.push(`[DRY_RUN] Would remove: ${wt.path} (branch: ${wt.branch}, ${doneVia})`);
+        continue;
+      }
+
+      try {
+        // No --force: git refuses to remove a worktree with uncommitted or
+        // untracked changes, which is the safety floor we want.
+        await runGit(repo_path, ['worktree', 'remove', wt.path]);
+        result.removed_worktrees.push(wt.path);
+        result.notes.push(`Removed worktree (${doneVia}): ${wt.path}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown error';
+        result.remaining_worktrees.push(wt.path);
+        if (isDirtyWorktreeRemovalError(message)) {
+          // Done-but-dirty: never auto-remove; surface for manual review.
+          result.notes.push(`Skipped (dirty — has uncommitted/untracked changes): ${wt.path} (branch: ${wt.branch})`);
+        } else {
+          result.errors.push(`Failed to remove ${wt.path}: ${message}`);
+        }
       }
     }
 
