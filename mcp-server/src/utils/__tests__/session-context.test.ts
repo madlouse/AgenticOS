@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
+  __resetInMemorySessionForTests,
   alignPwd,
   bindSessionProject,
   checkIsGitRepo,
@@ -14,6 +15,7 @@ import {
   validatePathSecurity,
   validatePathInAgenticosHome,
 } from '../session-context.js';
+import { __setSessionBindingStoreRootForTests } from '../session-binding-store.js';
 
 const execFileMock = vi.hoisted(() => vi.fn());
 const agenticosHomeMock = vi.hoisted(() => ({ value: '/test/home' }));
@@ -174,6 +176,55 @@ describe('session-context', () => {
       });
       const binding = getSessionProjectBinding();
       expect(binding?.projectId).toBe('p1');
+    });
+  });
+
+  describe('persistence across MCP reconnect (#516)', () => {
+    let storeRoot: string;
+
+    beforeEach(() => {
+      // A real store root lifts the VITEST no-op guard so persistence runs.
+      storeRoot = join(tmpdir(), `agenticos-reconnect-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(storeRoot, { recursive: true });
+      __setSessionBindingStoreRootForTests(storeRoot);
+    });
+
+    afterEach(() => {
+      __setSessionBindingStoreRootForTests(null);
+      rmSync(storeRoot, { recursive: true, force: true });
+    });
+
+    it('restores the bound project after the in-memory state is wiped (reconnect)', () => {
+      bindSessionProject({
+        projectId: 'agenticos',
+        projectName: 'AgenticOS',
+        projectPath: '/test/home/projects/agenticos',
+      });
+      // Simulate an MCP server reconnect: process memory is gone, sidecar remains.
+      __resetInMemorySessionForTests();
+
+      const restored = getSessionProjectBinding();
+      expect(restored?.projectId).toBe('agenticos');
+      expect(restored?.projectPath).toBe('/test/home/projects/agenticos');
+      // And it is now rehydrated into in-memory state for subsequent calls.
+      expect(getSessionContextState().activeProject?.projectId).toBe('agenticos');
+      expect(getSessionContextState().expectedWorkdir).toBe('/test/home/projects/agenticos');
+    });
+
+    it('returns null on reconnect when nothing was ever bound', () => {
+      __resetInMemorySessionForTests();
+      expect(getSessionProjectBinding()).toBeNull();
+    });
+
+    it('does not restore after a deliberate switch-out followed by reconnect', () => {
+      bindSessionProject({
+        projectId: 'agenticos',
+        projectName: 'AgenticOS',
+        projectPath: '/test/home/projects/agenticos',
+      });
+      switchOutSessionProject(); // clears the sidecar
+      __resetInMemorySessionForTests();
+      expect(getSessionProjectBinding()).toBeNull();
     });
   });
 
