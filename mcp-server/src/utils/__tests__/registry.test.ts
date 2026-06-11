@@ -58,6 +58,7 @@ import {
   patchProjectMetadata,
   getAgenticOSHome,
   getCanonicalAgenticosHome,
+  projectDisplayLabel,
   MISSING_AGENTICOS_HOME_MESSAGE,
 } from '../registry.js';
 import { detectCanonicalMainWriteProtection } from '../canonical-main-guard.js';
@@ -345,6 +346,20 @@ describe('registry utilities', () => {
       expect(writtenContent).toContain('last_accessed: 2025-01-01T12:00:00.000Z');
       expect(fsPromisesMock.rename).toHaveBeenCalled();
       expect(fsPromisesMock.rm).toHaveBeenCalled();
+    });
+  });
+
+  describe('projectDisplayLabel (#521)', () => {
+    it('returns display_name when set', () => {
+      expect(projectDisplayLabel({ name: 'hermes-agent-kit', display_name: 'Hermes Agent Kit' })).toBe('Hermes Agent Kit');
+    });
+
+    it('falls back to the canonical name when display_name is absent', () => {
+      expect(projectDisplayLabel({ name: 'agenticos' })).toBe('agenticos');
+    });
+
+    it('falls back to the canonical name when display_name is blank', () => {
+      expect(projectDisplayLabel({ name: 'agenticos', display_name: '   ' })).toBe('agenticos');
     });
   });
 });

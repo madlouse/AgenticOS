@@ -74,12 +74,22 @@ function getRegistryPath(): string {
 
 export interface Project {
   id: string;
-  name: string;
+  name: string; // canonical name/slug; identity resolution is id-based, never on this
+  display_name?: string; // optional human-facing label, distinct from canonical name (#521)
   path: string; // stored as relative path in YAML; resolved to absolute at runtime
   status: 'active' | 'archived';
   created: string;
   last_accessed: string;
   last_recorded?: string; // ISO timestamp of last agenticos_record call
+}
+
+/**
+ * Human-facing label for a project: the explicit display_name when set, else the
+ * canonical name. Identity (id/name/path) is unaffected — this is display only (#521).
+ */
+export function projectDisplayLabel(project: Pick<Project, 'name' | 'display_name'>): string {
+  const display = project.display_name?.trim();
+  return display && display.length > 0 ? display : project.name;
 }
 
 export interface Registry {

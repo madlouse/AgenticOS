@@ -48,6 +48,8 @@ vi.mock('../../utils/registry.js', () => ({
   patchProjectMetadata: vi.fn(),
   getAgenticOSHome: vi.fn(() => '/home/testuser/AgenticOS'),
   resolvePath: vi.fn((p: string) => p),
+  projectDisplayLabel: (project: { name: string; display_name?: string }) =>
+    (project.display_name?.trim() ? project.display_name.trim() : project.name),
 }));
 
 vi.mock('../../utils/distill.js', () => ({

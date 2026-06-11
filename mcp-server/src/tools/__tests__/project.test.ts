@@ -46,6 +46,8 @@ vi.mock('../../utils/registry.js', () => ({
   patchProjectMetadata: vi.fn(),
   getAgenticOSHome: vi.fn(() => '/home/testuser/AgenticOS'),
   resolvePath: vi.fn((p: string) => p),
+  projectDisplayLabel: (project: { name: string; display_name?: string }) =>
+    (project.display_name?.trim() ? project.display_name.trim() : project.name),
 }));
 
 vi.mock('../../utils/distill.js', () => ({
@@ -2027,6 +2029,57 @@ describe('listProjects', () => {
     expect(result).toContain('project-a');
   });
 
+  it('lists a project by its display_name while keeping the canonical name and id (#521)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'hermes-agent-kit',
+          name: 'hermes-agent-kit',
+          display_name: 'Hermes Agent Kit',
+          path: '/path/hermes',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({}));
+
+    const result = await listProjects();
+
+    // Human label is shown as the heading…
+    expect(result).toContain('**Hermes Agent Kit** (hermes-agent-kit)');
+    // …and the canonical name is still surfaced, not hidden.
+    expect(result).toContain('Canonical name: hermes-agent-kit');
+  });
+
+  it('does not show a canonical-name line when display_name is absent (#521)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'agenticos',
+          name: 'AgenticOS',
+          path: '/path/a',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockResolvedValue(JSON.stringify({}));
+
+    const result = await listProjects();
+
+    expect(result).toContain('**AgenticOS** (agenticos)');
+    expect(result).not.toContain('Canonical name:');
+  });
+
   it('fails closed when list reads an invalid project kind', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',
@@ -2207,6 +2260,47 @@ describe('getStatus', () => {
     expect(result).toContain('Expected workdir: unknown');
     expect(result).toContain('Origin cwd: unknown');
     expect(result).toContain('Origin warning: Path must be absolute');
+  });
+
+  it('shows the display label and canonical name in the status header when display_name is set (#521)', async () => {
+    bindSessionProject({
+      projectId: 'hermes-agent-kit',
+      projectName: 'hermes-agent-kit',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'hermes-agent-kit',
+      projects: [
+        {
+          id: 'hermes-agent-kit',
+          name: 'hermes-agent-kit',
+          display_name: 'Hermes Agent Kit',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    mockStatusReads(
+      {
+        meta: { id: 'hermes-agent-kit', name: 'hermes-agent-kit' },
+        agenticos: { project_kind: 'project' },
+        source_control: { topology: 'local_directory_only' },
+      },
+      {
+        source_control: { topology: 'local_directory_only' },
+      }
+    );
+
+    const result = await getStatus();
+
+    expect(result).toContain('# Status: Hermes Agent Kit');
+    expect(result).toContain('Canonical name: hermes-agent-kit (hermes-agent-kit)');
   });
 
   it('returns status for the resolved session project', async () => {
@@ -3668,6 +3762,59 @@ describe('getStatus', () => {
 
     expect(result).toContain('No bootstrap state');
     expect(result).not.toContain('Bootstrap Issues');
+  });
+
+  it('shows the display_name header and a canonical-name line in status (#521)', async () => {
+    bindSessionProject({
+      projectId: 'hermes-agent-kit',
+      projectName: 'hermes-agent-kit',
+      projectPath: '/test/path',
+    });
+
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: 'hermes-agent-kit',
+      projects: [
+        {
+          id: 'hermes-agent-kit',
+          name: 'hermes-agent-kit',
+          display_name: 'Hermes Agent Kit',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    fsPromisesMock.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/.project.yaml')) {
+        return JSON.stringify({
+          meta: { id: 'hermes-agent-kit', name: 'hermes-agent-kit' },
+          source_control: { topology: 'local_directory_only' },
+        });
+      }
+      if (path.endsWith('/.context/state.yaml')) {
+        return JSON.stringify({
+          current_task: { title: 'work', status: 'active' },
+          working_memory: { pending: [], decisions: [] },
+        });
+      }
+      throw new Error(`missing: ${path}`);
+    });
+    loadLatestGuardrailStateMock.mockResolvedValue({
+      source: 'committed',
+      state: {
+        current_task: { title: 'work', status: 'active' },
+        working_memory: { pending: [], decisions: [] },
+      },
+      state_path: '/test/path/.context/state.yaml',
+    });
+
+    const result = await getStatus();
+
+    expect(result).toContain('# Status: Hermes Agent Kit');
+    expect(result).toContain('🏷️ Canonical name: hermes-agent-kit (hermes-agent-kit)');
   });
 
   it('refuses status for an active project that has not completed topology initialization', async () => {
