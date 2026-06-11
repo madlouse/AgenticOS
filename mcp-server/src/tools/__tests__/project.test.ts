@@ -235,6 +235,54 @@ describe('switchProject', () => {
     expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
   });
 
+  it('surfaces knowledge-evolution freshness/drift warnings in the switch greeting', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    buildKnowledgeEvolutionStatusLinesMock.mockReturnValue([
+      '⚠️ Knowledge evolution: WARN',
+      '   state.yaml is 17 days stale',
+    ]);
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('Switched to project');
+    expect(result).toContain('⚠️ Knowledge evolution: WARN');
+    expect(result).toContain('state.yaml is 17 days stale');
+  });
+
+  it('shows the knowledge-evolution PASS line in the switch greeting when fresh', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        {
+          id: 'my-project',
+          name: 'My Project',
+          path: '/test/path',
+          status: 'active' as const,
+          created: '2025-01-01',
+          last_accessed: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const result = await switchProject({ project: 'my-project' });
+    expect(result).toContain('📚 Knowledge evolution: PASS');
+  });
+
   it('surfaces topic project kind on switch', async () => {
     registryMock.loadRegistry.mockResolvedValue({
       version: '1.0.0',

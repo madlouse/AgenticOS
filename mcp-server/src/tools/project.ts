@@ -710,7 +710,21 @@ export async function switchProject(args: any): Promise<string> {
   });
   const filesystemAlignmentSummary = buildFilesystemAlignmentLines(sessionPath, pwdResult);
 
-  return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  // Surface freshness/drift (stale state.yaml, stale quick-start, stale adapter
+  // templates, dirty worktree) in the switch greeting too — not just in
+  // agenticos_status — so operators see it on every entry.
+  let freshnessSummary: string[] = [];
+  try {
+    freshnessSummary = buildKnowledgeEvolutionStatusLines(await assessKnowledgeEvolutionHealth({
+      projectPath: sessionPath,
+      repoPath: sessionPath,
+      projectYaml,
+      state,
+    }));
+  } catch {}
+  const freshnessBlock = freshnessSummary.length > 0 ? `\n${freshnessSummary.join('\n')}\n` : '';
+
+  return `✅ Switched to project "${found.name}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
 }
 
 export async function switchOutProject(_args: any = {}): Promise<string> {
