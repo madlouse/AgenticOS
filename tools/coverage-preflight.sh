@@ -15,7 +15,15 @@ export GITHUB_REF_NAME="${GITHUB_REF_NAME:-$(git -C "$ROOT" rev-parse --abbrev-r
 
 if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" || -n "${GITHUB_BASE_REF:-}" ]]; then
   IS_PR="true"
-  git -C "$ROOT" fetch --no-tags --depth=1 origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+  # A --depth=1 fetch into a full clone grafts origin/$BASE_BRANCH: merge-base
+  # breaks for every consumer of the shared object store and the changed-scope
+  # diff base diverges from CI (#570). Only keep the shallow fetch when the
+  # repository is already shallow.
+  if [[ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" == "true" ]]; then
+    git -C "$ROOT" fetch --no-tags --depth=1 origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+  else
+    git -C "$ROOT" fetch --no-tags origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+  fi
   # Entry-point wrappers are covered by subprocess integration tests.
   CHANGED_FILES_JSON="$(
     { git -C "$ROOT" diff --name-only "origin/$BASE_BRANCH"...HEAD -- 'mcp-server/src/*.ts' 'mcp-server/src/**/*.ts' \
