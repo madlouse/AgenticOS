@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises';
 import yaml from 'yaml';
 import { gitText } from '../utils/exec-git.js';
-import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
+import { isShallowCheckout, resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import { persistGuardrailEvidence, type GuardrailPersistenceResult } from '../utils/guardrail-evidence.js';
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { matchesRuntimeReviewExcludedPath, resolveRuntimeReviewSurfacePaths } from '../utils/runtime-review-surface.js';
@@ -199,7 +199,11 @@ export async function runPrScopeCheck(args: PrScopeCheckArgs): Promise<string> {
     result.branch_fork_point = await gitText(repo_path, ['merge-base', 'HEAD', remote_base_branch]);
     result.branch_ancestry_verified = true;
   } catch {
-    result.block_reasons.push(`current branch is not comparable to ${remote_base_branch}`);
+    if (await isShallowCheckout(repo_path)) {
+      result.block_reasons.push(`git object store for "${repo_path}" is shallow, so the current branch cannot be compared to ${remote_base_branch}; restore full history with "git fetch --unshallow origin" and rerun`);
+    } else {
+      result.block_reasons.push(`current branch is not comparable to ${remote_base_branch}`);
+    }
     result.summary = result.block_reasons.join('; ');
     result.persistence = await persistGuardrailEvidence({
       command: 'agenticos_pr_scope_check',

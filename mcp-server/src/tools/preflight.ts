@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { dirname, relative, resolve, sep } from 'path';
 import { promisify } from 'util';
 import { gitText } from '../utils/exec-git.js';
-import { resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
+import { isShallowCheckout, resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import {
   extractLatestIssueBootstrap,
   loadLatestGuardrailState,
@@ -271,7 +271,12 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
       }
     }
   } catch {
-    result.block_reasons.push('failed to resolve git repository identity or remote base');
+    if (await isShallowCheckout(repo_path)) {
+      result.block_reasons.push(`git object store for "${repo_path}" is shallow, so fork-point resolution against ${remote_base_branch} is broken`);
+      result.redirect_actions.push('restore full history with "git fetch --unshallow origin" in the checkout, then rerun agenticos_preflight');
+    } else {
+      result.block_reasons.push('failed to resolve git repository identity or remote base');
+    }
     const finalized = finalizeResult(result);
     finalized.persistence = await persistGuardrailEvidence({
       command: 'agenticos_preflight',

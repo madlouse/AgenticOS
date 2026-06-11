@@ -17,6 +17,7 @@ vi.mock('yaml', () => ({
 }));
 
 import {
+  isShallowCheckout,
   loadAndVerifyManagedProjectIdentity,
   resolveGitCheckoutIdentity,
 } from '../checkout-identity.js';
@@ -146,5 +147,28 @@ describe('loadAndVerifyManagedProjectIdentity', () => {
       code: 'mismatch',
       message: 'Project identity mismatch: registry id "alpha" does not match .project.yaml meta.id "beta".',
     });
+  });
+});
+
+describe('isShallowCheckout', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it('returns true when git reports a shallow object store', async () => {
+    execGitMock.mockResolvedValue({ ok: true, stdout: 'true\n', stderr: '' });
+
+    expect(await isShallowCheckout('/repo')).toBe(true);
+    expect(execGitMock).toHaveBeenCalledWith('/repo', ['rev-parse', '--is-shallow-repository']);
+  });
+
+  it('returns false when git reports a full object store', async () => {
+    execGitMock.mockResolvedValue({ ok: true, stdout: 'false\n', stderr: '' });
+
+    expect(await isShallowCheckout('/repo')).toBe(false);
+  });
+
+  it('returns false when the directory is not a git repository', async () => {
+    execGitMock.mockRejectedValue(new Error('not a git repository'));
+
+    expect(await isShallowCheckout('/tmp/nowhere')).toBe(false);
   });
 });

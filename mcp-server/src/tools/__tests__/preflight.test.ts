@@ -908,6 +908,29 @@ describe('runPreflight', () => {
     expect(result.persistence?.persisted).toBe(true);
   });
 
+  it('names the shallow object store and the unshallow recovery when fork-point resolution fails on a shallow checkout (#564)', async () => {
+    execAsyncMock.mockImplementation((command: string) => {
+      if (command.includes('--is-shallow-repository')) {
+        return Promise.resolve({ stdout: 'true\n', stderr: '' });
+      }
+      return Promise.reject(new Error('git failed'));
+    });
+
+    const result = JSON.parse(await runPreflight({
+      issue_id: '564',
+      task_type: 'implementation',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/preflight.ts'],
+      worktree_required: true,
+    })) as { status: string; block_reasons: string[]; redirect_actions: string[]; persistence?: { persisted: boolean } };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.block_reasons.join(' ')).toContain('is shallow');
+    expect(result.block_reasons.join(' ')).not.toContain('failed to resolve git repository identity or remote base');
+    expect(result.redirect_actions.join(' ')).toContain('git fetch --unshallow');
+    expect(result.persistence?.persisted).toBe(true);
+  });
+
   it('uses explicit project_path fallbacks in persisted evidence when git resolution fails before target proof exists', async () => {
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos',

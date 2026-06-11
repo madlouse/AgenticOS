@@ -438,6 +438,28 @@ describe('runPrScopeCheck', () => {
     expect(result.block_reasons[0]).toContain('not comparable');
   });
 
+  it('names the shallow object store and the unshallow recovery when the branch comparison fails on a shallow checkout (#564)', async () => {
+    execAsyncMock.mockImplementation((command: string) => {
+      if (command.includes('--is-shallow-repository')) {
+        return Promise.resolve({ stdout: 'true\n', stderr: '' });
+      }
+      return Promise.reject(new Error('bad ref'));
+    });
+
+    const result = JSON.parse(await runPrScopeCheck({
+      issue_id: '564',
+      repo_path: '/repo',
+      declared_target_files: ['projects/agenticos/mcp-server/src/tools/**'],
+      expected_issue_scope: 'shallow_store_guard',
+    })) as { status: string; branch_ancestry_verified: boolean; block_reasons: string[] };
+
+    expect(result.status).toBe('BLOCK');
+    expect(result.branch_ancestry_verified).toBe(false);
+    expect(result.block_reasons[0]).toContain('is shallow');
+    expect(result.block_reasons[0]).toContain('git fetch --unshallow');
+    expect(result.block_reasons.join(' ')).not.toContain('not comparable');
+  });
+
   it('returns PASS when the worktree root is declared even if the common repo root differs', async () => {
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos',
