@@ -560,7 +560,18 @@ export function mergeSections(
     }
   }
 
-  return resultLines.length > 0 ? resultLines.join('\n\n') : templateContent;
+  if (resultLines.length === 0) {
+    return templateContent;
+  }
+
+  // Preserve the template header (everything before the first section marker:
+  // the VERSION_MARKER line + title). parseSections drops it, but without it the
+  // merged file carries no <!-- agenticos-template: vN --> marker and is detected
+  // as stale forever — so adopt "upgraded" it to still-stale content (#551).
+  const headerEnd = templateContent.indexOf(SECTION_MARKER_PREFIX);
+  const templateHeader = headerEnd > 0 ? templateContent.slice(0, headerEnd).trimEnd() : '';
+  const mergedBody = resultLines.join('\n\n');
+  return templateHeader ? `${templateHeader}\n\n${mergedBody}\n` : mergedBody;
 }
 
 /** Upgrade CLAUDE.md with section-level merge.
