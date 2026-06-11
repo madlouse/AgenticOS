@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, switchOutProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
+import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, switchOutProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runIssueStart, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 import { buildSwitchWorkdirStructuredContent, buildTextToolResult } from './utils/tool-result.js';
@@ -448,6 +448,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_issue_start',
+      description: 'Orchestration entrypoint that drives the full issue-start guardrail chain in one call: preflight → branch_bootstrap → issue_bootstrap → preflight (in the new worktree) → optional edit_guard. Stops at the first failing step and returns the created worktree path plus aggregated per-step evidence. The individual guardrail tools remain available for advanced/manual use. Returns JSON with READY or BLOCKED.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          issue_id: { type: 'string', description: 'Git issue, task, or review identifier for the current task' },
+          slug: { type: 'string', description: 'Short task slug used to derive the branch and worktree names' },
+          repo_path: { type: 'string', description: 'Absolute source repository path to start from (e.g. the canonical project checkout)' },
+          issue_title: { type: 'string', description: 'Current issue title, recorded as issue-start evidence' },
+          task_type: { type: 'string', enum: ['discussion_only', 'analysis_or_doc', 'implementation', 'bugfix', 'bootstrap'], description: 'Classified task type (default: implementation)' },
+          branch_type: { type: 'string', description: 'Branch prefix such as feat, fix, or chore (default: derived from task_type)' },
+          declared_target_files: { type: 'array', items: { type: 'string' }, description: 'Files or path globs the task intends to touch; also enables the edit_guard step' },
+          issue_body: { type: 'string', description: 'Current issue body or synthesized summary' },
+          labels: { type: 'array', items: { type: 'string' }, description: 'Optional issue labels' },
+          linked_artifacts: { type: 'array', items: { type: 'string' }, description: 'Optional linked docs or artifacts required at issue start' },
+          remote_base_branch: { type: 'string', description: 'Remote base branch to compare/branch against (default: origin/main)' },
+          project_path: { type: 'string', description: 'Optional managed project root when repo_path is a larger checkout or worktree' },
+          run_edit_guard: { type: 'boolean', description: 'Force-run (true) or skip (false) the edit_guard step; defaults to running it when declared_target_files are provided' },
+        },
+        required: ['issue_id', 'slug', 'repo_path', 'issue_title'],
+      },
+    },
+    {
       name: 'agenticos_pr_scope_check',
       description: 'Validate that the current branch diff is scoped to the intended issue relative to the intended remote base. Guardrail target resolution prefers explicit project_path, then provable repo_path, then session-local binding.',
       inputSchema: {
@@ -716,6 +739,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runEditGuard(args ?? {}) }] };
     case 'agenticos_branch_bootstrap':
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
+    case 'agenticos_issue_start':
+      return { content: [{ type: 'text', text: await runIssueStart(args ?? {}) }] };
     case 'agenticos_pr_scope_check':
       return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
     case 'agenticos_health':
