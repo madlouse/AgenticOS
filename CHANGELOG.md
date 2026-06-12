@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.40] — 2026-06-12
+
+### Fixed
+- mcp-server: partition runtime guardrail evidence by `(issue_id, worktree_root)`
+  so concurrent issue sessions stop overwriting each other's single global
+  `guardrail_evidence` / `issue_bootstrap` slots, which caused `agenticos_edit_guard`
+  / `agenticos_preflight` to falsely report `BLOCK`. The legacy single slot is kept
+  as a mirror for status/display and backward compatibility (#573).
+- tooling: `coverage-preflight.sh` no longer degrades a full local clone to shallow
+  with its base-branch fetch, which had broken `agenticos_pr_scope_check`'s merge-base
+  and could diverge local changed-scope results from CI (#572).
+
+### Changed
+- mcp-server: the Guardrail Protocol adapter template (`generateAgentsMd` /
+  `generateClaudeMd`) now documents `agenticos_issue_start` as the one-call way to
+  drive the issue-start guardrail chain; template version bumped v16→v17 (#575).
+
 ## [0.4.39] — 2026-06-11
 
 ### Added
