@@ -51,10 +51,41 @@ interface GuardrailEvidenceState {
 
 type GuardrailEvidenceSlot = 'preflight' | 'branch_bootstrap' | 'pr_scope_check';
 
+/**
+ * Per-session evidence partition keyed by (issue_id, worktree_root). Concurrent
+ * issue sessions each get their own partition so a later session's preflight /
+ * issue_bootstrap no longer overwrites an earlier session's gate evidence (#573).
+ */
+interface GuardrailSessionPartition {
+  issue_id?: string | null;
+  worktree_root?: string | null;
+  updated_at?: string;
+  guardrail_evidence?: GuardrailEvidenceState;
+  issue_bootstrap?: IssueBootstrapState;
+}
+
 interface StateYaml {
   guardrail_evidence?: GuardrailEvidenceState;
   issue_bootstrap?: IssueBootstrapState;
+  /** Session-scoped partitions; the top-level slots above remain as a legacy mirror. */
+  guardrail_sessions?: Record<string, GuardrailSessionPartition>;
   [key: string]: unknown;
+}
+
+/**
+ * Stable partition key for a guardrail session. Returns null when either
+ * component is missing — callers then fall back to the legacy single slot.
+ */
+export function guardrailSessionKey(
+  issueId: string | null | undefined,
+  repoPath: string | null | undefined,
+): string | null {
+  const issue = typeof issueId === 'string' ? issueId.trim().replace(/^#/, '') : '';
+  const repo = typeof repoPath === 'string' && repoPath.trim().length > 0 ? resolve(repoPath.trim()) : '';
+  if (!issue || !repo) {
+    return null;
+  }
+  return `${issue}::${repo}`;
 }
 
 export interface LoadedGuardrailState {
@@ -272,6 +303,53 @@ export async function loadLatestGuardrailState(
   };
 }
 
+interface LoadScopedGuardrailStateArgs {
+  project_id: string;
+  issue_id?: string | null;
+  repo_path?: string | null;
+  committed_state_path?: string;
+}
+
+/**
+ * Load guardrail evidence scoped to a specific (issue_id, worktree_root) session
+ * partition, so concurrent sessions validate against their own evidence rather
+ * than the global latest slot (#573). Falls back to the legacy single-slot state
+ * (loadLatestGuardrailState) when no matching partition exists — preserving
+ * behavior for old runtime files, committed snapshots, and single-session use.
+ */
+export async function loadScopedGuardrailState(
+  args: LoadScopedGuardrailStateArgs,
+): Promise<LoadedGuardrailState> {
+  const sessionKey = guardrailSessionKey(args.issue_id, args.repo_path);
+  if (sessionKey) {
+    const runtimeStatePath = getProjectGuardrailRuntimeStatePath(args.project_id);
+    const runtimeState = await readStateYaml(runtimeStatePath);
+    const partition = runtimeState?.guardrail_sessions?.[sessionKey];
+    if (partition) {
+      const committedStatePath = typeof args.committed_state_path === 'string' && args.committed_state_path.length > 0
+        ? args.committed_state_path
+        : null;
+      const committedState = committedStatePath ? await readStateYaml(committedStatePath) : null;
+      return {
+        source: 'runtime',
+        state: {
+          ...(committedState || {}),
+          ...(runtimeState || {}),
+          guardrail_evidence: mergeGuardrailEvidenceState(partition.guardrail_evidence, committedState?.guardrail_evidence),
+          issue_bootstrap: partition.issue_bootstrap ?? committedState?.issue_bootstrap,
+        },
+        state_path: runtimeStatePath,
+      };
+    }
+  }
+
+  // No partition (legacy runtime file, committed-only, or missing key) → latest slot.
+  return loadLatestGuardrailState({
+    project_id: args.project_id,
+    committed_state_path: args.committed_state_path,
+  });
+}
+
 export async function persistGuardrailEvidence(
   args: PersistGuardrailEvidenceArgs,
 ): Promise<GuardrailPersistenceResult> {
@@ -304,15 +382,35 @@ export async function persistGuardrailEvidence(
 
       const recordedAt = new Date().toISOString();
       const slot = getCommandSlot(command);
-
-      state.guardrail_evidence.updated_at = recordedAt;
-      state.guardrail_evidence.last_command = command;
-      state.guardrail_evidence[slot] = {
+      const evidenceEntry = {
         command,
         recorded_at: recordedAt,
         repo_path,
         ...payload,
       };
+
+      // Legacy single-slot mirror (kept for display/status readers + back-compat).
+      state.guardrail_evidence.updated_at = recordedAt;
+      state.guardrail_evidence.last_command = command;
+      state.guardrail_evidence[slot] = evidenceEntry;
+
+      // Session-scoped partition so concurrent sessions don't clobber each other (#573).
+      const sessionKey = guardrailSessionKey(
+        typeof payload.issue_id === 'string' ? payload.issue_id : null,
+        repo_path,
+      );
+      if (sessionKey) {
+        if (!state.guardrail_sessions) state.guardrail_sessions = {};
+        const partition: GuardrailSessionPartition = state.guardrail_sessions[sessionKey] || {};
+        partition.issue_id = typeof payload.issue_id === 'string' ? payload.issue_id : null;
+        partition.worktree_root = resolve(repo_path);
+        partition.updated_at = recordedAt;
+        if (!partition.guardrail_evidence) partition.guardrail_evidence = {};
+        partition.guardrail_evidence.updated_at = recordedAt;
+        partition.guardrail_evidence.last_command = command;
+        partition.guardrail_evidence[slot] = evidenceEntry;
+        state.guardrail_sessions[sessionKey] = partition;
+      }
     });
 
     return {
@@ -366,7 +464,7 @@ export async function persistIssueBootstrapEvidence(
   try {
     const statePath = await writeRuntimeGuardrailState(project.id, async (state) => {
       const recordedAt = payload.recorded_at || new Date().toISOString();
-      state.issue_bootstrap = {
+      const bootstrapState: IssueBootstrapState = {
         updated_at: recordedAt,
         latest: {
           ...payload,
@@ -375,6 +473,24 @@ export async function persistIssueBootstrapEvidence(
           repo_path: payload.repo_path || repo_path,
         },
       };
+
+      // Legacy single-slot mirror (display/status + back-compat).
+      state.issue_bootstrap = bootstrapState;
+
+      // Session-scoped partition (#573).
+      const sessionKey = guardrailSessionKey(
+        typeof payload.issue_id === 'string' ? payload.issue_id : null,
+        repo_path,
+      );
+      if (sessionKey) {
+        if (!state.guardrail_sessions) state.guardrail_sessions = {};
+        const partition: GuardrailSessionPartition = state.guardrail_sessions[sessionKey] || {};
+        partition.issue_id = typeof payload.issue_id === 'string' ? payload.issue_id : null;
+        partition.worktree_root = resolve(repo_path);
+        partition.updated_at = recordedAt;
+        partition.issue_bootstrap = bootstrapState;
+        state.guardrail_sessions[sessionKey] = partition;
+      }
     });
 
     return {

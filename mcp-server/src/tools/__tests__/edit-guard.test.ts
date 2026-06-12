@@ -39,6 +39,8 @@ vi.mock('../../utils/registry.js', () => ({
 vi.mock('../../utils/guardrail-evidence.js', () => ({
   extractLatestIssueBootstrap: (state: any) => state?.issue_bootstrap?.latest || null,
   loadLatestGuardrailState: loadLatestGuardrailStateMock,
+  // edit-guard now loads session-scoped state (#573); drive it through the same mock.
+  loadScopedGuardrailState: loadLatestGuardrailStateMock,
 }));
 
 vi.mock('../../utils/repo-boundary.js', () => ({

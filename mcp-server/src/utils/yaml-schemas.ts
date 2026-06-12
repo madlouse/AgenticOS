@@ -197,6 +197,16 @@ export interface StateYamlGuardrailEvidenceState {
   [key: string]: unknown;
 }
 
+/** A per-session guardrail evidence partition keyed by (issue_id, worktree_root) (#573). */
+export interface StateYamlGuardrailSessionPartition {
+  issue_id?: string | null;
+  worktree_root?: string | null;
+  updated_at?: string;
+  guardrail_evidence?: StateYamlGuardrailEvidenceState;
+  issue_bootstrap?: StateYamlIssueBootstrapState;
+  [key: string]: unknown;
+}
+
 /** The full shape of a standards/.context/state.yaml file. */
 export interface StateYamlSchema {
   issue_bootstrap?: StateYamlIssueBootstrapState;
@@ -205,6 +215,7 @@ export interface StateYamlSchema {
   current_task?: StateYamlCurrentTask;
   loaded_context?: StateYamlLoadedContext;
   guardrail_evidence?: StateYamlGuardrailEvidenceState;
+  guardrail_sessions?: Record<string, StateYamlGuardrailSessionPartition>;
   entry_surface_refresh?: ProjectYamlEntrySurfaceRefresh;
   [key: string]: unknown;
 }

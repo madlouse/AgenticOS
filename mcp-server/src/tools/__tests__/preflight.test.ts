@@ -50,6 +50,8 @@ vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistGuardrailEvidence: persistGuardrailEvidenceMock,
   extractLatestIssueBootstrap: (state: any) => state?.issue_bootstrap?.latest || null,
   loadLatestGuardrailState: loadLatestGuardrailStateMock,
+  // preflight now loads session-scoped state (#573); drive it through the same mock.
+  loadScopedGuardrailState: loadLatestGuardrailStateMock,
 }));
 
 vi.mock('../../utils/repo-boundary.js', () => ({
