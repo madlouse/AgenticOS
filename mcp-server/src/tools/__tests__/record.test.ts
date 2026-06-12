@@ -13,6 +13,10 @@ const distillationLedgerMock = vi.hoisted(() => ({
 // Mock only the git-I/O half of continuity-commit-status; the real note builder
 // runs so the record response wiring (#555) is exercised end-to-end.
 const detectUncommittedContinuityMock = vi.hoisted(() => vi.fn());
+const evolutionLogMock = vi.hoisted(() => ({
+  appendEvolutionEntries: vi.fn(),
+  deriveIssueRefFromBranch: vi.fn(),
+}));
 
 // Mock modules
 vi.mock('fs/promises', () => ({
@@ -61,6 +65,11 @@ vi.mock('../../utils/continuity-commit-status.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/continuity-commit-status.js')>();
   return { ...actual, detectUncommittedContinuity: detectUncommittedContinuityMock };
 });
+
+vi.mock('../../utils/evolution-log.js', () => ({
+  appendEvolutionEntries: evolutionLogMock.appendEvolutionEntries,
+  deriveIssueRefFromBranch: evolutionLogMock.deriveIssueRefFromBranch,
+}));
 
 import { recordSession } from '../record.js';
 import * as fsPromises from 'fs/promises';
@@ -183,6 +192,14 @@ describe('recordSession', () => {
     // assertions are unaffected; individual tests opt into the dirty case.
     detectUncommittedContinuityMock.mockReset();
     detectUncommittedContinuityMock.mockResolvedValue([]);
+    evolutionLogMock.appendEvolutionEntries.mockReset();
+    evolutionLogMock.deriveIssueRefFromBranch.mockReset();
+    evolutionLogMock.deriveIssueRefFromBranch.mockResolvedValue(null);
+    evolutionLogMock.appendEvolutionEntries.mockResolvedValue({
+      filePath: '/test/path/.context/evolution-log/2026-06.yaml',
+      contextRelativePath: 'evolution-log/2026-06.yaml',
+      appendedCount: 0,
+    });
     mockProjectFiles();
   });
 
@@ -282,6 +299,61 @@ describe('recordSession', () => {
       'test-project',
       expect.objectContaining({ last_recorded: expect.any(String) }),
     );
+  });
+
+  it('appends issue-stamped evolution entries for full-mode decisions (#580)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    evolutionLogMock.deriveIssueRefFromBranch.mockResolvedValue('#580');
+    evolutionLogMock.appendEvolutionEntries.mockResolvedValue({
+      filePath: '/test/path/.context/evolution-log/2026-06.yaml',
+      contextRelativePath: 'evolution-log/2026-06.yaml',
+      appendedCount: 1,
+    });
+
+    const result = await recordSession({ summary: 'work', decisions: ['use two-tier storage'] });
+
+    expect(result).toContain('🧬 Evolution log: evolution-log/2026-06.yaml (+1 entry)');
+    expect(evolutionLogMock.appendEvolutionEntries).toHaveBeenCalledWith(expect.objectContaining({
+      entries: [{ kind: 'decision', summary: 'use two-tier storage', refs: { issue: '#580' } }],
+    }));
+    // The freshly written log file joins the uncommitted-continuity surfaces (G2).
+    const surfaces = detectUncommittedContinuityMock.mock.calls[0][1];
+    expect(surfaces.some((surface: { absPath: string }) => surface.absPath.endsWith('evolution-log/2026-06.yaml'))).toBe(true);
+  });
+
+  it('drained canonical-main decisions get evolution entries without an issue stamp (#580)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    evolutionLogMock.deriveIssueRefFromBranch.mockResolvedValue('#580');
+    distillationLedgerMock.loadPendingCaptureEntries.mockResolvedValue({
+      path: '/ledger.yaml',
+      entries: [{ id: 'capture-old', status: 'captured', decisions: ['old main decision'] }],
+    });
+
+    await recordSession({ summary: 'work', decisions: ['current decision'] });
+
+    const { entries } = evolutionLogMock.appendEvolutionEntries.mock.calls[0][0];
+    expect(entries).toContainEqual({ kind: 'decision', summary: 'current decision', refs: { issue: '#580' } });
+    expect(entries).toContainEqual({ kind: 'decision', summary: 'old main decision' });
+  });
+
+  it('does not touch the evolution log in capture-only mode (#580)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    canonicalMainGuardMock.mockResolvedValue({ blocked: true, reason: 'canonical main checkout' });
+
+    const result = await recordSession({ summary: 'work on main', decisions: ['d'] });
+
+    expect(result).toContain('RECORDED_CAPTURE_ONLY');
+    expect(evolutionLogMock.appendEvolutionEntries).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an evolution append failure as a warning without breaking record (#580)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    evolutionLogMock.appendEvolutionEntries.mockRejectedValue(new Error('disk full'));
+
+    const result = await recordSession({ summary: 'work', decisions: ['d'] });
+
+    expect(result).toContain('✅ Session recorded');
+    expect(result).toContain('⚠️ Evolution log append failed: disk full');
   });
 
   it('flags uncommitted continuity with a save prompt after a full-mode record (#555)', async () => {

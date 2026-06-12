@@ -24,6 +24,11 @@ import {
   buildUncommittedContinuityNote,
   detectUncommittedContinuity,
 } from '../utils/continuity-commit-status.js';
+import {
+  appendEvolutionEntries,
+  deriveIssueRefFromBranch,
+  type EvolutionLogAppendResult,
+} from '../utils/evolution-log.js';
 import { type StateYamlSchema } from '../utils/yaml-schemas.js';
 
 function parseArray(val: unknown): string[] {
@@ -221,13 +226,46 @@ export async function recordSession(args: any): Promise<string> {
     now,
   });
 
+  // Append typed decision entries to the git-tracked evolution log (#580 / L2).
+  // The current session's decisions get refs.issue auto-stamped from the
+  // worktree branch (deterministic — never relies on agent discipline); drained
+  // canonical-main captures predate this worktree, so stamping them with this
+  // branch's issue would mis-attribute — they go in unstamped. Best-effort: a
+  // failed timeline append must not break the record flow.
+  let evolutionNote = '';
+  let evolutionResult: EvolutionLogAppendResult | null = null;
+  try {
+    const issueRef = await deriveIssueRefFromBranch(projectPath);
+    const evolutionEntries = [
+      ...decisions.map((summary) => ({
+        kind: 'decision' as const,
+        summary,
+        ...(issueRef ? { refs: { issue: issueRef } } : {}),
+      })),
+      ...drainedDecisions.map((summary) => ({ kind: 'decision' as const, summary })),
+    ];
+    evolutionResult = await appendEvolutionEntries({ statePath, entries: evolutionEntries, now });
+    if (evolutionResult.appendedCount > 0) {
+      evolutionNote = `🧬 Evolution log: ${evolutionResult.contextRelativePath} (+${evolutionResult.appendedCount} entr${evolutionResult.appendedCount === 1 ? 'y' : 'ies'})\n`;
+    }
+  } catch (error) {
+    evolutionNote = `⚠️ Evolution log append failed: ${error instanceof Error ? error.message : 'unknown error'}\n`;
+  }
+
   // Continuity was written to the project tree but record never commits (it is
   // the no-git path). Surface uncommitted continuity explicitly so the operator
   // knows it is not yet durable and must run agenticos_save (#555 / G2). This is
   // a governance prompt, never a silent auto-commit.
+  const stateDisplayDir = contextPolicyPlan.trackedContextDisplayPaths.state.replace(/\/[^/]+$/, '');
   const uncommittedContinuity = await detectUncommittedContinuity(projectPath, [
     { absPath: statePath, displayPath: contextPolicyPlan.trackedContextDisplayPaths.state },
     { absPath: `${projectPath}/CLAUDE.md`, displayPath: 'CLAUDE.md' },
+    ...(evolutionResult && evolutionResult.appendedCount > 0
+      ? [{
+          absPath: evolutionResult.filePath,
+          displayPath: `${stateDisplayDir}/${evolutionResult.contextRelativePath}`,
+        }]
+      : []),
   ]);
   const commitHygieneNote = buildUncommittedContinuityNote(uncommittedContinuity) ?? '';
 
@@ -240,6 +278,7 @@ export async function recordSession(args: any): Promise<string> {
     `🧾 Distillation ledger: ${ledgerCapture.path}#${ledgerCapture.entry.id}\n` +
     `📊 State: ${contextPolicyPlan.trackedContextDisplayPaths.state} (updated)\n` +
     `📋 CLAUDE.md: Current State synced\n` +
+    evolutionNote +
     drainNote +
     commitHygieneNote +
     (routingNotes.length > 0 ? `\n${routingNotes.join('\n')}\n` : '');

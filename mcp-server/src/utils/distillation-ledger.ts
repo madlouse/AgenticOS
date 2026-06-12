@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import yaml from 'yaml';
 import { getAgenticOSHome } from './registry.js';
@@ -51,6 +51,8 @@ export interface DistillationLedger {
 export interface LoadedDistillationLedger {
   path: string;
   exists: boolean;
+  /** File exists but could not be parsed. Mutations back it up before rewriting. */
+  corrupt: boolean;
   ledger: DistillationLedger;
 }
 
@@ -74,14 +76,6 @@ export interface DistillationLedgerHealth {
 
 const LEDGER_VERSION: DistillationLedger['version'] = '1.0.0';
 const DEFAULT_STALE_AFTER_DAYS = 14;
-const LEDGER_STATUSES = new Set<DistillationLedgerStatus>([
-  'captured',
-  'distilled_to_knowledge',
-  'distilled_to_state',
-  'converted_to_task',
-  'superseded',
-  'ignored_with_reason',
-]);
 
 export function getDistillationLedgerPath(projectId: string): string {
   return join(
@@ -119,47 +113,69 @@ function normalizeEntry(projectId: string, value: unknown, now: Date = new Date(
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
   const id = typeof raw.id === 'string' ? raw.id.trim() : '';
-  const status = typeof raw.status === 'string' && LEDGER_STATUSES.has(raw.status as DistillationLedgerStatus)
-    ? raw.status as DistillationLedgerStatus
+  // Forward compatibility: a newer runtime sharing this machine-local ledger may
+  // have written statuses/fields this version does not know. Destroying them on
+  // a load→save round-trip is data loss, so unknown statuses are preserved
+  // verbatim and unknown fields pass through via the raw spread below. Only an
+  // entry with no usable id/status at all is dropped as malformed.
+  const status = typeof raw.status === 'string' && raw.status.trim()
+    ? raw.status.trim() as DistillationLedgerStatus
     : null;
   if (!id || !status) return null;
 
   const createdAt = typeof raw.created_at === 'string' && raw.created_at.trim() ? raw.created_at : nowIso(now);
   const updatedAt = typeof raw.updated_at === 'string' && raw.updated_at.trim() ? raw.updated_at : createdAt;
-  return {
-    id,
-    project_id: typeof raw.project_id === 'string' && raw.project_id.trim() ? raw.project_id.trim() : projectId,
-    status,
-    created_at: createdAt,
-    updated_at: updatedAt,
-    ...(typeof raw.captured_at === 'string' && raw.captured_at.trim() ? { captured_at: raw.captured_at.trim() } : {}),
-    ...(typeof raw.processed_at === 'string' && raw.processed_at.trim() ? { processed_at: raw.processed_at.trim() } : {}),
-    ...(typeof raw.capture_path === 'string' && raw.capture_path.trim() ? { capture_path: raw.capture_path.trim() } : {}),
-    ...(typeof raw.capture_date === 'string' && raw.capture_date.trim() ? { capture_date: raw.capture_date.trim() } : {}),
-    ...(typeof raw.capture_time === 'string' && raw.capture_time.trim() ? { capture_time: raw.capture_time.trim() } : {}),
-    ...(typeof raw.summary === 'string' && raw.summary.trim() ? { summary: raw.summary.trim() } : {}),
-    ...(asStringArray(raw.decisions) ? { decisions: asStringArray(raw.decisions) } : {}),
-    ...(asStringArray(raw.outcomes) ? { outcomes: asStringArray(raw.outcomes) } : {}),
-    ...(asStringArray(raw.pending) ? { pending: asStringArray(raw.pending) } : {}),
-    ...(asStringArray(raw.knowledge_paths) ? { knowledge_paths: asStringArray(raw.knowledge_paths) } : {}),
-    ...(typeof raw.task_id === 'string' && raw.task_id.trim() ? { task_id: raw.task_id.trim() } : {}),
-    ...(typeof raw.superseded_by === 'string' && raw.superseded_by.trim() ? { superseded_by: raw.superseded_by.trim() } : {}),
-    ...(typeof raw.reason === 'string' && raw.reason.trim() ? { reason: raw.reason.trim() } : {}),
-    ...(Array.isArray(raw.refs) ? {
-      refs: raw.refs
-        .filter((ref): ref is Record<string, unknown> => Boolean(ref) && typeof ref === 'object')
-        .map((ref) => {
-          const visibility: 'private' | 'public' | 'restricted' =
-            ref.visibility === 'public' || ref.visibility === 'restricted' ? ref.visibility : 'private';
-          return {
-            type: typeof ref.type === 'string' && ref.type.trim() ? ref.type.trim() : 'reference',
-            uri: typeof ref.uri === 'string' && ref.uri.trim() ? ref.uri.trim() : '',
-            visibility,
-          };
-        })
-        .filter((ref) => ref.uri.length > 0),
-    } : {}),
-  };
+
+  // Unknown fields pass through verbatim; known fields keep their established
+  // cleaning (trim, drop-when-empty). Cleaning must only ever touch fields this
+  // version understands.
+  const entry = { ...raw } as DistillationLedgerEntry & Record<string, unknown>;
+  entry.id = id;
+  entry.project_id = typeof raw.project_id === 'string' && raw.project_id.trim() ? raw.project_id.trim() : projectId;
+  entry.status = status;
+  entry.created_at = createdAt;
+  entry.updated_at = updatedAt;
+
+  const stringFields = ['captured_at', 'processed_at', 'capture_path', 'capture_date', 'capture_time', 'summary', 'task_id', 'superseded_by', 'reason'] as const;
+  for (const field of stringFields) {
+    const value = raw[field];
+    if (typeof value === 'string' && value.trim()) {
+      entry[field] = value.trim();
+    } else if (field in entry) {
+      delete entry[field];
+    }
+  }
+
+  const arrayFields = ['decisions', 'outcomes', 'pending', 'knowledge_paths'] as const;
+  for (const field of arrayFields) {
+    const values = asStringArray(raw[field]);
+    if (values) {
+      entry[field] = values;
+    } else if (field in entry) {
+      delete entry[field];
+    }
+  }
+
+  if (Array.isArray(raw.refs)) {
+    const refs = raw.refs
+      .filter((ref): ref is Record<string, unknown> => Boolean(ref) && typeof ref === 'object')
+      .map((ref) => {
+        const visibility: 'private' | 'public' | 'restricted' =
+          ref.visibility === 'public' || ref.visibility === 'restricted' ? ref.visibility : 'private';
+        return {
+          ...ref,
+          type: typeof ref.type === 'string' && ref.type.trim() ? ref.type.trim() : 'reference',
+          uri: typeof ref.uri === 'string' && ref.uri.trim() ? ref.uri.trim() : '',
+          visibility,
+        };
+      })
+      .filter((ref) => ref.uri.length > 0);
+    entry.refs = refs;
+  } else if ('refs' in entry) {
+    delete entry.refs;
+  }
+
+  return entry;
 }
 
 function normalizeLedger(projectId: string, raw: unknown, now: Date = new Date()): DistillationLedger {
@@ -179,17 +195,36 @@ function normalizeLedger(projectId: string, raw: unknown, now: Date = new Date()
 
 export async function loadDistillationLedger(projectId: string, now: Date = new Date()): Promise<LoadedDistillationLedger> {
   const path = getDistillationLedgerPath(projectId);
+  let content: string;
   try {
-    const parsed = yaml.parse(await readFile(path, 'utf-8'));
-    return {
-      path,
-      exists: true,
-      ledger: normalizeLedger(projectId, parsed, now),
-    };
+    content = await readFile(path, 'utf-8');
   } catch {
     return {
       path,
       exists: false,
+      corrupt: false,
+      ledger: emptyLedger(projectId, now),
+    };
+  }
+
+  try {
+    const parsed = yaml.parse(content);
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('ledger file did not parse to an object');
+    }
+    return {
+      path,
+      exists: true,
+      corrupt: false,
+      ledger: normalizeLedger(projectId, parsed, now),
+    };
+  } catch {
+    // The file exists but is unreadable. Never treat it as an empty ledger for
+    // write purposes — a later save would silently erase the entire history.
+    return {
+      path,
+      exists: true,
+      corrupt: true,
       ledger: emptyLedger(projectId, now),
     };
   }
@@ -200,8 +235,82 @@ export async function saveDistillationLedger(projectId: string, ledger: Distilla
   const normalized = normalizeLedger(projectId, ledger, now);
   normalized.updated_at = nowIso(now);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, yaml.stringify(normalized), 'utf-8');
+  // Atomic write: a crash mid-write must never leave a torn file behind.
+  const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, yaml.stringify(normalized), 'utf-8');
+  await rename(tempPath, path);
   return path;
+}
+
+const LEDGER_LOCK_STALE_MS = 30_000;
+
+function getDistillationLedgerLockPath(projectId: string): string {
+  return `${getDistillationLedgerPath(projectId)}.lock`;
+}
+
+async function reapStaleLedgerLock(lockPath: string): Promise<boolean> {
+  // A vanished lock (released between our mkdir failure and this stat) counts
+  // as reaped: the caller can retry mkdir immediately.
+  const lockStat = await stat(lockPath).catch(() => null);
+  if (!lockStat) return true;
+  if ((Date.now() - lockStat.mtimeMs) <= LEDGER_LOCK_STALE_MS) {
+    return false;
+  }
+  await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  return true;
+}
+
+async function withDistillationLedgerLock<T>(projectId: string, callback: () => Promise<T>): Promise<T> {
+  const lockPath = getDistillationLedgerLockPath(projectId);
+  await mkdir(dirname(lockPath), { recursive: true });
+
+  let locked = false;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await mkdir(lockPath);
+      locked = true;
+      break;
+    } catch {
+      if (await reapStaleLedgerLock(lockPath)) {
+        continue;
+      }
+      await new Promise((resolveSleep) => setTimeout(resolveSleep, 10));
+    }
+  }
+  if (!locked) {
+    throw new Error(`failed to acquire distillation ledger lock at ${lockPath}`);
+  }
+
+  try {
+    return await callback();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * Locked read-modify-write for ledger mutations: concurrent worktree sessions
+ * serialize on the lock instead of overwriting each other's entries. When the
+ * existing file is corrupt, it is renamed to a .corrupt-* backup first so the
+ * rewrite can never silently destroy history.
+ */
+async function mutateDistillationLedger<T>(
+  projectId: string,
+  now: Date,
+  mutate: (loaded: LoadedDistillationLedger) => { result: T; save: boolean },
+): Promise<T> {
+  return withDistillationLedgerLock(projectId, async () => {
+    const loaded = await loadDistillationLedger(projectId, now);
+    if (loaded.corrupt) {
+      const backupPath = `${loaded.path}.corrupt-${Date.now()}`;
+      await rename(loaded.path, backupPath).catch(() => undefined);
+    }
+    const { result, save } = mutate(loaded);
+    if (save) {
+      await saveDistillationLedger(projectId, loaded.ledger, now);
+    }
+    return result;
+  });
 }
 
 function captureEntryId(args: { projectId: string; capture: AppendedRecordCapture; summary: string }): string {
@@ -222,45 +331,43 @@ export async function recordCapturedDistillationEntry(args: {
   now?: Date;
 }): Promise<DistillationLedgerWriteResult> {
   const now = args.now ?? new Date();
-  const loaded = await loadDistillationLedger(args.projectId, now);
   const id = captureEntryId(args);
-  const existing = loaded.ledger.entries.find((entry) => entry.id === id) ?? null;
-  if (existing) {
-    return {
-      path: loaded.path,
-      entry: existing,
-      created: false,
-    };
-  }
+  return mutateDistillationLedger<DistillationLedgerWriteResult>(args.projectId, now, (loaded) => {
+    const existing = loaded.ledger.entries.find((entry) => entry.id === id) ?? null;
+    if (existing) {
+      return {
+        result: { path: loaded.path, entry: existing, created: false },
+        save: false,
+      };
+    }
 
-  const timestamp = nowIso(now);
-  const entry: DistillationLedgerEntry = {
-    id,
-    project_id: args.projectId,
-    status: 'captured',
-    created_at: timestamp,
-    updated_at: timestamp,
-    captured_at: timestamp,
-    capture_path: args.capture.filePath,
-    capture_date: args.capture.date,
-    capture_time: args.capture.time,
-    summary: args.summary,
-    ...(args.decisions && args.decisions.length > 0 ? { decisions: args.decisions } : {}),
-    ...(args.outcomes && args.outcomes.length > 0 ? { outcomes: args.outcomes } : {}),
-    ...(args.pending && args.pending.length > 0 ? { pending: args.pending } : {}),
-    refs: [{
-      type: 'runtime_capture',
-      uri: args.capture.filePath,
-      visibility: 'private',
-    }],
-  };
-  loaded.ledger.entries.push(entry);
-  await saveDistillationLedger(args.projectId, loaded.ledger, now);
-  return {
-    path: loaded.path,
-    entry,
-    created: true,
-  };
+    const timestamp = nowIso(now);
+    const entry: DistillationLedgerEntry = {
+      id,
+      project_id: args.projectId,
+      status: 'captured',
+      created_at: timestamp,
+      updated_at: timestamp,
+      captured_at: timestamp,
+      capture_path: args.capture.filePath,
+      capture_date: args.capture.date,
+      capture_time: args.capture.time,
+      summary: args.summary,
+      ...(args.decisions && args.decisions.length > 0 ? { decisions: args.decisions } : {}),
+      ...(args.outcomes && args.outcomes.length > 0 ? { outcomes: args.outcomes } : {}),
+      ...(args.pending && args.pending.length > 0 ? { pending: args.pending } : {}),
+      refs: [{
+        type: 'runtime_capture',
+        uri: args.capture.filePath,
+        visibility: 'private',
+      }],
+    };
+    loaded.ledger.entries.push(entry);
+    return {
+      result: { path: loaded.path, entry, created: true },
+      save: true,
+    };
+  });
 }
 
 function assertTransitionPatch(entry: DistillationLedgerEntry, patch: Partial<DistillationLedgerEntry> & { status: DistillationLedgerStatus }): void {
@@ -295,35 +402,34 @@ export async function markDistillationLedgerEntry(args: {
   reason?: string;
 }): Promise<DistillationLedgerWriteResult> {
   const now = args.now ?? new Date();
-  const loaded = await loadDistillationLedger(args.projectId, now);
-  const index = loaded.ledger.entries.findIndex((entry) => entry.id === args.entryId);
-  if (index < 0) {
-    throw new Error(`distillation ledger entry "${args.entryId}" not found`);
-  }
+  return mutateDistillationLedger(args.projectId, now, (loaded) => {
+    const index = loaded.ledger.entries.findIndex((entry) => entry.id === args.entryId);
+    if (index < 0) {
+      throw new Error(`distillation ledger entry "${args.entryId}" not found`);
+    }
 
-  const existing = loaded.ledger.entries[index];
-  const timestamp = nowIso(now);
-  const patch = {
-    status: args.status,
-    ...(args.knowledge_paths ? { knowledge_paths: args.knowledge_paths } : {}),
-    ...(args.task_id ? { task_id: args.task_id } : {}),
-    ...(args.superseded_by ? { superseded_by: args.superseded_by } : {}),
-    ...(args.reason ? { reason: args.reason } : {}),
-  };
-  assertTransitionPatch(existing, patch);
-  const entry: DistillationLedgerEntry = {
-    ...existing,
-    ...patch,
-    updated_at: timestamp,
-    ...(args.status === 'captured' ? {} : { processed_at: timestamp }),
-  };
-  loaded.ledger.entries[index] = entry;
-  await saveDistillationLedger(args.projectId, loaded.ledger, now);
-  return {
-    path: loaded.path,
-    entry,
-    created: false,
-  };
+    const existing = loaded.ledger.entries[index];
+    const timestamp = nowIso(now);
+    const patch = {
+      status: args.status,
+      ...(args.knowledge_paths ? { knowledge_paths: args.knowledge_paths } : {}),
+      ...(args.task_id ? { task_id: args.task_id } : {}),
+      ...(args.superseded_by ? { superseded_by: args.superseded_by } : {}),
+      ...(args.reason ? { reason: args.reason } : {}),
+    };
+    assertTransitionPatch(existing, patch);
+    const entry: DistillationLedgerEntry = {
+      ...existing,
+      ...patch,
+      updated_at: timestamp,
+      ...(args.status === 'captured' ? {} : { processed_at: timestamp }),
+    };
+    loaded.ledger.entries[index] = entry;
+    return {
+      result: { path: loaded.path, entry, created: false },
+      save: true,
+    };
+  });
 }
 
 /**
@@ -352,26 +458,27 @@ export async function markCapturesDistilledToState(args: {
   now?: Date;
 }): Promise<{ path: string; markedCount: number }> {
   const now = args.now ?? new Date();
-  const loaded = await loadDistillationLedger(args.projectId, now);
-  const ids = new Set(args.entryIds);
-  const timestamp = nowIso(now);
-  let markedCount = 0;
-  for (let index = 0; index < loaded.ledger.entries.length; index += 1) {
-    const entry = loaded.ledger.entries[index];
-    if (ids.has(entry.id) && entry.status === 'captured') {
-      loaded.ledger.entries[index] = {
-        ...entry,
-        status: 'distilled_to_state',
-        updated_at: timestamp,
-        processed_at: timestamp,
-      };
-      markedCount += 1;
+  return mutateDistillationLedger(args.projectId, now, (loaded) => {
+    const ids = new Set(args.entryIds);
+    const timestamp = nowIso(now);
+    let markedCount = 0;
+    for (let index = 0; index < loaded.ledger.entries.length; index += 1) {
+      const entry = loaded.ledger.entries[index];
+      if (ids.has(entry.id) && entry.status === 'captured') {
+        loaded.ledger.entries[index] = {
+          ...entry,
+          status: 'distilled_to_state',
+          updated_at: timestamp,
+          processed_at: timestamp,
+        };
+        markedCount += 1;
+      }
     }
-  }
-  if (markedCount > 0) {
-    await saveDistillationLedger(args.projectId, loaded.ledger, now);
-  }
-  return { path: loaded.path, markedCount };
+    return {
+      result: { path: loaded.path, markedCount },
+      save: markedCount > 0,
+    };
+  });
 }
 
 function normalizeEntryTime(entry: DistillationLedgerEntry): string | null {
