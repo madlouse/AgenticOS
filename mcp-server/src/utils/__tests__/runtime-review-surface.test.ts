@@ -38,6 +38,18 @@ describe('runtime review surface', () => {
     expect(result.private_transcript_blocked_paths).toContain('.private/conversations/');
   });
 
+  it('excludes the evolution-log dir as runtime-managed continuity (#580)', () => {
+    const result = resolveRuntimeReviewSurfacePaths('/workspace/private-project', {
+      meta: { name: 'Private Project' },
+      source_control: {
+        topology: 'github_versioned',
+        context_publication_policy: 'private_continuity',
+      },
+    });
+
+    expect(result.tracked_review_excluded_paths).toContain('.context/evolution-log/');
+  });
+
   it('treats tracked conversations as blocked raw transcript paths for public_distilled', () => {
     const result = resolveRuntimeReviewSurfacePaths('/workspace/public-project', {
       meta: { name: 'Public Project' },

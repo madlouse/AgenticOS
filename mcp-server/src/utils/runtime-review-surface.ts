@@ -1,5 +1,6 @@
 import { basename, join, relative, resolve } from 'path';
 import { resolveContextPolicyPlan } from './context-policy-plan.js';
+import { getEvolutionLogDir } from './evolution-log.js';
 import { resolveManagedProjectContextPaths } from './project-target.js';
 
 export interface RuntimeReviewSurfacePaths {
@@ -69,6 +70,8 @@ export function resolveRuntimeReviewSurfacePaths(
       normalizeRelativePathFromBase(comparisonRoot, contextPaths.statePath),
       normalizeRelativePathFromBase(comparisonRoot, contextPaths.markerPath),
       normalizeRelativePathFromBase(comparisonRoot, contextPaths.conversationsDir, true),
+      // Evolution log entries are runtime-managed continuity like state.yaml (#580).
+      normalizeRelativePathFromBase(comparisonRoot, getEvolutionLogDir(contextPaths.statePath), true),
     ]);
 
     if (options.include_claude_state_mirror) {
@@ -90,6 +93,8 @@ export function resolveRuntimeReviewSurfacePaths(
   const tracked = new Set<string>([
     normalizeRelativePathFromBase(comparisonRoot, contextPolicyPlan.trackedContextPaths.state),
     normalizeRelativePathFromBase(comparisonRoot, contextPolicyPlan.trackedContextPaths.lastRecord),
+    // Evolution log entries are runtime-managed continuity like state.yaml (#580).
+    normalizeRelativePathFromBase(comparisonRoot, getEvolutionLogDir(contextPolicyPlan.trackedContextPaths.state), true),
   ]);
   const sidecarOnlyPaths = contextPolicyPlan.sidecarOnlyPaths.map((path) =>
     normalizeRelativePathFromBase(comparisonRoot, path, true),

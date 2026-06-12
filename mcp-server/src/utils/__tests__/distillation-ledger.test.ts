@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import yaml from 'yaml';
@@ -498,6 +498,8 @@ describe('distillation ledger', () => {
           ],
         },
         { id: 'valid', status: 'captured', created_at: 'bad-date', updated_at: '2026-05-20T00:00:00.000Z' },
+        { id: 'no-status' },
+        { id: 'bad-refs', status: 'captured', refs: 'not-an-array' },
       ],
     }), 'utf-8');
 
@@ -506,18 +508,33 @@ describe('distillation ledger', () => {
     expect(loaded.exists).toBe(true);
     expect(loaded.ledger.project_id).toBe('agenticos');
     expect(loaded.ledger.updated_at).toBe('2026-05-21T00:00:00.000Z');
-    expect(loaded.ledger.entries.map((entry) => entry.id)).toEqual(['empty-values', 'valid']);
-    expect(loaded.ledger.entries[0]).toMatchObject({
+    // 'invalid-status' survives normalization now: unknown statuses are preserved
+    // for forward compatibility (#580) instead of being destroyed on round-trip.
+    expect(loaded.ledger.entries.map((entry) => entry.id)).toEqual(['invalid-status', 'empty-values', 'valid', 'bad-refs']);
+    expect(loaded.ledger.entries[3].refs).toBeUndefined();
+    expect(loaded.ledger.entries[1]).toMatchObject({
       project_id: 'agenticos',
       created_at: '2026-05-21T00:00:00.000Z',
       updated_at: '2026-05-21T00:00:00.000Z',
     });
-    expect(loaded.ledger.entries[0].knowledge_paths).toBeUndefined();
-    expect(loaded.ledger.entries[0].refs).toEqual([
+    expect(loaded.ledger.entries[1].knowledge_paths).toBeUndefined();
+    expect(loaded.ledger.entries[1].refs).toEqual([
       { type: 'doc', uri: 'gbrain://knowledge/summary', visibility: 'public' },
       { type: 'task', uri: 'agenticos://task/follow-up', visibility: 'restricted' },
       { type: 'reference', uri: 'runtime://capture/fallback', visibility: 'private' },
     ]);
+  });
+
+  it('normalizes a ledger object without an entries key to empty entries', async () => {
+    await setupHome();
+    const path = getDistillationLedgerPath('agenticos');
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, 'version: 1.0.0\nproject_id: agenticos\n', 'utf-8');
+
+    const loaded = await loadDistillationLedger('agenticos');
+    expect(loaded.exists).toBe(true);
+    expect(loaded.corrupt).toBe(false);
+    expect(loaded.ledger.entries).toEqual([]);
   });
 
   it('normalizes scalar ledger content as an empty project ledger', async () => {
@@ -529,6 +546,9 @@ describe('distillation ledger', () => {
     const loaded = await loadDistillationLedger('agenticos', new Date('2026-05-21T00:00:00.000Z'));
 
     expect(loaded.exists).toBe(true);
+    // Scalar content is unusable: flagged corrupt so mutations back it up
+    // instead of treating it as an empty ledger and erasing history (#580).
+    expect(loaded.corrupt).toBe(true);
     expect(loaded.ledger).toMatchObject({
       version: '1.0.0',
       project_id: 'agenticos',
@@ -597,5 +617,103 @@ describe('distillation ledger', () => {
 
     const health = await summarizeDistillationLedger({ projectId: 'p', now });
     expect(health.unprocessed_capture_count).toBe(0);
+  });
+});
+
+describe('distillation ledger hardening (#580)', () => {
+  it('serializes concurrent capture writes so neither entry is lost', async () => {
+    await setupHome();
+    const now = new Date('2026-06-12T09:00:00.000Z');
+    await Promise.all([
+      recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'session A', capture: captureArgs('2026-06-12', '09:00') }),
+      recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'session B', capture: captureArgs('2026-06-12', '09:01') }),
+    ]);
+
+    const loaded = await loadDistillationLedger('p', now);
+    expect(loaded.ledger.entries).toHaveLength(2);
+  });
+
+  it('backs up a corrupt ledger instead of silently erasing history', async () => {
+    const root = await setupHome();
+    const path = getDistillationLedgerPath('p');
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, 'just-a-scalar', 'utf-8');
+
+    const loadedBefore = await loadDistillationLedger('p');
+    expect(loadedBefore.corrupt).toBe(true);
+
+    const now = new Date('2026-06-12T09:00:00.000Z');
+    const result = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'after corruption', capture: captureArgs('2026-06-12', '09:00') });
+    expect(result.created).toBe(true);
+
+    const files = await readdir(dirname(path));
+    const backups = files.filter((name) => name.includes('.corrupt-'));
+    expect(backups).toHaveLength(1);
+    expect(await readFile(join(dirname(path), backups[0]), 'utf-8')).toBe('just-a-scalar');
+
+    const loadedAfter = await loadDistillationLedger('p', now);
+    expect(loadedAfter.corrupt).toBe(false);
+    expect(loadedAfter.ledger.entries).toHaveLength(1);
+    void root;
+  });
+
+  it('preserves unknown fields and statuses across a load->save round-trip (forward compat)', async () => {
+    await setupHome();
+    const path = getDistillationLedgerPath('p');
+    await mkdir(dirname(path), { recursive: true });
+    const futureEntry = {
+      id: 'evo-future-1',
+      project_id: 'p',
+      status: 'active', // not in this version's enum
+      created_at: '2026-06-01T00:00:00.000Z',
+      updated_at: '2026-06-01T00:00:00.000Z',
+      kind: 'decision', // unknown field from a newer runtime
+      rationale: 'written by a newer version',
+    };
+    const yamlModule = await import('yaml');
+    await writeFile(path, yamlModule.default.stringify({ version: '1.0.0', project_id: 'p', updated_at: '2026-06-01T00:00:00.000Z', entries: [futureEntry] }), 'utf-8');
+
+    // Any mutation triggers load->save; the future entry must survive verbatim.
+    const now = new Date('2026-06-12T09:00:00.000Z');
+    await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'new capture', capture: captureArgs('2026-06-12', '09:00') });
+
+    const written = yamlModule.default.parse(await readFile(path, 'utf-8'));
+    const survived = written.entries.find((entry: { id: string }) => entry.id === 'evo-future-1');
+    expect(survived).toBeDefined();
+    expect(survived.status).toBe('active');
+    expect(survived.kind).toBe('decision');
+    expect(survived.rationale).toBe('written by a newer version');
+  });
+
+  it('reaps a stale lock and proceeds', async () => {
+    await setupHome();
+    const lockPath = `${getDistillationLedgerPath('p')}.lock`;
+    await mkdir(dirname(lockPath), { recursive: true });
+    await mkdir(lockPath);
+    const stale = new Date(Date.now() - 60_000);
+    await utimes(lockPath, stale, stale);
+
+    const now = new Date('2026-06-12T09:00:00.000Z');
+    const result = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-12', '09:00') });
+    expect(result.created).toBe(true);
+  });
+
+  it('fails with a clear error when a fresh lock is held by another writer', async () => {
+    await setupHome();
+    const lockPath = `${getDistillationLedgerPath('p')}.lock`;
+    await mkdir(dirname(lockPath), { recursive: true });
+    await mkdir(lockPath); // fresh mtime: not reapable
+
+    const now = new Date('2026-06-12T09:00:00.000Z');
+    await expect(recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-12', '09:00') }))
+      .rejects.toThrow(/failed to acquire distillation ledger lock/);
+  });
+
+  it('leaves no temp or lock artifacts behind after mutations', async () => {
+    await setupHome();
+    const now = new Date('2026-06-12T09:00:00.000Z');
+    await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-12', '09:00') });
+    const files = await readdir(dirname(getDistillationLedgerPath('p')));
+    expect(files).toEqual(['distillation-ledger.yaml']);
   });
 });
