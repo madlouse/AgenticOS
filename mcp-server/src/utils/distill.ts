@@ -7,7 +7,7 @@ import { STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 16;
+export const CURRENT_TEMPLATE_VERSION = 17;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -194,13 +194,13 @@ export function generateAgentsMd(
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
-For implementation-affecting work:
+For implementation-affecting work, the fastest path is one call to \`agenticos_issue_start\` (issue_id, slug, repo_path, issue_title, and optional declared_target_files). It drives the startup chain — steps 1–4 below, plus \`agenticos_edit_guard\` when declared_target_files are supplied — and stops at the first \`BLOCK\`, returning the created worktree and per-step evidence. The individual steps remain available and are exactly what \`agenticos_issue_start\` runs:
 
 1. call \`agenticos_preflight\`; if the result is \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
 2. after the issue worktree is active, perform the normal startup load and record \`agenticos_issue_bootstrap\`
 3. rerun \`agenticos_preflight\` in that worktree before editing
 4. call \`agenticos_edit_guard\` immediately before implementation edits
-5. before PR creation or merge, call \`agenticos_pr_scope_check\`
+5. before PR creation or merge, call \`agenticos_pr_scope_check\` (this step is not part of \`agenticos_issue_start\`)
 
 If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.`
     },
@@ -357,13 +357,13 @@ export function generateClaudeMd(
 
 Before implementation edits, confirm session/project alignment with \`agenticos_status\`; if no session project is bound or the bound project is not the intended one, call \`agenticos_switch\`.
 
-For implementation-affecting work:
+For implementation-affecting work, the fastest path is one call to \`agenticos_issue_start\` (issue_id, slug, repo_path, issue_title, and optional declared_target_files). It drives the startup chain — steps 1–4 below, plus \`agenticos_edit_guard\` when declared_target_files are supplied — and stops at the first \`BLOCK\`, returning the created worktree and per-step evidence. The individual steps remain available and are exactly what \`agenticos_issue_start\` runs:
 
 1. call \`agenticos_preflight\`; if the result is \`REDIRECT\`, call \`agenticos_branch_bootstrap\` and continue in the returned worktree
 2. after the issue worktree is active, perform the normal startup load and record \`agenticos_issue_bootstrap\`
 3. rerun \`agenticos_preflight\` in that worktree before editing
 4. call \`agenticos_edit_guard\` immediately before implementation edits
-5. before PR creation or merge, call \`agenticos_pr_scope_check\`
+5. before PR creation or merge, call \`agenticos_pr_scope_check\` (this step is not part of \`agenticos_issue_start\`)
 
 If any guardrail command returns \`BLOCK\`, stop and resolve the blocking reason before continuing.`
     },
