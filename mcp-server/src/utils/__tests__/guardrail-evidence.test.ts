@@ -33,7 +33,9 @@ import { detectCanonicalMainWriteProtection } from '../canonical-main-guard.js';
 import { loadRegistry } from '../registry.js';
 import {
   extractLatestIssueBootstrap,
+  guardrailSessionKey,
   loadLatestGuardrailState,
+  loadScopedGuardrailState,
   persistGuardrailEvidence,
   persistIssueBootstrapEvidence,
 } from '../guardrail-evidence.js';
@@ -1040,5 +1042,120 @@ describe('loadLatestGuardrailState', () => {
         },
       },
     } as any)?.issue_id).toBe('294');
+  });
+});
+
+describe('guardrail session partitioning (#573)', () => {
+  // In-memory runtime file so read-modify-write persists across persist calls,
+  // letting us simulate two concurrent sessions writing the same project's state.
+  const files = new Map<string, string>();
+  const temps = new Map<string, string>();
+
+  const REPO_A = '/workspace/projects/agenticos/wt-a';
+  const REPO_B = '/workspace/projects/agenticos/wt-b';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    files.clear();
+    temps.clear();
+    yamlMock.parse.mockImplementation((content: string) => {
+      try { return JSON.parse(content); } catch { return undefined; }
+    });
+    yamlMock.stringify.mockImplementation((obj: unknown) => JSON.stringify(obj));
+    loadRegistryMock.mockResolvedValue({
+      active_project: 'agenticos',
+      projects: [{ id: 'agenticos', name: 'AgenticOS', path: '/workspace/projects/agenticos', status: 'active', created: '2026-03-23', last_accessed: '2026-03-23T00:00:00.000Z' }],
+    });
+    accessMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    statMock.mockResolvedValue({ mtimeMs: Date.now() });
+    detectCanonicalMainWriteProtectionMock.mockResolvedValue({ blocked: false });
+    rmMock.mockResolvedValue(undefined);
+    writeFileMock.mockImplementation(async (p: string, content: string) => { temps.set(p, content); });
+    renameMock.mockImplementation(async (from: string, to: string) => { files.set(to, temps.get(from) ?? ''); temps.delete(from); });
+    readFileMock.mockImplementation(async (p: string) => {
+      if (p.endsWith('/.project.yaml')) return defaultProjectYaml();
+      if (files.has(p)) return files.get(p) as string;
+      throw new Error(`missing: ${p}`);
+    });
+  });
+
+  async function preflightFor(issue: string, repo: string) {
+    return persistGuardrailEvidence({
+      command: 'agenticos_preflight',
+      repo_path: repo,
+      payload: { issue_id: issue, result: { status: 'PASS', summary: 'preflight passed' } },
+    });
+  }
+  async function bootstrapFor(issue: string, repo: string) {
+    return persistIssueBootstrapEvidence({
+      repo_path: repo,
+      payload: { issue_id: issue, current_branch: `feat/${issue}`, repo_path: repo },
+    });
+  }
+
+  it('isolates concurrent sessions so a later session does not clobber an earlier one', async () => {
+    await preflightFor('111', REPO_A);
+    await bootstrapFor('111', REPO_A);
+    // Concurrent session B overwrites the legacy global slot.
+    await preflightFor('222', REPO_B);
+    await bootstrapFor('222', REPO_B);
+
+    const a = await loadScopedGuardrailState({ project_id: 'agenticos', issue_id: '111', repo_path: REPO_A });
+    expect(a.state.guardrail_evidence?.preflight?.issue_id).toBe('111');
+    expect(a.state.issue_bootstrap?.latest?.issue_id).toBe('111');
+
+    const b = await loadScopedGuardrailState({ project_id: 'agenticos', issue_id: '222', repo_path: REPO_B });
+    expect(b.state.guardrail_evidence?.preflight?.issue_id).toBe('222');
+    expect(b.state.issue_bootstrap?.latest?.issue_id).toBe('222');
+  });
+
+  it('keeps the legacy single slot mirrored to the latest write for display/back-compat', async () => {
+    await preflightFor('111', REPO_A);
+    await preflightFor('222', REPO_B);
+    const latest = await loadLatestGuardrailState({ project_id: 'agenticos' });
+    expect(latest.state.guardrail_evidence?.preflight?.issue_id).toBe('222');
+  });
+
+  it('merges committed state into the scoped partition load', async () => {
+    await preflightFor('111', REPO_A);
+    const committedPath = '/workspace/projects/agenticos/standards/.context/state.yaml';
+    files.set(committedPath, JSON.stringify({ current_task: { title: 'committed task' } }));
+
+    const scoped = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '111',
+      repo_path: REPO_A,
+      committed_state_path: committedPath,
+    });
+
+    // Partition evidence wins for the gate slots…
+    expect(scoped.state.guardrail_evidence?.preflight?.issue_id).toBe('111');
+    // …while committed non-evidence fields are still merged in.
+    expect((scoped.state as Record<string, any>).current_task?.title).toBe('committed task');
+  });
+
+  it('falls back to the legacy latest slot when no matching partition exists', async () => {
+    await preflightFor('111', REPO_A);
+    const scoped = await loadScopedGuardrailState({
+      project_id: 'agenticos',
+      issue_id: '999',
+      repo_path: '/workspace/projects/agenticos/wt-z',
+    });
+    expect(scoped.state.guardrail_evidence?.preflight?.issue_id).toBe('111');
+  });
+
+  it('falls back to legacy when the session key is null (missing issue_id or repo_path)', async () => {
+    await preflightFor('111', REPO_A);
+    const noIssue = await loadScopedGuardrailState({ project_id: 'agenticos', issue_id: null, repo_path: REPO_A });
+    expect(noIssue.state.guardrail_evidence?.preflight?.issue_id).toBe('111');
+  });
+
+  it('derives a stable session key, normalizes a leading #, and returns null on missing parts', () => {
+    expect(guardrailSessionKey('#573', '/a/b')).toBe(guardrailSessionKey('573', '/a/b'));
+    expect(guardrailSessionKey('573', '/a/b')).toContain('573::');
+    expect(guardrailSessionKey('', '/a/b')).toBeNull();
+    expect(guardrailSessionKey('573', '')).toBeNull();
+    expect(guardrailSessionKey(null, null)).toBeNull();
   });
 });

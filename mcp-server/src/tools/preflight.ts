@@ -6,7 +6,7 @@ import { gitText } from '../utils/exec-git.js';
 import { isShallowCheckout, resolveGitCheckoutIdentity } from '../utils/checkout-identity.js';
 import {
   extractLatestIssueBootstrap,
-  loadLatestGuardrailState,
+  loadScopedGuardrailState,
   persistGuardrailEvidence,
   type GuardrailPersistenceResult,
 } from '../utils/guardrail-evidence.js';
@@ -371,8 +371,10 @@ export async function runPreflight(args: PreflightArgs): Promise<string> {
 
     if (projectResolution.targetProject && result.worktree_ok) {
       try {
-        const guardrailState = await loadLatestGuardrailState({
+        const guardrailState = await loadScopedGuardrailState({
           project_id: projectResolution.targetProject.id,
+          issue_id,
+          repo_path,
           committed_state_path: projectResolution.targetProject.statePath,
         });
         const latestBootstrap = extractLatestIssueBootstrap(guardrailState.state);
