@@ -16,11 +16,11 @@ jobs:
       matrix:
         node-version: [20, 22]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
@@ -41,7 +41,7 @@ jobs:
         working-directory: mcp-server
       - name: Upload coverage artifact
         if: matrix.node-version == 22
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcp-server-coverage
           path: mcp-server/coverage/
@@ -54,12 +54,12 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Use Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install dependencies
@@ -74,11 +74,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Use Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install dependencies
