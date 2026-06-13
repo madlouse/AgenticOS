@@ -10,6 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.42] — 2026-06-13
+
+Completes the #549 closed-loop context recall: write → durable persistence →
+read on every cold start.
+
+### Added
+- mcp-server: cold-start context recall (L3) now also fires on
+  `agenticos_switch` — the canonical Session Start entrypoint — surfacing a
+  "pick up where you left off" block keyed to `current_task` + pending (plus the
+  last issue id for lineage), not only on `agenticos_issue_bootstrap`. Read-only
+  and best-effort: never blocks a switch (#597).
+
+### Fixed
+- mcp-server: `agenticos_save` now stages the evolution-log dir, so L2 timeline
+  entries written by `agenticos_record` actually reach git/`main` — previously
+  the dir was omitted from the continuity staging surface and never committed.
+  A single existence guard also closes a latent `git add` failure for
+  `local_private` projects with no full-mode record yet (#594).
+- mcp-server: drained captures are consumed (`distilled_to_state`) only after
+  `agenticos_save` durably commits the distillation artifact. `agenticos_record`
+  now marks them `distilled_pending_commit` (stamped with the worktree) and the
+  drain recovers orphans from a discarded worktree — fixing silent loss of
+  distilled decisions when a worktree was discarded before save (#593).
+
 ## [0.4.41] — 2026-06-13
 
 ### Added
