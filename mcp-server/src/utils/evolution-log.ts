@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { mkdir, readdir, readFile, rename, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import yaml from 'yaml';
 import { gitText } from './exec-git.js';
@@ -98,6 +98,38 @@ async function loadMonthlyFile(filePath: string): Promise<MonthlyLogFile> {
     version: '1.0.0',
     entries: (parsed as MonthlyLogFile).entries,
   };
+}
+
+/**
+ * Read every monthly evolution-log entry for a project, oldest file first.
+ * Tolerant by design — recall must degrade gracefully, so an unreadable month
+ * is skipped rather than failing the whole read (unlike append, which fails loud
+ * because it is git-tracked state the operator can restore).
+ */
+export async function readEvolutionLog(statePath: string): Promise<EvolutionLogEntry[]> {
+  const dir = getEvolutionLogDir(statePath);
+  let files: string[];
+  try {
+    files = (await readdir(dir)).filter((name) => /^\d{4}-\d{2}\.yaml$/.test(name)).sort();
+  } catch {
+    return [];
+  }
+  const entries: EvolutionLogEntry[] = [];
+  for (const file of files) {
+    try {
+      const parsed = yaml.parse(await readFile(join(dir, file), 'utf-8'));
+      if (parsed && Array.isArray(parsed.entries)) {
+        for (const entry of parsed.entries) {
+          if (entry && typeof entry === 'object' && typeof entry.id === 'string') {
+            entries.push(entry as EvolutionLogEntry);
+          }
+        }
+      }
+    } catch {
+      // skip an unreadable month
+    }
+  }
+  return entries;
 }
 
 export async function appendEvolutionEntries(args: {

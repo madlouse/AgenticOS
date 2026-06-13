@@ -113,15 +113,25 @@ async function sendMessage(
       timeoutMs,
     );
 
+    // Buffer across 'data' events: a single JSON-RPC line (e.g. a large
+    // tools/list response, ~36KB) exceeds the stdout pipe chunk size and arrives
+    // split across chunks. Parsing each chunk independently would never see the
+    // complete line and would time out. Accumulate and only parse on newlines.
+    let buffer = '';
     const handler = (data: Buffer) => {
-      const lines = data.toString().split('\n').filter((l) => l.trim());
-      for (const line of lines) {
+      buffer += data.toString();
+      let newlineIndex: number;
+      while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line.trim()) continue;
         try {
           const parsed = JSON.parse(line) as JsonRpcResponse;
           if (parsed.id === id) {
             clearTimeout(timer);
             proc.stdout.off('data', handler);
             resolve(parsed);
+            return;
           }
         } catch {
           // skip unparseable lines

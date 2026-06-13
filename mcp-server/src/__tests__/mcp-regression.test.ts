@@ -56,15 +56,23 @@ async function sendMessage(
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timeout waiting for response to ${msg.method}`)), timeoutMs);
+    // Buffer across 'data' events: a large response (e.g. tools/list ~36KB)
+    // splits across stdout pipe chunks, so parse only on complete newlines.
+    let buffer = '';
     const handler = (data: Buffer) => {
-      const lines = data.toString().split('\n').filter((l) => l.trim());
-      for (const line of lines) {
+      buffer += data.toString();
+      let nl: number;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl);
+        buffer = buffer.slice(nl + 1);
+        if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line) as JsonRpcMessage;
           if (msg.id === id) {
             clearTimeout(timer);
             proc.stdout.off('data', handler);
             resolve(msg);
+            return;
           }
         } catch { /* skip */ }
       }
