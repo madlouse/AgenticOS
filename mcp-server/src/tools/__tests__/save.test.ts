@@ -43,6 +43,15 @@ vi.mock('../../utils/canonical-main-guard.js', () => ({
   detectCanonicalMainWriteProtection: vi.fn(),
 }));
 
+// save finalizes pending-commit captures after a durable commit (#593). Mock it
+// so tests stay hermetic (no machine-local ledger I/O) and can assert the handoff.
+const distillationLedgerMock = vi.hoisted(() => ({
+  finalizeDistilledPendingCommit: vi.fn().mockResolvedValue({ path: '', finalizedCount: 0 }),
+}));
+vi.mock('../../utils/distillation-ledger.js', () => ({
+  finalizeDistilledPendingCommit: distillationLedgerMock.finalizeDistilledPendingCommit,
+}));
+
 // Mock child_process before the module imports it
 const execMock = vi.hoisted(() => vi.fn());
 vi.mock('child_process', () => ({
@@ -833,6 +842,74 @@ describe('saveState', () => {
     expect(addCommand).toContain('CLAUDE.md');
     expect(addCommand).not.toContain('.context/.last_record');
     expect(result).toContain('Recovery: tracked continuity contract evaluated; no new continuity changes were committed');
+  });
+
+  it('finalizes pending-commit captures after a successful commit (#593)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      state: { session: {} },
+    });
+    distillationLedgerMock.finalizeDistilledPendingCommit.mockResolvedValue({ path: '', finalizedCount: 2 });
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+        if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+        if (cmd.includes('remote get-url origin')) { cb(null, 'git@github.com:example/test-project.git\n', ''); return; }
+        cb(null, '', ''); // add / commit / push all succeed
+      }
+    );
+
+    const result = await saveState({ message: 'durable save' });
+
+    // Captures are consumed for good only here, keyed to this worktree.
+    expect(distillationLedgerMock.finalizeDistilledPendingCommit).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'test-project', worktree: '/test/path' }),
+    );
+    expect(result).toContain('Finalized 2 pending-commit capture(s) into distilled state');
+  });
+
+  it('does not finalize pending-commit captures when there is nothing to commit (#593)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      state: { session: {} },
+    });
+    distillationLedgerMock.finalizeDistilledPendingCommit.mockClear();
+
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+        if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+        if (cmd.includes('remote get-url origin')) { cb(null, 'git@github.com:example/test-project.git\n', ''); return; }
+        if (cmd.includes(' commit ')) { cb(new Error('nothing to commit'), '', 'nothing to commit'); return; }
+        cb(null, '', '');
+      }
+    );
+
+    await saveState({ message: 'no-op save' });
+
+    // Nothing was committed → no source may be consumed.
+    expect(distillationLedgerMock.finalizeDistilledPendingCommit).not.toHaveBeenCalled();
   });
 
   it('fails closed before state mutation when private_continuity cannot prove a git repo', async () => {

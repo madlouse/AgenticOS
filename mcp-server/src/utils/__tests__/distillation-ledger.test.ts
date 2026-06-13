@@ -4,10 +4,11 @@ import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import yaml from 'yaml';
 import {
+  finalizeDistilledPendingCommit,
   getDistillationLedgerPath,
   loadDistillationLedger,
   loadPendingCaptureEntries,
-  markCapturesDistilledToState,
+  markCapturesPendingCommit,
   markDistillationLedgerEntry,
   recordCapturedDistillationEntry,
   saveDistillationLedger,
@@ -591,32 +592,74 @@ describe('distillation ledger', () => {
     expect(pending.entries[0].summary).toBe('s1');
   });
 
-  it('markCapturesDistilledToState transitions only captured entries and is idempotent', async () => {
+  it('markCapturesPendingCommit folds captured entries into pending-commit stamped with the worktree (#593)', async () => {
     await setupHome();
     const now = new Date('2026-06-10T09:00:00.000Z');
     const a = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-10', '09:00') });
     const b = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'b', capture: captureArgs('2026-06-10', '10:00') });
 
-    const first = await markCapturesDistilledToState({ projectId: 'p', entryIds: [a.entry.id, b.entry.id, 'missing-id'], now });
+    const first = await markCapturesPendingCommit({ projectId: 'p', entryIds: [a.entry.id, b.entry.id, 'missing-id'], worktree: '/wt/A', now });
     expect(first.markedCount).toBe(2);
 
     const reloaded = await loadDistillationLedger('p', now);
-    expect(reloaded.ledger.entries.every((e) => e.status === 'distilled_to_state')).toBe(true);
+    expect(reloaded.ledger.entries.every((e) => e.status === 'distilled_pending_commit')).toBe(true);
+    expect(reloaded.ledger.entries.every((e) => e.pending_commit_worktree === '/wt/A')).toBe(true);
     expect(reloaded.ledger.entries.every((e) => e.processed_at === now.toISOString())).toBe(true);
-
-    // Already distilled → nothing left to transition.
-    const second = await markCapturesDistilledToState({ projectId: 'p', entryIds: [a.entry.id, b.entry.id], now });
-    expect(second.markedCount).toBe(0);
   });
 
-  it('does not count distilled_to_state captures as unprocessed in the health summary', async () => {
+  it('finalizeDistilledPendingCommit consumes only this worktree pending entries after commit (#593)', async () => {
     await setupHome();
     const now = new Date('2026-06-10T09:00:00.000Z');
     const a = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-10', '09:00') });
-    await markCapturesDistilledToState({ projectId: 'p', entryIds: [a.entry.id], now });
+    const b = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'b', capture: captureArgs('2026-06-10', '10:00') });
+    await markCapturesPendingCommit({ projectId: 'p', entryIds: [a.entry.id], worktree: '/wt/A', now });
+    await markCapturesPendingCommit({ projectId: 'p', entryIds: [b.entry.id], worktree: '/wt/B', now });
 
-    const health = await summarizeDistillationLedger({ projectId: 'p', now });
-    expect(health.unprocessed_capture_count).toBe(0);
+    const finalized = await finalizeDistilledPendingCommit({ projectId: 'p', worktree: '/wt/A', now });
+    expect(finalized.finalizedCount).toBe(1);
+
+    const reloaded = await loadDistillationLedger('p', now);
+    const byId = Object.fromEntries(reloaded.ledger.entries.map((e) => [e.id, e]));
+    expect(byId[a.entry.id].status).toBe('distilled_to_state');
+    expect(byId[a.entry.id].pending_commit_worktree).toBeUndefined();
+    // The other worktree's pending entry is untouched (its commit has not happened).
+    expect(byId[b.entry.id].status).toBe('distilled_pending_commit');
+    expect(byId[b.entry.id].pending_commit_worktree).toBe('/wt/B');
+
+    // Nothing left for /wt/A to finalize → idempotent.
+    const second = await finalizeDistilledPendingCommit({ projectId: 'p', worktree: '/wt/A', now });
+    expect(second.finalizedCount).toBe(0);
+  });
+
+  it('drain re-pulls a foreign pending-commit orphan but skips this worktree own pending (#593)', async () => {
+    await setupHome();
+    const now = new Date('2026-06-10T09:00:00.000Z');
+    const orphan = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'orphan', capture: captureArgs('2026-06-10', '09:00') });
+    const mine = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'mine', capture: captureArgs('2026-06-10', '10:00') });
+    const fresh = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'fresh', capture: captureArgs('2026-06-10', '11:00') });
+    // orphan folded by a now-discarded worktree, mine folded by the current one.
+    await markCapturesPendingCommit({ projectId: 'p', entryIds: [orphan.entry.id], worktree: '/wt/discarded', now });
+    await markCapturesPendingCommit({ projectId: 'p', entryIds: [mine.entry.id], worktree: '/wt/current', now });
+
+    const drained = await loadPendingCaptureEntries('p', now, '/wt/current');
+    const summaries = drained.entries.map((e) => e.summary).sort();
+    // still-captured `fresh` + foreign orphan are drainable; own pending is skipped.
+    expect(summaries).toEqual(['fresh', 'orphan']);
+
+    // Without a worktree, pending-commit entries are left alone (safe default).
+    const noWorktree = await loadPendingCaptureEntries('p', now);
+    expect(noWorktree.entries.map((e) => e.summary)).toEqual(['fresh']);
+  });
+
+  it('does not count pending-commit or distilled captures as unprocessed in the health summary (#593)', async () => {
+    await setupHome();
+    const now = new Date('2026-06-10T09:00:00.000Z');
+    const a = await recordCapturedDistillationEntry({ projectId: 'p', now, summary: 'a', capture: captureArgs('2026-06-10', '09:00') });
+    await markCapturesPendingCommit({ projectId: 'p', entryIds: [a.entry.id], worktree: '/wt/A', now });
+    expect((await summarizeDistillationLedger({ projectId: 'p', now })).unprocessed_capture_count).toBe(0);
+
+    await finalizeDistilledPendingCommit({ projectId: 'p', worktree: '/wt/A', now });
+    expect((await summarizeDistillationLedger({ projectId: 'p', now })).unprocessed_capture_count).toBe(0);
   });
 });
 

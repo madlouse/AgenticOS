@@ -7,6 +7,10 @@ import type { AppendedRecordCapture } from './record-capture.js';
 
 export type DistillationLedgerStatus =
   | 'captured'
+  // Folded into a worktree's uncommitted tracked state, awaiting a durable commit.
+  // A capture is only consumed for good once agenticos_save commits the artifact
+  // and finalizes it to distilled_to_state (#593).
+  | 'distilled_pending_commit'
   | 'distilled_to_knowledge'
   | 'distilled_to_state'
   | 'converted_to_task'
@@ -34,6 +38,11 @@ export interface DistillationLedgerEntry {
   task_id?: string;
   superseded_by?: string;
   reason?: string;
+  /** Worktree root that folded this capture into uncommitted tracked state while
+   * it is distilled_pending_commit. The drain re-pulls pending entries stamped
+   * with a *different* worktree (an orphan from a discarded worktree) so no
+   * source is silently consumed; agenticos_save clears it on finalize (#593). */
+  pending_commit_worktree?: string;
   refs?: Array<{
     type: string;
     uri: string;
@@ -440,21 +449,41 @@ export async function markDistillationLedgerEntry(args: {
 export async function loadPendingCaptureEntries(
   projectId: string,
   now: Date = new Date(),
+  currentWorktree?: string,
 ): Promise<{ path: string; entries: DistillationLedgerEntry[] }> {
   const loaded = await loadDistillationLedger(projectId, now);
   return {
     path: loaded.path,
-    entries: loaded.ledger.entries.filter((entry) => entry.status === 'captured'),
+    entries: loaded.ledger.entries.filter((entry) => {
+      if (entry.status === 'captured') return true;
+      // Re-drain a pending-commit orphan: it was folded into a *different*
+      // worktree's uncommitted state that was never committed (e.g. a discarded
+      // worktree), so re-pulling it here recovers it instead of silently losing
+      // the source. The current worktree's own pending entries are already in its
+      // uncommitted state and must not be re-folded — state patches append, so
+      // that would duplicate decisions/facts. Without a worktree to compare
+      // against, pending entries are left alone (safe default). (#593)
+      if (entry.status === 'distilled_pending_commit') {
+        return currentWorktree !== undefined && entry.pending_commit_worktree !== currentWorktree;
+      }
+      return false;
+    }),
   };
 }
 
 /**
- * Batch-mark captured entries as distilled into tracked state. Loads and saves
- * the ledger once. Only entries currently in 'captured' status are transitioned.
+ * Batch-mark captures as folded into a worktree's uncommitted tracked state
+ * (status distilled_pending_commit), stamped with the folding worktree. Captures
+ * are NOT consumed for good here — agenticos_save finalizes them to
+ * distilled_to_state only after the continuity commit is durable
+ * (finalizeDistilledPendingCommit). Entries currently 'captured' or already
+ * pending-commit (an orphan re-drained into this worktree) are (re-)stamped;
+ * loads and saves the ledger once. (#593)
  */
-export async function markCapturesDistilledToState(args: {
+export async function markCapturesPendingCommit(args: {
   projectId: string;
   entryIds: string[];
+  worktree: string;
   now?: Date;
 }): Promise<{ path: string; markedCount: number }> {
   const now = args.now ?? new Date();
@@ -464,10 +493,11 @@ export async function markCapturesDistilledToState(args: {
     let markedCount = 0;
     for (let index = 0; index < loaded.ledger.entries.length; index += 1) {
       const entry = loaded.ledger.entries[index];
-      if (ids.has(entry.id) && entry.status === 'captured') {
+      if (ids.has(entry.id) && (entry.status === 'captured' || entry.status === 'distilled_pending_commit')) {
         loaded.ledger.entries[index] = {
           ...entry,
-          status: 'distilled_to_state',
+          status: 'distilled_pending_commit',
+          pending_commit_worktree: args.worktree,
           updated_at: timestamp,
           processed_at: timestamp,
         };
@@ -477,6 +507,42 @@ export async function markCapturesDistilledToState(args: {
     return {
       result: { path: loaded.path, markedCount },
       save: markedCount > 0,
+    };
+  });
+}
+
+/**
+ * Finalize all pending-commit captures folded by the given worktree into
+ * distilled_to_state — called by agenticos_save once the continuity commit
+ * succeeds, the point at which the distillation artifact (state.yaml +
+ * evolution-log) is durable and the source can be consumed for good. Clears the
+ * worktree stamp. Loads and saves the ledger once. (#593)
+ */
+export async function finalizeDistilledPendingCommit(args: {
+  projectId: string;
+  worktree: string;
+  now?: Date;
+}): Promise<{ path: string; finalizedCount: number }> {
+  const now = args.now ?? new Date();
+  return mutateDistillationLedger(args.projectId, now, (loaded) => {
+    const timestamp = nowIso(now);
+    let finalizedCount = 0;
+    for (let index = 0; index < loaded.ledger.entries.length; index += 1) {
+      const entry = loaded.ledger.entries[index];
+      if (entry.status === 'distilled_pending_commit' && entry.pending_commit_worktree === args.worktree) {
+        const { pending_commit_worktree: _cleared, ...rest } = entry;
+        loaded.ledger.entries[index] = {
+          ...rest,
+          status: 'distilled_to_state',
+          updated_at: timestamp,
+          processed_at: timestamp,
+        };
+        finalizedCount += 1;
+      }
+    }
+    return {
+      result: { path: loaded.path, finalizedCount },
+      save: finalizedCount > 0,
     };
   });
 }
