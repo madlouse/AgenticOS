@@ -11,6 +11,7 @@ import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '
 import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
 import { resolveContinuitySurfacePlan } from '../utils/continuity-surface.js';
 import { EVOLUTION_LOG_DIRNAME, getEvolutionLogDir } from '../utils/evolution-log.js';
+import { finalizeDistilledPendingCommit } from '../utils/distillation-ledger.js';
 import {
   buildConversationRoutingStatusLines,
   detectLegacyTrackedTranscriptStatus,
@@ -348,6 +349,24 @@ export async function saveState(args: any): Promise<string> {
       } catch { /* push failure is degraded, not fatal */ }
     }
 
+    // Phase 4: finalize pending-commit captures now that the continuity artifact
+    // is durably committed. record left drained captures as distilled_pending_commit
+    // (stamped with this worktree); only here, after a successful commit, are they
+    // consumed for good. A push failure does not roll this back — the commit is
+    // durable locally. Best-effort: a ledger hiccup must not fail the save (#593).
+    let finalizedCaptureNote = '';
+    if (committed) {
+      try {
+        const finalized = await finalizeDistilledPendingCommit({
+          projectId: project.id,
+          worktree: projectPath,
+        });
+        if (finalized.finalizedCount > 0) {
+          finalizedCaptureNote = `\n🧾 Finalized ${finalized.finalizedCount} pending-commit capture(s) into distilled state`;
+        }
+      } catch { /* ledger finalize is best-effort; the commit is already durable */ }
+    }
+
     // Build structured status
     const phases: string[] = [];
     phases.push('✅ State saved locally');
@@ -372,7 +391,7 @@ export async function saveState(args: any): Promise<string> {
     const routingNotes = buildConversationRoutingStatusLines(conversationRoutingPlan, legacyTranscriptStatus);
     const routingSuffix = routingNotes.length > 0 ? `\n${routingNotes.join('\n')}` : '';
 
-    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}${recoveryNote}${routingSuffix}`;
+    return `${phases.join('\n')}\n\nProject: "${project.name}"\nCommit: ${commitMessage}\nTimestamp: ${state.session.last_backup}${claudeMdNote}${recoveryNote}${finalizedCaptureNote}${routingSuffix}`;
   } catch (error: any) {
     return `⚠️ Partial save completed\n\nError: ${error.message}`;
   }

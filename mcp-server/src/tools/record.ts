@@ -17,7 +17,7 @@ import {
 } from '../utils/record-capture.js';
 import {
   loadPendingCaptureEntries,
-  markCapturesDistilledToState,
+  markCapturesPendingCommit,
   recordCapturedDistillationEntry,
 } from '../utils/distillation-ledger.js';
 import {
@@ -200,7 +200,9 @@ export async function recordSession(args: any): Promise<string> {
   // their append-only decisions/outcomes into this state patch and mark them
   // distilled. The current session's own pending is authoritative, so prior
   // pending is not re-applied (it may already be resolved).
-  const pendingCaptures = await loadPendingCaptureEntries(project.id, now);
+  // Pass this worktree so the drain also recovers pending-commit orphans from a
+  // discarded worktree, but never re-folds this worktree's own pending entries (#593).
+  const pendingCaptures = await loadPendingCaptureEntries(project.id, now, projectPath);
   const drainedCaptures = pendingCaptures.entries.filter((entry) => entry.id !== ledgerCapture.entry.id);
   const drainedDecisions = drainedCaptures.flatMap((entry) => entry.decisions ?? []);
   const drainedOutcomes = drainedCaptures.flatMap((entry) => entry.outcomes ?? []);
@@ -218,11 +220,15 @@ export async function recordSession(args: any): Promise<string> {
     pending,
   });
 
-  // Mark the current capture and every drained prior capture as distilled into
-  // tracked state so they stop showing as unprocessed in the ledger.
-  await markCapturesDistilledToState({
+  // Mark the current capture and every drained prior capture as folded into this
+  // worktree's *uncommitted* tracked state (distilled_pending_commit), stamped
+  // with this worktree. They are consumed for good only when agenticos_save
+  // finalizes them after the continuity commit is durable — so a worktree
+  // discarded before save leaves them re-drainable instead of silently lost (#593).
+  await markCapturesPendingCommit({
     projectId: project.id,
     entryIds: [ledgerCapture.entry.id, ...drainedCaptures.map((entry) => entry.id)],
+    worktree: projectPath,
     now,
   });
 

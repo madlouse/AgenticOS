@@ -8,7 +8,7 @@ const yamlMock = vi.hoisted(() => ({
 const distillationLedgerMock = vi.hoisted(() => ({
   recordCapturedDistillationEntry: vi.fn(),
   loadPendingCaptureEntries: vi.fn(),
-  markCapturesDistilledToState: vi.fn(),
+  markCapturesPendingCommit: vi.fn(),
 }));
 // Mock only the git-I/O half of continuity-commit-status; the real note builder
 // runs so the record response wiring (#555) is exercised end-to-end.
@@ -58,7 +58,7 @@ vi.mock('../../utils/canonical-main-guard.js', () => ({
 vi.mock('../../utils/distillation-ledger.js', () => ({
   recordCapturedDistillationEntry: distillationLedgerMock.recordCapturedDistillationEntry,
   loadPendingCaptureEntries: distillationLedgerMock.loadPendingCaptureEntries,
-  markCapturesDistilledToState: distillationLedgerMock.markCapturesDistilledToState,
+  markCapturesPendingCommit: distillationLedgerMock.markCapturesPendingCommit,
 }));
 
 vi.mock('../../utils/continuity-commit-status.js', async (importOriginal) => {
@@ -184,7 +184,7 @@ describe('recordSession', () => {
       path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
       entries: [],
     });
-    distillationLedgerMock.markCapturesDistilledToState.mockResolvedValue({
+    distillationLedgerMock.markCapturesPendingCommit.mockResolvedValue({
       path: '/home/testuser/AgenticOS/.agent-workspace/projects/test-project/distillation-ledger.yaml',
       markedCount: 0,
     });
@@ -448,7 +448,7 @@ describe('recordSession', () => {
     expect(writtenState.working_memory.decisions).toContain('new decision 2');
   });
 
-  it('drains prior capture-only records into tracked state and marks them distilled', async () => {
+  it('drains prior capture-only records into tracked state and marks them pending-commit (#593)', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     mockProjectFiles({ state: { session: {}, working_memory: { decisions: [], facts: [], pending: [] } } });
 
@@ -476,10 +476,18 @@ describe('recordSession', () => {
     // Pending is the current session's only — stale prior pending is not re-applied.
     expect(writtenState.working_memory.pending).toEqual(['current-pending']);
 
-    // The current capture and the drained prior capture are both marked distilled.
-    expect(distillationLedgerMock.markCapturesDistilledToState).toHaveBeenCalledWith(expect.objectContaining({
+    // The current capture and the drained prior capture are folded as pending-commit,
+    // stamped with this worktree; they are not consumed for good until save commits (#593).
+    expect(distillationLedgerMock.markCapturesPendingCommit).toHaveBeenCalledWith(expect.objectContaining({
       entryIds: ['capture-2026-05-21-1200-test', 'prior-canonical-main-capture'],
+      worktree: expect.any(String),
     }));
+    // The drain is worktree-aware so it can recover orphans from a discarded worktree.
+    expect(distillationLedgerMock.loadPendingCaptureEntries).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Date),
+      expect.any(String),
+    );
     expect(result).toContain('Drained 1 pending capture-only record');
   });
 
