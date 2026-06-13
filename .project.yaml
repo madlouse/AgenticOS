@@ -16,7 +16,7 @@ agent_context:
   current_state: standards/.context/state.yaml
   conversations: standards/.context/conversations/
   last_record_marker: standards/.context/.last_record
-  knowledge: knowledge/
+  knowledge: standards/knowledge/
   tasks: tasks/
   artifacts: artifacts/
 
