@@ -16,7 +16,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, switchOutProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runIssueStart, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
+import { initProject, runProjectResolve, runProjectEnsure, runExternalThreadBind, runExternalThreadGet, runExternalThreadList, switchProject, switchOutProject, listProjects, getStatus, saveState, recordSession, runPreflight, runIssueBootstrap, runBranchBootstrap, runIssueStart, runRecall, runPrScopeCheck, runHealth, runCanonicalSync, runConfig, runEditGuard, runEntrySurfaceRefresh, runStandardKitAdopt, runStandardKitUpgradeCheck, runStandardKitConformanceCheck, runNonCodeEvaluate, runArchiveImportEvaluate, runRecordCase, runListCases, runValidateDelegation, runCoverageCheck, runCoverageGenerate, runMultiAgentReview, runEnforceGitPolicy, runWorktreeCleanup, runTaskCreate, runTaskUpdate, runTaskList, runTaskClose } from './tools/index.js';
 import { getProjectContext } from './resources/index.js';
 import { isDirectExecution, resolveCliPrelude } from './utils/mcp-server-cli.js';
 import { buildSwitchWorkdirStructuredContent, buildTextToolResult } from './utils/tool-result.js';
@@ -471,6 +471,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'agenticos_recall',
+      description: 'Deterministic context recall (#582): given an issue or free query, surface the most related prior evolution-log entries and knowledge documents for the project. Signals are issue lineage, CJK-aware keyword overlap, and recency (no vector store in v1). Returns human-readable markdown by default (or JSON). The same engine auto-injects recall into agenticos_issue_bootstrap at cold start.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Free-text query to recall against (optional if issue_id is given)' },
+          issue_id: { type: 'string', description: 'Issue identifier to recall related history for' },
+          project: { type: 'string', description: 'Optional project ID, name, or path; defaults to the session project' },
+          project_path: { type: 'string', description: 'Optional managed project root override' },
+          limit: { type: 'number', description: 'Max results to return (default 5)' },
+          format: { type: 'string', enum: ['markdown', 'json'], description: 'Output format (default markdown)' },
+        },
+      },
+    },
+    {
       name: 'agenticos_pr_scope_check',
       description: 'Validate that the current branch diff is scoped to the intended issue relative to the intended remote base. Guardrail target resolution prefers explicit project_path, then provable repo_path, then session-local binding.',
       inputSchema: {
@@ -741,6 +756,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: await runBranchBootstrap(args ?? {}) }] };
     case 'agenticos_issue_start':
       return { content: [{ type: 'text', text: await runIssueStart(args ?? {}) }] };
+    case 'agenticos_recall':
+      return { content: [{ type: 'text', text: await runRecall(args ?? {}) }] };
     case 'agenticos_pr_scope_check':
       return { content: [{ type: 'text', text: await runPrScopeCheck(args ?? {}) }] };
     case 'agenticos_health':

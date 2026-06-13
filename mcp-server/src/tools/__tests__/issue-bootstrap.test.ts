@@ -13,6 +13,7 @@ const persistIssueBootstrapEvidenceMock = vi.hoisted(() => vi.fn().mockResolvedV
   project_id: 'agenticos',
   state_path: '/workspace/projects/agenticos/standards/.context/state.yaml',
 }));
+const recallContextMock = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 
 vi.mock('child_process', () => ({
   exec: vi.fn(),
@@ -62,6 +63,10 @@ vi.mock('../../utils/guardrail-evidence.js', () => ({
   persistIssueBootstrapEvidence: persistIssueBootstrapEvidenceMock,
 }));
 
+vi.mock('../../utils/recall.js', () => ({
+  recallContext: recallContextMock,
+}));
+
 import { runIssueBootstrap } from '../issue-bootstrap.js';
 
 function mockGitResponses(responses: Record<string, string>): void {
@@ -78,6 +83,8 @@ function mockGitResponses(responses: Record<string, string>): void {
 describe('runIssueBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    recallContextMock.mockReset();
+    recallContextMock.mockResolvedValue([]);
     resolveGuardrailProjectTargetMock.mockResolvedValue({
       activeProjectId: 'agenticos',
       resolutionSource: 'repo_path_match',
@@ -144,6 +151,50 @@ describe('runIssueBootstrap', () => {
         },
       }),
     }));
+  });
+
+  it('injects server-generated recall into the bootstrap result (#582)', async () => {
+    recallContextMock.mockResolvedValue([
+      { kind: 'decision', ref: 'evo-x', summary: 'prior decision', score: 101, signals: ['issue lineage #179'] },
+    ]);
+
+    const result = JSON.parse(await runIssueBootstrap({
+      issue_id: '179',
+      issue_title: 'Implement bootstrap evidence',
+      issue_body: 'about sampling',
+      context_reset_performed: true,
+      project_hot_load_performed: true,
+      issue_payload_attached: true,
+      repo_path: '/repo',
+      project_path: '/workspace/projects/agenticos/standards',
+    })) as { status: string; recalled: Array<{ ref: string }> };
+
+    expect(result.status).toBe('RECORDED');
+    expect(result.recalled).toEqual([
+      { kind: 'decision', ref: 'evo-x', summary: 'prior decision', score: 101, signals: ['issue lineage #179'] },
+    ]);
+    expect(recallContextMock).toHaveBeenCalledWith(expect.objectContaining({
+      issueId: '179',
+      issueTitle: 'Implement bootstrap evidence',
+      issueBody: 'about sampling',
+    }));
+  });
+
+  it('never blocks bootstrap when recall throws (best-effort) (#582)', async () => {
+    recallContextMock.mockRejectedValue(new Error('recall boom'));
+
+    const result = JSON.parse(await runIssueBootstrap({
+      issue_id: '179',
+      issue_title: 'Implement bootstrap evidence',
+      context_reset_performed: true,
+      project_hot_load_performed: true,
+      issue_payload_attached: true,
+      repo_path: '/repo',
+      project_path: '/workspace/projects/agenticos/standards',
+    })) as { status: string; recalled: unknown[] };
+
+    expect(result.status).toBe('RECORDED');
+    expect(result.recalled).toEqual([]);
   });
 
   it('blocks when the caller has not explicitly confirmed the clear-equivalent reset', async () => {

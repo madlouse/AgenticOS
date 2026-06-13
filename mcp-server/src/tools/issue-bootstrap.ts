@@ -8,6 +8,7 @@ import { persistIssueBootstrapEvidence, type GuardrailPersistenceResult, type Is
 import { resolveGuardrailProjectTarget } from '../utils/repo-boundary.js';
 import { resolveManagedProjectContextPaths } from '../utils/project-target.js';
 import { validateGuardrailRepoIdentity } from '../utils/guardrail-repo-identity.js';
+import { recallContext, type RecallCandidate } from '../utils/recall.js';
 
 type BootstrapStatus = 'RECORDED' | 'BLOCK';
 type WorkspaceType = 'main' | 'isolated_worktree';
@@ -39,6 +40,9 @@ interface IssueBootstrapResult {
     project_yaml_path: string;
   } | null;
   startup_context_paths: string[];
+  /** Server-generated cold-start recall (#582). System→agent injection — distinct
+   * from additional_context, which is the agent's own evidence input. */
+  recalled: RecallCandidate[];
   block_reasons: string[];
   evidence: {
     issue_id: string | null;
@@ -117,6 +121,7 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
     active_project: null,
     target_project: null,
     startup_context_paths: [],
+    recalled: [],
     block_reasons: [],
     evidence: {
       issue_id: issue_id || null,
@@ -212,6 +217,22 @@ export async function runIssueBootstrap(args: IssueBootstrapArgs): Promise<strin
       ].filter((path, index, all) => existsSync(path) && all.indexOf(path) === index);
       result.startup_context_paths = startupContextPaths;
       result.evidence.project_path = result.target_project.path;
+
+      // Cold-start recall (#582): surface strongly-related prior evolution
+      // entries + knowledge so the agent sees them without remembering to ask.
+      // Best-effort — a recall failure must never block issue bootstrap.
+      try {
+        result.recalled = await recallContext({
+          statePath: contextPaths.statePath,
+          knowledgeDir: contextPaths.knowledgeDir,
+          knowledgeDisplayDir: contextPaths.knowledgeDir.replace(`${result.target_project.path}/`, ''),
+          issueId: issue_id,
+          issueTitle: issue_title,
+          issueBody: issue_body,
+        });
+      } catch {
+        result.recalled = [];
+      }
     } catch (error) {
       result.block_reasons.push(error instanceof Error ? error.message : 'failed to resolve git or project startup context for issue bootstrap');
     }

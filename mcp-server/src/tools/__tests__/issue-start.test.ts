@@ -31,7 +31,11 @@ function wireHappyPath(): void {
     .mockResolvedValueOnce(json({ status: 'REDIRECT', evidence: { current_branch: 'main' } }))
     .mockResolvedValueOnce(json({ status: 'PASS', evidence: { current_branch: 'feat/519-x' } }));
   runBranchBootstrapMock.mockResolvedValue(json({ status: 'CREATED', worktree_path: WORKTREE, branch_name: 'feat/519-x' }));
-  runIssueBootstrapMock.mockResolvedValue(json({ status: 'RECORDED', startup_context_paths: ['/p/.project.yaml'] }));
+  runIssueBootstrapMock.mockResolvedValue(json({
+    status: 'RECORDED',
+    startup_context_paths: ['/p/.project.yaml'],
+    recalled: [{ kind: 'decision', ref: 'evo-x', summary: 'prior decision', score: 101, signals: ['issue lineage #519'] }],
+  }));
   runEditGuardMock.mockResolvedValue(json({ status: 'PASS' }));
 }
 
@@ -47,6 +51,27 @@ afterEach(() => {
 });
 
 describe('runIssueStart', () => {
+  it('surfaces server-generated recall from the bootstrap result with a review next-action (#582)', async () => {
+    wireHappyPath();
+
+    const result = JSON.parse(await runIssueStart(BASE_ARGS));
+
+    expect(result.recalled).toEqual([
+      { kind: 'decision', ref: 'evo-x', summary: 'prior decision', score: 101, signals: ['issue lineage #519'] },
+    ]);
+    expect(result.next_actions.some((a: string) => a.includes('review recalled'))).toBe(true);
+  });
+
+  it('omits the recall next-action when nothing was recalled (#582)', async () => {
+    wireHappyPath();
+    runIssueBootstrapMock.mockResolvedValue(json({ status: 'RECORDED', startup_context_paths: ['/p/.project.yaml'], recalled: [] }));
+
+    const result = JSON.parse(await runIssueStart(BASE_ARGS));
+
+    expect(result.recalled).toEqual([]);
+    expect(result.next_actions.some((a: string) => a.includes('review recalled'))).toBe(false);
+  });
+
   it('drives the full chain and returns READY with the created worktree', async () => {
     wireHappyPath();
 

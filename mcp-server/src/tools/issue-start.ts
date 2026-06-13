@@ -148,6 +148,7 @@ export async function runIssueStart(args: IssueStartArgs): Promise<string> {
     return blocked('issue bootstrap was not recorded', ib.block_reasons, steps);
   }
   const startupContextPaths: string[] = Array.isArray(ib.startup_context_paths) ? ib.startup_context_paths : [];
+  const recalled: unknown[] = Array.isArray(ib.recalled) ? ib.recalled : [];
 
   // Step 4: rerun preflight inside the worktree — this must now PASS.
   const pf2 = parseToolResult(await runPreflight({
@@ -190,6 +191,9 @@ export async function runIssueStart(args: IssueStartArgs): Promise<string> {
 
   const nextActions: string[] = [];
   nextActions.push('load startup context from startup_context_paths');
+  if (recalled.length > 0) {
+    nextActions.push('review recalled (related prior decisions/knowledge) before editing');
+  }
   if (editGuard === 'PASS') {
     nextActions.push(`begin implementation edits in ${worktreePath}`);
   } else {
@@ -205,6 +209,7 @@ export async function runIssueStart(args: IssueStartArgs): Promise<string> {
     branch_name: branchName,
     edit_guard: editGuard,
     startup_context_paths: startupContextPaths,
+    recalled,
     steps,
     next_actions: nextActions,
   }, null, 2);

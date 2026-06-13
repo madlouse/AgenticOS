@@ -1,9 +1,9 @@
 {
-  "capturedAt": "2026-06-11T07:26:33.545Z",
-  "version": "0.4.38",
+  "capturedAt": "2026-06-13T04:40:26.352Z",
+  "version": "0.4.40",
   "serverInfo": {
     "name": "agenticos-mcp",
-    "version": "0.4.38"
+    "version": "0.4.40"
   },
   "protocolVersion": "2025-11-25",
   "capabilities": {
@@ -35,6 +35,7 @@
     "agenticos_issue_bootstrap",
     "agenticos_branch_bootstrap",
     "agenticos_issue_start",
+    "agenticos_recall",
     "agenticos_pr_scope_check",
     "agenticos_health",
     "agenticos_canonical_sync",
@@ -50,5 +51,5 @@
     "agenticos_enforce_git_policy",
     "agenticos_worktree_cleanup"
   ],
-  "toolCount": 38
+  "toolCount": 39
 }
