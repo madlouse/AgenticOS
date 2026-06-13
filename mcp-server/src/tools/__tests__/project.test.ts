@@ -85,6 +85,15 @@ vi.mock('../../utils/canonical-main-guard.js', () => ({
   detectCanonicalMainWriteProtection: vi.fn(() => ({ blocked: false })),
 }));
 
+// Partial-mock recall: keep the real renderRecallMarkdown, control recallContext
+// so the switch recall block (#597) is deterministic without real evolution-log
+// or knowledge-dir reads.
+const recallMock = vi.hoisted(() => ({ recallContext: vi.fn() }));
+vi.mock('../../utils/recall.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/recall.js')>();
+  return { ...actual, recallContext: recallMock.recallContext };
+});
+
 import { switchOutProject, switchProject, listProjects, getStatus } from '../project.js';
 import * as fsPromises from 'fs/promises';
 import * as registry from '../../utils/registry.js';
@@ -145,6 +154,7 @@ describe('switchProject', () => {
     });
     fsPromisesMock.readdir.mockResolvedValue([]);
     fsPromisesMock.stat.mockRejectedValue(new Error('not found'));
+    recallMock.recallContext.mockResolvedValue([]);
     loadLatestGuardrailStateMock.mockResolvedValue({
       source: null,
       state: {},
@@ -235,6 +245,80 @@ describe('switchProject', () => {
     expect(result).toContain('/test/path');
     expect(result).toContain('Kind: project');
     expect(registryMock.patchProjectMetadata).toHaveBeenCalled();
+  });
+
+  it('surfaces a recall block on switch keyed to current_task and pending (#597)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        { id: 'my-project', name: 'My Project', path: '/test/path', status: 'active' as const, created: '2025-01-01', last_accessed: '2025-01-01T00:00:00.000Z' },
+      ],
+    });
+    mockStatusReads(
+      { meta: { description: '' }, source_control: { topology: 'local_directory_only' } },
+      {
+        current_task: { title: 'recall on switch path', status: 'in_progress' },
+        working_memory: { pending: ['wire recallContext into switch', 'render block'], decisions: [], facts: [] },
+        issue_bootstrap: { latest: { issue_id: '597' } },
+      },
+    );
+    recallMock.recallContext.mockResolvedValue([
+      { kind: 'decision', ref: 'evo-2026-06-13-abc', summary: 'prior recall decision', score: 102, signals: ['issue lineage #597'] },
+    ]);
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('Recalled context (pick up where you left off)');
+    expect(result).toContain('prior recall decision');
+    // Query is built from current_task + pending; the last issue id is passed for lineage.
+    expect(recallMock.recallContext).toHaveBeenCalledWith(expect.objectContaining({
+      query: expect.stringContaining('recall on switch path'),
+      issueId: '597',
+    }));
+  });
+
+  it('skips recall on switch when there is no task/pending/issue signal (#597)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        { id: 'my-project', name: 'My Project', path: '/test/path', status: 'active' as const, created: '2025-01-01', last_accessed: '2025-01-01T00:00:00.000Z' },
+      ],
+    });
+    mockStatusReads(
+      { meta: { description: '' }, source_control: { topology: 'local_directory_only' } },
+      { session: {} },
+    );
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(recallMock.recallContext).not.toHaveBeenCalled();
+    expect(result).not.toContain('Recalled context');
+    expect(result).toContain('Switched to project');
+  });
+
+  it('does not block the switch when recall throws (#597)', async () => {
+    registryMock.loadRegistry.mockResolvedValue({
+      version: '1.0.0',
+      last_updated: '2025-01-01T00:00:00.000Z',
+      active_project: null,
+      projects: [
+        { id: 'my-project', name: 'My Project', path: '/test/path', status: 'active' as const, created: '2025-01-01', last_accessed: '2025-01-01T00:00:00.000Z' },
+      ],
+    });
+    mockStatusReads(
+      { meta: { description: '' }, source_control: { topology: 'local_directory_only' } },
+      { current_task: { title: 'something' }, working_memory: { pending: ['x'] } },
+    );
+    recallMock.recallContext.mockRejectedValue(new Error('recall boom'));
+
+    const result = await switchProject({ project: 'my-project' });
+
+    expect(result).toContain('Switched to project');
+    expect(result).not.toContain('Recalled context');
   });
 
   it('surfaces knowledge-evolution freshness/drift warnings in the switch greeting', async () => {

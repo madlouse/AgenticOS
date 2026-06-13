@@ -38,6 +38,7 @@ import { deriveExpectedWorktreeRoot, inspectProjectWorktreeTopology } from '../u
 import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guard.js';
 import { assessKnowledgeEvolutionHealth, buildKnowledgeEvolutionStatusLines } from '../utils/knowledge-evolution-health.js';
 import { assessCanonicalMainDrift, buildCanonicalMainDriftStatusLines } from '../utils/canonical-main-drift.js';
+import { recallContext, renderRecallMarkdown, type RecallCandidate } from '../utils/recall.js';
 
 type GuardrailCommand = 'agenticos_preflight' | 'agenticos_branch_bootstrap' | 'agenticos_pr_scope_check';
 
@@ -738,7 +739,57 @@ export async function switchProject(args: any): Promise<string> {
   } catch {}
   const driftBlock = driftSummary.length > 0 ? `${driftSummary.join('\n')}\n` : '';
 
-  return `✅ Switched to project "${projectDisplayLabel(found)}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}${driftBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+  // Cold-start recall (#582 / L3) on the switch path (#597): surface strongly
+  // related prior evolution entries + knowledge keyed to what the operator was
+  // last doing, so a plain switch — the canonical Session Start entrypoint —
+  // picks up where it left off, not only the issue_bootstrap path. Read-only and
+  // best-effort: a recall failure must never break the switch.
+  const recallBlock = await buildSwitchRecallBlock({
+    sessionPath,
+    contextPaths,
+    state,
+    displayState,
+  });
+
+  return `✅ Switched to project "${projectDisplayLabel(found)}"\n\nPath: ${sessionPath}\nStatus: ${found.status}\nKind: ${projectKind}\n${filesystemAlignmentSummary.join('\n')}\n\n${contextSummary.join('\n')}${committedSnapshotSummary.length > 0 ? `\n${committedSnapshotSummary.join('\n')}` : ''}\n${transcriptRoutingSummary.length > 0 ? `\n${transcriptRoutingSummary.join('\n')}\n` : '\n'}Context loaded from:\n- ${sessionPath}/.project.yaml\n- ${contextPaths.quickStartPath}\n- ${contextPaths.statePath}\n${freshnessBlock}${driftBlock}${recallBlock}\n${guardrailSummary.join('\n')}\n${issueBootstrapSummary.join('\n')}${bootstrap}`;
+}
+
+/**
+ * Build the cold-start recall block for the switch greeting (#597). The query is
+ * what the operator was last doing — current_task title + pending — plus the last
+ * issue id for lineage scoring. Returns '' when there is no query signal or no
+ * related history. Best-effort: any failure yields '' so it never blocks a switch.
+ */
+async function buildSwitchRecallBlock(args: {
+  sessionPath: string;
+  contextPaths: { statePath: string; knowledgeDir: string };
+  state: any;
+  displayState: any;
+}): Promise<string> {
+  try {
+    const source = args.state ?? args.displayState;
+    const currentTaskTitle = typeof source?.current_task?.title === 'string' ? source.current_task.title : '';
+    const pendingItems = Array.isArray(source?.working_memory?.pending)
+      ? source.working_memory.pending.filter((item: unknown): item is string => typeof item === 'string')
+      : [];
+    const query = [currentTaskTitle, ...pendingItems].join(' ').trim();
+    const lastIssueId = (args.displayState?.issue_bootstrap?.latest as IssueBootstrapRecord | undefined)?.issue_id
+      ?? (args.state?.issue_bootstrap?.latest as IssueBootstrapRecord | undefined)?.issue_id
+      ?? null;
+    if (query.length === 0 && !lastIssueId) return '';
+
+    const recalled: RecallCandidate[] = await recallContext({
+      statePath: args.contextPaths.statePath,
+      knowledgeDir: args.contextPaths.knowledgeDir,
+      knowledgeDisplayDir: args.contextPaths.knowledgeDir.replace(`${args.sessionPath}/`, ''),
+      issueId: lastIssueId,
+      query: query.length > 0 ? query : null,
+    });
+    if (recalled.length === 0) return '';
+    return `\n${renderRecallMarkdown(recalled, 'Recalled context (pick up where you left off)')}\n`;
+  } catch {
+    return '';
+  }
 }
 
 export async function switchOutProject(_args: any = {}): Promise<string> {
