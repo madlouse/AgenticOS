@@ -10,6 +10,7 @@ import { detectCanonicalMainWriteProtection } from '../utils/canonical-main-guar
 import { resolveRuntimeReviewSurfacePaths, toProjectAbsoluteRuntimePath } from '../utils/runtime-review-surface.js';
 import { resolveContextPolicyPlan } from '../utils/context-policy-plan.js';
 import { resolveContinuitySurfacePlan } from '../utils/continuity-surface.js';
+import { EVOLUTION_LOG_DIRNAME, getEvolutionLogDir } from '../utils/evolution-log.js';
 import {
   buildConversationRoutingStatusLines,
   detectLegacyTrackedTranscriptStatus,
@@ -293,13 +294,28 @@ export async function saveState(args: any): Promise<string> {
           : []),
         toGitRelativePath(gitWorktreeRoot, join(projectPath, contextPolicyPlan.trackedContextDisplayPaths.knowledge), { directory: true }),
         toGitRelativePath(gitWorktreeRoot, join(projectPath, contextPolicyPlan.trackedContextDisplayPaths.tasks), { directory: true }),
+        // The evolution log (L2, #580) is tracked continuity alongside state.yaml;
+        // without staging it here it is written by record but never reaches git (#594).
+        // Existence is enforced uniformly below (filteredStagePaths) since the
+        // runtime-review surface lists it for the local_private branch too.
+        toGitRelativePath(gitWorktreeRoot, getEvolutionLogDir(join(projectPath, contextPolicyPlan.trackedContextDisplayPaths.state)), { directory: true }),
         toGitRelativePath(gitWorktreeRoot, join(projectPath, 'CLAUDE.md')),
         ...(existsSync(`${projectPath}/AGENTS.md`) ? [toGitRelativePath(gitWorktreeRoot, join(projectPath, 'AGENTS.md'))] : []),
       ]
       : resolveRuntimeReviewSurfacePaths(projectPath, projectYaml, {
         include_claude_state_mirror: true,
       }).tracked_review_excluded_paths;
-    const filteredStagePaths = stagePaths.filter((trackedPath) => !isLastRecordMarkerPath(trackedPath));
+    // The evolution log (L2, #580) is listed by both the continuity and runtime-review
+    // surfaces, but it only exists after the first full-mode record. Stage it only when
+    // present so `git add -A --` does not fatal on a missing pathspec (#594).
+    const evolutionLogExists = existsSync(
+      getEvolutionLogDir(join(projectPath, contextPolicyPlan.trackedContextDisplayPaths.state)),
+    );
+    const isEvolutionLogPath = (trackedPath: string): boolean =>
+      trackedPath.replace(/\/+$/, '').split('/').pop() === EVOLUTION_LOG_DIRNAME;
+    const filteredStagePaths = stagePaths.filter((trackedPath) =>
+      !isLastRecordMarkerPath(trackedPath)
+      && (evolutionLogExists || !isEvolutionLogPath(trackedPath)));
     // Pass each path as a distinct argv element (no shell, no quoting); runtime
     // paths resolve to absolute so they apply from the git worktree root.
     const stageTargets = filteredStagePaths.map((trackedPath) => continuityPlan

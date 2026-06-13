@@ -331,6 +331,101 @@ describe('saveState', () => {
     expect(addCommand).not.toContain('add "/test/path/"');
   });
 
+  it('stages the evolution-log dir when it exists so the L2 timeline reaches git (#594)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      state: { session: {} },
+    });
+    // Evolution log dir present on disk → must be staged.
+    fsMock.existsSync.mockImplementation((path: string) => String(path).includes('evolution-log'));
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+        if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+        if (cmd.includes('remote get-url origin')) { cb(null, 'git@github.com:example/test-project.git\n', ''); return; }
+        cb(null, '', '');
+      }
+    );
+
+    await saveState({ message: 'save with evolution log' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).toContain('.context/evolution-log');
+  });
+
+  it('omits the evolution-log dir when it is absent so git add does not fatal (#594)', async () => {
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({
+      projectYaml: {
+        meta: { id: 'test-project', name: 'Test Project' },
+        source_control: {
+          topology: 'github_versioned',
+          context_publication_policy: 'private_continuity',
+          github_repo: 'example/test-project',
+          branch_strategy: 'github_flow',
+        },
+        execution: { source_repo_roots: ['.'] },
+      },
+      state: { session: {} },
+    });
+    fsMock.existsSync.mockReturnValue(false); // no evolution-log dir yet
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+        if (cmd.includes('rev-parse --git-common-dir')) { cb(null, '.git\n', ''); return; }
+        if (cmd.includes('remote get-url origin')) { cb(null, 'git@github.com:example/test-project.git\n', ''); return; }
+        cb(null, '', '');
+      }
+    );
+
+    await saveState({ message: 'save without evolution log' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).not.toContain('evolution-log');
+  });
+
+  it('does not stage the local_private evolution-log surface when the dir is absent (#594)', async () => {
+    // local_private goes through the runtime-review surface, which lists the
+    // evolution log unconditionally; without the absence guard `git add` would
+    // fatal on a missing pathspec before the first full-mode record.
+    registryMock.loadRegistry.mockResolvedValue(buildRegistry());
+    mockProjectFiles({ state: { session: {} } });
+    fsMock.existsSync.mockReturnValue(false); // no evolution-log dir yet
+
+    const commands: string[] = [];
+    childProcessMock.exec.mockImplementation(
+      (cmd: string, cb: (err: Error | null, stdout?: string, stderr?: string) => void) => {
+        commands.push(cmd);
+        if (cmd.includes('rev-parse --show-toplevel')) { cb(null, '/test/path\n', ''); return; }
+        cb(null, '', '');
+      }
+    );
+
+    await saveState({ message: 'local_private save without evolution log' });
+
+    const addCommand = commands.find((cmd) => cmd.includes(' add -A -- '));
+    expect(addCommand).toBeDefined();
+    expect(addCommand).not.toContain('evolution-log');
+  });
+
   it('notes when CLAUDE.md had to be auto-generated during save', async () => {
     registryMock.loadRegistry.mockResolvedValue(buildRegistry());
     mockProjectFiles({ state: { session: {} } });
