@@ -10,6 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [0.4.41] — 2026-06-13
+
+### Added
+- mcp-server: project **evolution log** (L2) — typed, git-tracked timeline at
+  `<context>/evolution-log/YYYY-MM.yaml`. Full-mode `agenticos_record` now
+  auto-appends `kind: decision` entries with `refs.issue` stamped from the
+  worktree branch; travels with the repo and is human-readable (#580).
+- mcp-server: `agenticos_recall` (L3) — deterministic context recall over the
+  evolution log + knowledge docs (issue lineage, CJK-aware keyword overlap,
+  recency; no vector store). Auto-injected into `agenticos_issue_bootstrap`
+  cold start as a `recalled` field and surfaced via `agenticos_issue_start`;
+  also available as an operator-facing tool (markdown or JSON) (#582).
+
+### Fixed
+- mcp-server: distillation-ledger mutations are now lock-serialized with atomic
+  writes; a corrupt ledger is backed up rather than silently erased, and unknown
+  fields/statuses survive a load→save round-trip (forward compatibility) (#580).
+- tests: JSON-RPC spawn parsers now buffer across stdout chunks, fixing a
+  timeout on large `tools/list` responses that split across pipe chunks (#582).
+
 ## [0.4.40] — 2026-06-12
 
 ### Fixed
