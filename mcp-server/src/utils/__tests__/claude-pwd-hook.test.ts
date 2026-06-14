@@ -12,6 +12,9 @@ import {
   runClaudePwdHook,
   resolveClaudePreToolCwdMode,
   runClaudePreToolCwdHook,
+  hasClaudePreToolCwdHook,
+  inspectClaudePreToolCwdHook,
+  mergeClaudePreToolCwdHook,
 } from '../claude-pwd-hook.js';
 
 describe('claude-pwd-hook', () => {
@@ -396,5 +399,55 @@ describe('runClaudePreToolCwdHook (#603)', () => {
       JSON.stringify({ tool_name: 'Bash', tool_input: {} }),
       { mode: 'warn', boundProjectPath: '/proj', cwd: '/x' },
     )).toBeNull();
+  });
+});
+
+describe('claude PreToolUse cwd hook registration (#603 follow-up)', () => {
+  const entry = {
+    matcher: 'Bash',
+    hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }],
+  };
+
+  it('hasClaudePreToolCwdHook detects the Bash hook', () => {
+    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [entry] } })).toBe(true);
+    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [] } })).toBe(false);
+    expect(hasClaudePreToolCwdHook({})).toBe(false);
+    expect(hasClaudePreToolCwdHook(null)).toBe(false);
+    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [{ matcher: 'Read', hooks: entry.hooks }] } })).toBe(false);
+    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'other' }] }] } })).toBe(false);
+  });
+
+  it('inspect reports missing / unset / configured / unavailable', () => {
+    expect(inspectClaudePreToolCwdHook(null).status).toBe('missing');
+    expect(inspectClaudePreToolCwdHook('{}').status).toBe('unset');
+    expect(inspectClaudePreToolCwdHook(JSON.stringify({ hooks: { PreToolUse: [entry] } })).status).toBe('configured');
+    expect(inspectClaudePreToolCwdHook('{not json').status).toBe('unavailable');
+  });
+
+  it('merge adds the hook idempotently and preserves existing PreToolUse entries', () => {
+    const first = mergeClaudePreToolCwdHook('{}');
+    expect(first.changed).toBe(true);
+    const parsed = JSON.parse(first.content);
+    expect(parsed.hooks.PreToolUse).toHaveLength(1);
+    expect(parsed.hooks.PreToolUse[0].matcher).toBe('Bash');
+    expect(parsed.hooks.PreToolUse[0].hooks[0].command).toBe('agenticos-claude-pretool-cwd');
+
+    const second = mergeClaudePreToolCwdHook(first.content);
+    expect(second.changed).toBe(false);
+
+    const withOther = JSON.stringify({
+      hooks: { PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: 'x' }] }] },
+    });
+    const merged = mergeClaudePreToolCwdHook(withOther);
+    expect(JSON.parse(merged.content).hooks.PreToolUse).toHaveLength(2);
+  });
+
+  it('merge throws on a non-object settings root', () => {
+    expect(() => mergeClaudePreToolCwdHook('[]')).toThrow();
+  });
+
+  it('merge throws when hooks or hooks.PreToolUse have the wrong shape', () => {
+    expect(() => mergeClaudePreToolCwdHook(JSON.stringify({ hooks: 'nope' }))).toThrow();
+    expect(() => mergeClaudePreToolCwdHook(JSON.stringify({ hooks: { PreToolUse: 'nope' } }))).toThrow();
   });
 });

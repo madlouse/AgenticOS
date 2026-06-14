@@ -526,6 +526,7 @@ describe('bootstrap cli', () => {
     expect(harness.files.has('/Users/tester/.claude/settings.json')).toBe(false);
     expect(harness.stdout.some((line) => line.includes('claude-pwd-hook'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('add agenticos_switch and agenticos_switch_out PostToolUse cwd guidance hooks'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('claude-pretool-cwd-hook: add the opt-in PreToolUse Bash'))).toBe(true);
   });
 
   it('adds Claude cwd guidance hook during apply when requested', () => {
@@ -543,6 +544,30 @@ describe('bootstrap cli', () => {
     expect(settings.hooks.PostToolUse[1].matcher).toBe('mcp__agenticos__agenticos_switch_out');
     expect(settings.hooks.PostToolUse[0].hooks[0].command).toBe('agenticos-claude-pwd-hook');
     expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
+    // #603 follow-up: the opt-in PreToolUse Bash cwd hook is registered alongside.
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse[0].matcher).toBe('Bash');
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe('agenticos-claude-pretool-cwd');
+    expect(harness.stdout.some((line) => line.includes('OK claude-pretool-cwd-hook'))).toBe(true);
+  });
+
+  it('reports the PreToolUse cwd hook as already configured when present (#603)', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          { matcher: 'Bash', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+        ],
+      },
+    }));
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK claude-pretool-cwd-hook') && line.includes('Detected the opt-in'))).toBe(true);
   });
 
   it('installs AgenticOS activation Skills during apply when requested', () => {
