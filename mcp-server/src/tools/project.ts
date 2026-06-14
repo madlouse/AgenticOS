@@ -22,6 +22,7 @@ import {
   getSessionContextState,
   getSessionProjectBinding,
   alignPwd,
+  shellQuote,
   switchOutSessionProject,
   type PwdAlignmentResult,
   type SwitchOutSessionResult,
@@ -384,6 +385,13 @@ function buildFilesystemAlignmentLines(
     lines.push('⚠️ Claude Code shell cwd is per-call; MCP output cannot persistently change the parent session cwd.');
     lines.push('   Use this project path as explicit workdir for file/edit tools, or prefix each shell command with:');
     lines.push(`   ${pwdResult.instruction}`);
+    if (pwdResult.observedMcpProcessPwd !== projectPath) {
+      lines.push("   To load this project's instructions without changing cwd or relaunching, add it as a working directory:");
+      lines.push(`     CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir ${shellQuote(projectPath)}`);
+      lines.push('     (loads CLAUDE.md, .claude/CLAUDE.md, .claude/rules/*.md, CLAUDE.local.md — not .claude/ commands, subagents, hooks, or permissions)');
+      lines.push("   For this project's full native runtime (.claude/ commands/subagents/hooks/permissions), launch a session rooted here:");
+      lines.push(`     cd ${shellQuote(projectPath)} && claude`);
+    }
   } else {
     lines.push('📍 Client alignment hint:');
     lines.push(`   ${pwdResult.instruction}`);
