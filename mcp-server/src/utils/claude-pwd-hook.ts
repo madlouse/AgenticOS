@@ -1,4 +1,5 @@
 import { shellQuote, validatePathSecurity } from './session-context.js';
+import { restoreSessionBinding } from './session-binding-store.js';
 
 export const CLAUDE_SETTINGS_PATH = '.claude/settings.json';
 export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHER = 'mcp__agenticos__agenticos_switch';
@@ -291,4 +292,95 @@ export function mergeClaudePwdAlignmentHook(settingsContent: string | null): Cla
     changed: true,
     content: `${JSON.stringify(next, null, 2)}\n`,
   };
+}
+
+export type ClaudePreToolCwdMode = 'off' | 'warn' | 'rewrite';
+
+/**
+ * Opt-in PreToolUse cwd-alignment for the Claude Code Bash tool (#603).
+ *
+ * Off unless AGENTICOS_CLAUDE_PRETOOL_CWD is set to `warn` or `rewrite`, so
+ * existing installs are unaffected. `warn` adds advisory context; `rewrite`
+ * transparently prefixes the command with a cd into the bound project using a
+ * PreToolUse `updatedInput` (supported in Claude Code v2.0.10+).
+ */
+export function resolveClaudePreToolCwdMode(
+  raw: string | undefined = process.env.AGENTICOS_CLAUDE_PRETOOL_CWD,
+): ClaudePreToolCwdMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === 'warn') return 'warn';
+  if (value === 'rewrite') return 'rewrite';
+  return 'off';
+}
+
+export interface ClaudePreToolCwdHookOptions {
+  mode?: ClaudePreToolCwdMode;
+  /** Injected bound-project path; defaults to the persisted session binding. */
+  boundProjectPath?: string | null;
+  /** Injected cwd; defaults to process.cwd(). */
+  cwd?: string;
+}
+
+/**
+ * Resolve the bound project from the runtime session-binding sidecar. The hook
+ * runs in the same environment as the MCP process (so resolveSessionKey()
+ * reconstructs the same key), making the lookup deterministic from a foreign
+ * process. Returns null when nothing is bound or persistence is unavailable.
+ */
+function resolveBoundProjectPath(options: ClaudePreToolCwdHookOptions): string | null {
+  if (options.boundProjectPath !== undefined) return options.boundProjectPath;
+  return restoreSessionBinding()?.projectPath ?? null;
+}
+
+export function runClaudePreToolCwdHook(
+  input: string,
+  options: ClaudePreToolCwdHookOptions = {},
+): string | null {
+  const mode = options.mode ?? resolveClaudePreToolCwdMode();
+  if (mode === 'off') return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input || '{}');
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+
+  // Built-in Bash tool only; never touch MCP tools or file/edit tools.
+  if (parsed.tool_name !== 'Bash') return null;
+  const toolInput = parsed.tool_input;
+  if (!isRecord(toolInput) || typeof toolInput.command !== 'string') return null;
+  const command = toolInput.command;
+
+  const boundProjectPath = resolveBoundProjectPath(options);
+  if (!boundProjectPath || !validatePathSecurity(boundProjectPath).valid) return null;
+
+  const cwd = options.cwd ?? process.cwd();
+  if (boundProjectPath === cwd) return null; // already aligned; nothing to do
+
+  // Conservative: leave commands that already manage their own directory alone.
+  if (/^\s*cd(\s|$)/.test(command)) return null;
+
+  if (mode === 'warn') {
+    return `${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: [
+          `AgenticOS: session is bound to ${boundProjectPath} but the shell cwd differs.`,
+          `Prefix this command with: cd ${shellQuote(boundProjectPath)} && <command> (or use absolute paths).`,
+        ].join('\n'),
+      },
+    })}\n`;
+  }
+
+  const updatedInput = { ...toolInput, command: `cd ${shellQuote(boundProjectPath)} && ${command}` };
+  return `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      permissionDecisionReason: `AgenticOS aligned the shell cwd to the bound project ${boundProjectPath}.`,
+      updatedInput,
+    },
+  })}\n`;
 }

@@ -7,6 +7,7 @@
     "agenticos-mcp": "./bin/agenticos-mcp",
     "agenticos-bootstrap": "./build/bootstrap.js",
     "agenticos-claude-pwd-hook": "./build/claude-pwd-hook.js",
+    "agenticos-claude-pretool-cwd": "./build/claude-pretool-cwd-hook.js",
     "agenticos-config": "./build/config.js",
     "agenticos-edit-guard": "./build/edit-guard.js",
     "agenticos-record-reminder": "./build/record-reminder.js"
