@@ -10,6 +10,10 @@ export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS = [
 ] as const;
 export const CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND = 'agenticos-claude-pwd-hook';
 
+/** Opt-in PreToolUse cwd-alignment hook (#603): Bash matcher + command. */
+export const CLAUDE_PRETOOL_CWD_HOOK_MATCHER = 'Bash';
+export const CLAUDE_PRETOOL_CWD_HOOK_COMMAND = 'agenticos-claude-pretool-cwd';
+
 export type ClaudePwdHookStatus = 'configured' | 'missing' | 'unset' | 'unavailable';
 
 export interface ClaudePwdHookInspection {
@@ -383,4 +387,87 @@ export function runClaudePreToolCwdHook(
       updatedInput,
     },
   })}\n`;
+}
+
+export function hasClaudePreToolCwdHook(settings: unknown): boolean {
+  if (!isRecord(settings)) return false;
+  const hooks = settings.hooks;
+  if (!isRecord(hooks)) return false;
+  const preToolUse = hooks.PreToolUse;
+  if (!Array.isArray(preToolUse)) return false;
+  return preToolUse.some((entry) => {
+    if (!isRecord(entry) || entry.matcher !== CLAUDE_PRETOOL_CWD_HOOK_MATCHER) return false;
+    const nestedHooks = entry.hooks;
+    if (!Array.isArray(nestedHooks)) return false;
+    return nestedHooks.some((hook) => isRecord(hook)
+      && hook.type === 'command'
+      && typeof hook.command === 'string'
+      && hook.command.trim() === CLAUDE_PRETOOL_CWD_HOOK_COMMAND);
+  });
+}
+
+export function inspectClaudePreToolCwdHook(settingsContent: string | null): ClaudePwdHookInspection {
+  if (settingsContent === null) {
+    return { status: 'missing', detail: 'Claude Code settings file is missing.' };
+  }
+  try {
+    const parsed = parseSettings(settingsContent);
+    return hasClaudePreToolCwdHook(parsed)
+      ? {
+        status: 'configured',
+        detail: 'Detected the opt-in PreToolUse Bash cwd-alignment hook (activate with AGENTICOS_CLAUDE_PRETOOL_CWD=warn|rewrite).',
+      }
+      : {
+        status: 'unset',
+        detail: 'Claude Code settings exist but the opt-in PreToolUse Bash cwd-alignment hook is missing.',
+      };
+  } catch {
+    return { status: 'unavailable', detail: 'Claude Code settings could not be parsed as JSON.' };
+  }
+}
+
+export function mergeClaudePreToolCwdHook(settingsContent: string | null): ClaudePwdHookMergeResult {
+  const parsed = settingsContent?.trim() ? parseSettings(settingsContent) : {};
+  if (!isRecord(parsed)) {
+    throw new Error('Claude Code settings must be a JSON object.');
+  }
+
+  if (hasClaudePreToolCwdHook(parsed)) {
+    const configuredContent = settingsContent as string;
+    return {
+      changed: false,
+      content: configuredContent.endsWith('\n') ? configuredContent : `${configuredContent}\n`,
+    };
+  }
+
+  const hooks = parsed.hooks === undefined ? {} : parsed.hooks;
+  if (!isRecord(hooks)) {
+    throw new Error('Claude Code settings hooks must be a JSON object.');
+  }
+  const preToolUse = hooks.PreToolUse === undefined ? [] : hooks.PreToolUse;
+  if (!Array.isArray(preToolUse)) {
+    throw new Error('Claude Code settings hooks.PreToolUse must be an array.');
+  }
+
+  const entry = {
+    matcher: CLAUDE_PRETOOL_CWD_HOOK_MATCHER,
+    hooks: [
+      {
+        type: 'command',
+        command: CLAUDE_PRETOOL_CWD_HOOK_COMMAND,
+        shell: 'bash',
+        timeout: 5,
+      },
+    ],
+  };
+
+  const next = {
+    ...parsed,
+    hooks: {
+      ...hooks,
+      PreToolUse: [...preToolUse, entry],
+    },
+  };
+
+  return { changed: true, content: `${JSON.stringify(next, null, 2)}\n` };
 }

@@ -4,7 +4,9 @@ import { detectDefaultShellProfile, detectDefaultWorkspace, detectSupportedAgent
 import {
   CLAUDE_SETTINGS_PATH,
   inspectClaudePwdAlignmentHook,
+  inspectClaudePreToolCwdHook,
   mergeClaudePwdAlignmentHook,
+  mergeClaudePreToolCwdHook,
 } from './claude-pwd-hook.js';
 import {
   installAgentSkill,
@@ -230,6 +232,9 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
     const hookConfigResult = selectedAgents.includes('claude-code')
       ? configureClaudePwdAlignmentHook(options, deps)
       : null;
+    const preToolHookConfigResult = selectedAgents.includes('claude-code')
+      ? configureClaudePreToolCwdHook(options, deps)
+      : null;
     const skillInstallResults = options.installSkills
       ? selectedAgents.map((agentId) => applyAgentSkill(agentId, options, deps))
       : null;
@@ -262,6 +267,10 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       const marker = hookConfigResult.ok ? 'OK' : hookConfigResult.fatal ? 'FAIL' : 'WARN';
       deps.stdout(`${marker} claude-pwd-hook: ${hookConfigResult.detail}`);
     }
+    if (preToolHookConfigResult) {
+      const marker = preToolHookConfigResult.ok ? 'OK' : preToolHookConfigResult.fatal ? 'FAIL' : 'WARN';
+      deps.stdout(`${marker} claude-pretool-cwd-hook: ${preToolHookConfigResult.detail}`);
+    }
     if (skillInstallResults) {
       for (const result of skillInstallResults) {
         const marker = result.ok
@@ -284,6 +293,7 @@ export function runBootstrapCli(argv: string[], deps: BootstrapCliDeps): number 
       || (shellProfileResult && !shellProfileResult.ok)
       || (launchctlResult && !launchctlResult.ok)
       || (hookConfigResult && hookConfigResult.fatal)
+      || (preToolHookConfigResult && preToolHookConfigResult.fatal)
       || (skillInstallResults && skillInstallResults.some((result) => !result.ok))
       || switchWorkdirEffectResults.some((result) => !result.ok)
       || !bootstrapStateResult.ok
@@ -431,8 +441,10 @@ export function buildDryRunLines(
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
     if (options.autoConfigureHooks) {
       lines.push(`- claude-pwd-hook: add agenticos_switch and agenticos_switch_out PostToolUse cwd guidance hooks to ${settingsPath}`);
+      lines.push(`- claude-pretool-cwd-hook: add the opt-in PreToolUse Bash cwd-alignment hook to ${settingsPath} (inert until AGENTICOS_CLAUDE_PRETOOL_CWD=warn|rewrite)`);
     } else {
       lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add missing switch/switch_out hooks`);
+      lines.push(`- claude-pretool-cwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add the opt-in PreToolUse Bash hook`);
     }
   }
   lines.push('', 'Switch workdir effects:');
@@ -730,6 +742,48 @@ function configureClaudePwdAlignmentHook(
   try {
     deps.mkdirp(`${deps.homeDir}/.claude`);
     const merged = mergeClaudePwdAlignmentHook(existing);
+    deps.writeFile(settingsPath, merged.content);
+    return {
+      ok: true,
+      fatal: false,
+      detail: `updated ${settingsPath}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      fatal: true,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function configureClaudePreToolCwdHook(
+  options: CliOptions,
+  deps: BootstrapCliDeps,
+): HookConfigResult {
+  const settingsPath = `${deps.homeDir}/${CLAUDE_SETTINGS_PATH}`;
+  const existing = deps.readFile(settingsPath);
+  const inspection = inspectClaudePreToolCwdHook(existing);
+
+  if (inspection.status === 'configured') {
+    return {
+      ok: true,
+      fatal: false,
+      detail: inspection.detail,
+    };
+  }
+
+  if (!options.autoConfigureHooks) {
+    return {
+      ok: false,
+      fatal: false,
+      detail: `${inspection.detail} Rerun with --auto-configure-hooks --apply to add it to ${settingsPath}.`,
+    };
+  }
+
+  try {
+    deps.mkdirp(`${deps.homeDir}/.claude`);
+    const merged = mergeClaudePreToolCwdHook(existing);
     deps.writeFile(settingsPath, merged.content);
     return {
       ok: true,
