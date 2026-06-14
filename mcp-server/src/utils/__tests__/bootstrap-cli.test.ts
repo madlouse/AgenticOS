@@ -551,6 +551,25 @@ describe('bootstrap cli', () => {
     expect(harness.stdout.some((line) => line.includes('OK claude-pretool-cwd-hook'))).toBe(true);
   });
 
+  it('reports the PreToolUse cwd hook as already configured when present (#603)', () => {
+    const harness = createDeps();
+    harness.files.set('/Users/tester/.claude/settings.json', JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          { matcher: 'Bash', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+        ],
+      },
+    }));
+
+    const exitCode = runBootstrapCli(
+      ['--workspace', '/tmp/workspace', '--agent', 'claude-code', '--auto-configure-hooks', '--apply'],
+      harness.deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.stdout.some((line) => line.includes('OK claude-pretool-cwd-hook') && line.includes('Detected the opt-in'))).toBe(true);
+  });
+
   it('installs AgenticOS activation Skills during apply when requested', () => {
     const harness = createDeps();
 

@@ -445,4 +445,9 @@ describe('claude PreToolUse cwd hook registration (#603 follow-up)', () => {
   it('merge throws on a non-object settings root', () => {
     expect(() => mergeClaudePreToolCwdHook('[]')).toThrow();
   });
+
+  it('merge throws when hooks or hooks.PreToolUse have the wrong shape', () => {
+    expect(() => mergeClaudePreToolCwdHook(JSON.stringify({ hooks: 'nope' }))).toThrow();
+    expect(() => mergeClaudePreToolCwdHook(JSON.stringify({ hooks: { PreToolUse: 'nope' } }))).toThrow();
+  });
 });
