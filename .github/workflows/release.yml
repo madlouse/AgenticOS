@@ -14,7 +14,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FORMULA_NAME: agenticos
   FORMULA_PATH: Formula/agenticos.rb
   HOMEBREW_TAP: madlouse/homebrew-agenticos
 
@@ -116,14 +115,37 @@ jobs:
 
       - name: Update Homebrew formula in tap repo
         if: steps.homebrew_pat.outputs.available == 'true'
-        uses: mislav/bump-homebrew-formula-action@ccf2332299a883f6af50a1d2d41e5df7904dd769 # v4.1
-        with:
-          formula-name: ${{ env.FORMULA_NAME }}
-          formula-path: ${{ env.FORMULA_PATH }}
-          homebrew-tap: ${{ env.HOMEBREW_TAP }}
-          tag-name: ${{ github.ref_name }}
         env:
-          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
+          HOMEBREW_TAP_PAT: ${{ secrets.HOMEBREW_TAP_PAT }}
+        run: |
+          # Direct clone+sed+push to the tap repo. Replaces
+          # mislav/bump-homebrew-formula-action, which failed with "unexpected HTTP 303"
+          # (download phase) and defaults to fork+PR rather than a hands-off direct commit.
+          # Same sed contract as the "Sync formula to source repo" step below. See #608.
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          SHA=$(shasum -a 256 agenticos-mcp.tgz | cut -d' ' -f1)
+
+          git clone --depth 1 \
+            "https://x-access-token:${HOMEBREW_TAP_PAT}@github.com/${{ env.HOMEBREW_TAP }}.git" tap-repo
+
+          sed -E -i.bak \
+            -e "s|releases/download/v[^/]*/agenticos-mcp(-[^/\"]*)?\.tgz|releases/download/v${VERSION}/agenticos-mcp.tgz|" \
+            -e "s|version \"[0-9.]*\"|version \"${VERSION}\"|" \
+            -e "s| sha256 \"[a-f0-9]*\"| sha256 \"${SHA}\"|" \
+            "tap-repo/${{ env.FORMULA_PATH }}"
+          rm "tap-repo/${{ env.FORMULA_PATH }}.bak"
+
+          cd tap-repo
+          if git diff --quiet; then
+            echo "Tap formula already at v${VERSION}; nothing to push."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${{ env.FORMULA_PATH }}"
+          git commit -m "agenticos ${VERSION}"
+          git push origin HEAD
 
       - name: Report skipped Homebrew tap bump
         if: steps.homebrew_pat.outputs.available != 'true'
@@ -134,7 +156,7 @@ jobs:
 
       - name: Sync formula to source repo
         run: |
-          # After mislav bumps the tap repo, sync the version back to source
+          # After the tap repo is bumped above, sync the version back to source
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
           SHA=$(shasum -a 256 agenticos-mcp.tgz | cut -d' ' -f1)
