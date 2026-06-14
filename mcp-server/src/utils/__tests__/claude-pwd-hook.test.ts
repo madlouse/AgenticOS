@@ -10,6 +10,8 @@ import {
   mergeClaudePwdAlignmentHook,
   renderClaudePwdHookResponse,
   runClaudePwdHook,
+  resolveClaudePreToolCwdMode,
+  runClaudePreToolCwdHook,
 } from '../claude-pwd-hook.js';
 
 describe('claude-pwd-hook', () => {
@@ -298,5 +300,101 @@ describe('claude-pwd-hook', () => {
     expect(output).not.toBeNull();
     expect(JSON.parse(output || '{}').hookSpecificOutput.additionalContext).toContain('/tmp/origin');
     expect(JSON.parse(output || '{}').hookSpecificOutput.additionalContext).toContain('switch-out');
+  });
+});
+
+describe('runClaudePreToolCwdHook (#603)', () => {
+  const bashPayload = (command: string) => JSON.stringify({
+    tool_name: 'Bash',
+    tool_input: { command },
+  });
+
+  it('resolveClaudePreToolCwdMode parses env values', () => {
+    expect(resolveClaudePreToolCwdMode(undefined)).toBe('off');
+    expect(resolveClaudePreToolCwdMode('')).toBe('off');
+    expect(resolveClaudePreToolCwdMode('0')).toBe('off');
+    expect(resolveClaudePreToolCwdMode('WARN')).toBe('warn');
+    expect(resolveClaudePreToolCwdMode(' rewrite ')).toBe('rewrite');
+  });
+
+  it('is off by default and returns null even on a mismatch', () => {
+    expect(runClaudePreToolCwdHook(bashPayload('ls'), {
+      boundProjectPath: '/proj',
+      cwd: '/elsewhere',
+    })).toBeNull();
+  });
+
+  it('ignores non-Bash tools', () => {
+    expect(runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'x' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    )).toBeNull();
+  });
+
+  it('no-ops when already aligned (bound == cwd)', () => {
+    expect(runClaudePreToolCwdHook(bashPayload('ls'), {
+      mode: 'rewrite',
+      boundProjectPath: '/proj',
+      cwd: '/proj',
+    })).toBeNull();
+  });
+
+  it('no-ops when no project is bound', () => {
+    expect(runClaudePreToolCwdHook(bashPayload('ls'), {
+      mode: 'rewrite',
+      boundProjectPath: null,
+      cwd: '/elsewhere',
+    })).toBeNull();
+  });
+
+  it('leaves commands that already cd alone', () => {
+    expect(runClaudePreToolCwdHook(bashPayload('cd /x && ls'), {
+      mode: 'rewrite',
+      boundProjectPath: '/proj',
+      cwd: '/elsewhere',
+    })).toBeNull();
+  });
+
+  it('rejects non-absolute bound paths', () => {
+    expect(runClaudePreToolCwdHook(bashPayload('ls'), {
+      mode: 'rewrite',
+      boundProjectPath: 'relative/path',
+      cwd: '/elsewhere',
+    })).toBeNull();
+  });
+
+  it('warn mode adds advisory context without rewriting', () => {
+    const out = runClaudePreToolCwdHook(bashPayload('ls'), {
+      mode: 'warn',
+      boundProjectPath: '/proj dir',
+      cwd: '/elsewhere',
+    });
+    const parsed = JSON.parse(out || '{}');
+    expect(parsed.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("cd '/proj dir'");
+    expect(parsed.hookSpecificOutput.permissionDecision).toBeUndefined();
+    expect(parsed.hookSpecificOutput.updatedInput).toBeUndefined();
+  });
+
+  it('rewrite mode prefixes cd via updatedInput and allows', () => {
+    const out = runClaudePreToolCwdHook(bashPayload('npm test'), {
+      mode: 'rewrite',
+      boundProjectPath: '/proj',
+      cwd: '/elsewhere',
+    });
+    const parsed = JSON.parse(out || '{}');
+    expect(parsed.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
+    expect(parsed.hookSpecificOutput.updatedInput.command).toBe("cd '/proj' && npm test");
+  });
+
+  it('ignores malformed or incomplete payloads', () => {
+    expect(runClaudePreToolCwdHook('{bad', {
+      mode: 'warn', boundProjectPath: '/proj', cwd: '/x',
+    })).toBeNull();
+    expect(runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Bash', tool_input: {} }),
+      { mode: 'warn', boundProjectPath: '/proj', cwd: '/x' },
+    )).toBeNull();
   });
 });
