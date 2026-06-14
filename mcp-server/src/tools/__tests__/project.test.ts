@@ -1581,6 +1581,11 @@ describe('switchProject', () => {
       expect(result).toContain('Claude Code shell cwd is per-call');
       expect(result).toContain('Use this project path as explicit workdir');
       expect(result).toContain("cd '/test/path' && <command>");
+      // #604: surface the cd-free context-loading path and a relaunch affordance
+      // when the agent is not already rooted at the project (process.cwd() != /test/path).
+      expect(result).toContain("CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir '/test/path'");
+      expect(result).toContain('not .claude/ commands, subagents, hooks, or permissions');
+      expect(result).toContain("cd '/test/path' && claude");
     } finally {
       if (previousClaudeCode === undefined) delete process.env.CLAUDE_CODE;
       else process.env.CLAUDE_CODE = previousClaudeCode;
