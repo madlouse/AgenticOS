@@ -13,7 +13,8 @@ Semantic versioning: `MAJOR.MINOR.PATCH`
 
 Releases are automated via `.github/workflows/release.yml`:
 - Triggered by pushing a tag matching `v*` (e.g., `git tag v0.4.19 && git push origin v0.4.19`)
-- Runs: build → npm pack → create GitHub Release → update Homebrew formula
+- Runs: release preflight → build → npm pack → create GitHub Release → update Homebrew formula
+- Fails before build/release if required release automation secrets are missing
 
 ## Pre-release Checklist
 
@@ -33,12 +34,14 @@ git tag v<VERSION> && git push origin v<VERSION>
     ↓
 .github/workflows/release.yml triggers
     ↓
-1. Build (npm install + npm run build)
-2. Create tarball (npm pack)
-3. Create GitHub Release (softprops/action-gh-release)
-4. Update Homebrew formula (mislav/bump-homebrew-formula-action)
+1. Release preflight (verify `HOMEBREW_TAP_PAT` is configured)
+2. Build (npm install + npm run build)
+3. Create tarball (npm pack)
+4. Create GitHub Release (softprops/action-gh-release)
+5. Update Homebrew formula in the tap repository
+6. Sync the source-repo formula on `main`
     ↓
-GitHub Release created + Homebrew PR auto-opened
+GitHub Release created + Homebrew tap bumped automatically
 ```
 
 ## Manual Release Commands (Fallback)
@@ -96,13 +99,21 @@ For automated Homebrew bumps, configure **Settings → Secrets and variables →
 
 | Secret | Purpose |
 |--------|---------|
-| `HOMEBREW_TAP_PAT` | Fine-grained or classic PAT with `contents: write` on `madlouse/homebrew-agenticos` (or full `repo` scope) for `mislav/bump-homebrew-formula-action` |
+| `HOMEBREW_TAP_PAT` | Fine-grained PAT scoped to `madlouse/homebrew-agenticos` with Contents: read/write and Metadata: read, or a classic PAT with equivalent repository write access |
 
-If `HOMEBREW_TAP_PAT` is absent or empty, the release workflow skips the tap-repo
-bump step with an explicit warning instead of failing on an empty
-`COMMITTER_TOKEN`. The GitHub Release artifact and source-repo formula sync still
-run. Manually update both formula locations (canonical source and local tap) to
-the release artifact URL and SHA256 before considering the release complete.
+Do not paste the PAT into chats, issue comments, PRs, logs, or committed files.
+Configure it through GitHub repository secrets only:
+
+```bash
+gh secret set HOMEBREW_TAP_PAT --repo madlouse/AgenticOS --body "$TOKEN"
+gh secret list --repo madlouse/AgenticOS | grep -E '^HOMEBREW_TAP_PAT[[:space:]]'
+```
+
+If `HOMEBREW_TAP_PAT` is absent or empty, the release workflow fails during the
+`release-preflight` job before building or publishing a GitHub Release. The
+failure summary includes the operator checklist above. A release is not complete
+until the tap repository and the source formula both point at the release
+artifact URL and SHA256.
 
 ## Post-release
 
