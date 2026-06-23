@@ -12,6 +12,7 @@ import {
   runClaudePwdHook,
   resolveClaudePreToolCwdMode,
   runClaudePreToolCwdHook,
+  CLAUDE_PRETOOL_CWD_HOOK_MATCHERS,
   hasClaudePreToolCwdHook,
   inspectClaudePreToolCwdHook,
   mergeClaudePreToolCwdHook,
@@ -327,9 +328,9 @@ describe('runClaudePreToolCwdHook (#603)', () => {
     })).toBeNull();
   });
 
-  it('ignores non-Bash tools', () => {
+  it('ignores unsupported tools', () => {
     expect(runClaudePreToolCwdHook(
-      JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'x' } }),
+      JSON.stringify({ tool_name: 'TodoWrite', tool_input: { todos: [] } }),
       { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
     )).toBeNull();
   });
@@ -391,6 +392,85 @@ describe('runClaudePreToolCwdHook (#603)', () => {
     expect(parsed.hookSpecificOutput.updatedInput.command).toBe("cd '/proj' && npm test");
   });
 
+  it('rewrite mode rewrites Read/Edit style relative file paths into the bound project', () => {
+    const out = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'src/index.ts' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const parsed = JSON.parse(out || '{}');
+
+    expect(parsed.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
+    expect(parsed.hookSpecificOutput.updatedInput.file_path).toBe('/proj/src/index.ts');
+  });
+
+  it('rewrite mode sets default Glob/Grep paths to the bound project', () => {
+    const globOut = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Glob', tool_input: { pattern: '**/*.ts' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const grepOut = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Grep', tool_input: { pattern: 'agenticos' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+
+    expect(JSON.parse(globOut || '{}').hookSpecificOutput.updatedInput.path).toBe('/proj');
+    expect(JSON.parse(grepOut || '{}').hookSpecificOutput.updatedInput.path).toBe('/proj');
+  });
+
+  it('rewrite mode rewrites relative Glob/Grep paths and leaves absolute paths alone', () => {
+    const globOut = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Glob', tool_input: { pattern: '**/*.ts', path: 'packages' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const grepOut = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Grep', tool_input: { pattern: 'x', path: 'src' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const absoluteOut = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/already/absolute.ts' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+
+    expect(JSON.parse(globOut || '{}').hookSpecificOutput.updatedInput.path).toBe('/proj/packages');
+    expect(JSON.parse(grepOut || '{}').hookSpecificOutput.updatedInput.path).toBe('/proj/src');
+    expect(absoluteOut).toBeNull();
+  });
+
+  it('rewrite mode denies file paths that escape the bound project', () => {
+    const out = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Write', tool_input: { file_path: '../outside.txt', content: 'x' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const parsed = JSON.parse(out || '{}');
+
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('outside the bound project');
+  });
+
+  it('rewrite mode denies file paths that fail AgenticOS path security validation', () => {
+    const out = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Write', tool_input: { file_path: 'src/\u0000bad.ts', content: 'x' } }),
+      { mode: 'rewrite', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const parsed = JSON.parse(out || '{}');
+
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('control characters');
+  });
+
+  it('warn mode reports file tool cwd mismatch without rewriting', () => {
+    const out = runClaudePreToolCwdHook(
+      JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'src/index.ts', old_string: 'a', new_string: 'b' } }),
+      { mode: 'warn', boundProjectPath: '/proj', cwd: '/elsewhere' },
+    );
+    const parsed = JSON.parse(out || '{}');
+
+    expect(parsed.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+    expect(parsed.hookSpecificOutput.additionalContext).toContain('Edit tool may run relative to a different cwd');
+    expect(parsed.hookSpecificOutput.updatedInput).toBeUndefined();
+  });
+
   it('ignores malformed or incomplete payloads', () => {
     expect(runClaudePreToolCwdHook('{bad', {
       mode: 'warn', boundProjectPath: '/proj', cwd: '/x',
@@ -403,24 +483,25 @@ describe('runClaudePreToolCwdHook (#603)', () => {
 });
 
 describe('claude PreToolUse cwd hook registration (#603 follow-up)', () => {
-  const entry = {
-    matcher: 'Bash',
+  const entryFor = (matcher: string) => ({
+    matcher,
     hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }],
-  };
+  });
+  const entries = CLAUDE_PRETOOL_CWD_HOOK_MATCHERS.map(entryFor);
 
-  it('hasClaudePreToolCwdHook detects the Bash hook', () => {
-    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [entry] } })).toBe(true);
+  it('hasClaudePreToolCwdHook detects the full hook set', () => {
+    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: entries } })).toBe(true);
     expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [] } })).toBe(false);
     expect(hasClaudePreToolCwdHook({})).toBe(false);
     expect(hasClaudePreToolCwdHook(null)).toBe(false);
-    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [{ matcher: 'Read', hooks: entry.hooks }] } })).toBe(false);
+    expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [entryFor('Read')] } })).toBe(false);
     expect(hasClaudePreToolCwdHook({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'other' }] }] } })).toBe(false);
   });
 
   it('inspect reports missing / unset / configured / unavailable', () => {
     expect(inspectClaudePreToolCwdHook(null).status).toBe('missing');
     expect(inspectClaudePreToolCwdHook('{}').status).toBe('unset');
-    expect(inspectClaudePreToolCwdHook(JSON.stringify({ hooks: { PreToolUse: [entry] } })).status).toBe('configured');
+    expect(inspectClaudePreToolCwdHook(JSON.stringify({ hooks: { PreToolUse: entries } })).status).toBe('configured');
     expect(inspectClaudePreToolCwdHook('{not json').status).toBe('unavailable');
   });
 
@@ -428,7 +509,7 @@ describe('claude PreToolUse cwd hook registration (#603 follow-up)', () => {
     const first = mergeClaudePreToolCwdHook('{}');
     expect(first.changed).toBe(true);
     const parsed = JSON.parse(first.content);
-    expect(parsed.hooks.PreToolUse).toHaveLength(1);
+    expect(parsed.hooks.PreToolUse).toHaveLength(CLAUDE_PRETOOL_CWD_HOOK_MATCHERS.length);
     expect(parsed.hooks.PreToolUse[0].matcher).toBe('Bash');
     expect(parsed.hooks.PreToolUse[0].hooks[0].command).toBe('agenticos-claude-pretool-cwd');
 
@@ -439,7 +520,7 @@ describe('claude PreToolUse cwd hook registration (#603 follow-up)', () => {
       hooks: { PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: 'x' }] }] },
     });
     const merged = mergeClaudePreToolCwdHook(withOther);
-    expect(JSON.parse(merged.content).hooks.PreToolUse).toHaveLength(2);
+    expect(JSON.parse(merged.content).hooks.PreToolUse).toHaveLength(CLAUDE_PRETOOL_CWD_HOOK_MATCHERS.length + 1);
   });
 
   it('merge throws on a non-object settings root', () => {

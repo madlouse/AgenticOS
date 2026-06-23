@@ -441,10 +441,10 @@ export function buildDryRunLines(
     const settingsPath = `${homeDir}/${CLAUDE_SETTINGS_PATH}`;
     if (options.autoConfigureHooks) {
       lines.push(`- claude-pwd-hook: add agenticos_switch and agenticos_switch_out PostToolUse cwd guidance hooks to ${settingsPath}`);
-      lines.push(`- claude-pretool-cwd-hook: add the opt-in PreToolUse Bash cwd-alignment hook to ${settingsPath} (inert until AGENTICOS_CLAUDE_PRETOOL_CWD=warn|rewrite)`);
+      lines.push(`- claude-pretool-cwd-hook: add the opt-in PreToolUse cwd-alignment hooks to ${settingsPath} (inert until AGENTICOS_CLAUDE_PRETOOL_CWD=warn|rewrite)`);
     } else {
       lines.push(`- claude-pwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add missing switch/switch_out hooks`);
-      lines.push(`- claude-pretool-cwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add the opt-in PreToolUse Bash hook`);
+      lines.push(`- claude-pretool-cwd-hook: inspect ${settingsPath}; rerun with --auto-configure-hooks --apply to add the opt-in PreToolUse cwd-alignment hooks`);
     }
   }
   lines.push('', 'Switch workdir effects:');
