@@ -1,3 +1,4 @@
+import { isAbsolute, resolve } from 'path';
 import { shellQuote, validatePathSecurity } from './session-context.js';
 import { restoreSessionBinding } from './session-binding-store.js';
 
@@ -10,8 +11,16 @@ export const CLAUDE_PWD_ALIGNMENT_HOOK_MATCHERS = [
 ] as const;
 export const CLAUDE_PWD_ALIGNMENT_HOOK_COMMAND = 'agenticos-claude-pwd-hook';
 
-/** Opt-in PreToolUse cwd-alignment hook (#603): Bash matcher + command. */
-export const CLAUDE_PRETOOL_CWD_HOOK_MATCHER = 'Bash';
+/** Opt-in PreToolUse cwd-alignment hook (#603): Bash + relative path tools. */
+export const CLAUDE_PRETOOL_CWD_HOOK_MATCHERS = [
+  'Bash',
+  'Read',
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'Glob',
+  'Grep',
+] as const;
 export const CLAUDE_PRETOOL_CWD_HOOK_COMMAND = 'agenticos-claude-pretool-cwd';
 
 export type ClaudePwdHookStatus = 'configured' | 'missing' | 'unset' | 'unavailable';
@@ -301,12 +310,13 @@ export function mergeClaudePwdAlignmentHook(settingsContent: string | null): Cla
 export type ClaudePreToolCwdMode = 'off' | 'warn' | 'rewrite';
 
 /**
- * Opt-in PreToolUse cwd-alignment for the Claude Code Bash tool (#603).
+ * Opt-in PreToolUse cwd-alignment for Claude Code shell and file/search tools (#603).
  *
  * Off unless AGENTICOS_CLAUDE_PRETOOL_CWD is set to `warn` or `rewrite`, so
  * existing installs are unaffected. `warn` adds advisory context; `rewrite`
- * transparently prefixes the command with a cd into the bound project using a
- * PreToolUse `updatedInput` (supported in Claude Code v2.0.10+).
+ * transparently prefixes Bash commands or rewrites relative file/search paths
+ * into the bound project using PreToolUse `updatedInput` (supported in Claude
+ * Code v2.0.10+).
  */
 export function resolveClaudePreToolCwdMode(
   raw: string | undefined = process.env.AGENTICOS_CLAUDE_PRETOOL_CWD,
@@ -336,6 +346,95 @@ function resolveBoundProjectPath(options: ClaudePreToolCwdHookOptions): string |
   return restoreSessionBinding()?.projectPath ?? null;
 }
 
+function pathIsWithin(basePath: string, candidatePath: string): boolean {
+  const base = resolve(basePath);
+  const candidate = resolve(candidatePath);
+  return candidate === base || candidate.startsWith(`${base}/`);
+}
+
+function resolveBoundRelativePath(boundProjectPath: string, value: unknown): { ok: true; value: string } | { ok: false; reason: string } | null {
+  if (typeof value !== 'string' || !value.trim() || isAbsolute(value)) {
+    return null;
+  }
+
+  const resolved = resolve(boundProjectPath, value);
+  const security = validatePathSecurity(resolved);
+  if (!security.valid) {
+    return { ok: false, reason: security.error || 'path failed AgenticOS security validation' };
+  }
+
+  if (!pathIsWithin(boundProjectPath, resolved)) {
+    return { ok: false, reason: `relative path ${value} resolves outside the bound project` };
+  }
+
+  return { ok: true, value: resolved };
+}
+
+function renderClaudePreToolWarn(toolName: string, boundProjectPath: string): string {
+  return `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      additionalContext: [
+        `AgenticOS: session is bound to ${boundProjectPath} but the ${toolName} tool may run relative to a different cwd.`,
+        'Use absolute paths rooted at the bound project, or enable AGENTICOS_CLAUDE_PRETOOL_CWD=rewrite for safe automatic path alignment.',
+      ].join('\n'),
+    },
+  })}\n`;
+}
+
+function renderClaudePreToolDeny(reason: string): string {
+  return `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `AgenticOS could not safely align this tool input: ${reason}.`,
+    },
+  })}\n`;
+}
+
+function rewriteClaudeFileToolInput(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  boundProjectPath: string,
+): { updatedInput: Record<string, unknown>; changed: boolean } | { denied: string } {
+  const updatedInput = { ...toolInput };
+  let changed = false;
+
+  const rewriteField = (field: string) => {
+    const result = resolveBoundRelativePath(boundProjectPath, updatedInput[field]);
+    if (!result) return;
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    updatedInput[field] = result.value;
+    changed = true;
+  };
+
+  try {
+    if (['Read', 'Write', 'Edit', 'MultiEdit'].includes(toolName)) {
+      rewriteField('file_path');
+    } else if (toolName === 'Glob') {
+      if (typeof updatedInput.path === 'string') {
+        rewriteField('path');
+      } else if (updatedInput.path === undefined) {
+        updatedInput.path = boundProjectPath;
+        changed = true;
+      }
+    } else if (toolName === 'Grep') {
+      if (typeof updatedInput.path === 'string') {
+        rewriteField('path');
+      } else if (updatedInput.path === undefined) {
+        updatedInput.path = boundProjectPath;
+        changed = true;
+      }
+    }
+  } catch (error) {
+    return { denied: error instanceof Error ? error.message : 'unknown path rewrite failure' };
+  }
+
+  return { updatedInput, changed };
+}
+
 export function runClaudePreToolCwdHook(
   input: string,
   options: ClaudePreToolCwdHookOptions = {},
@@ -351,17 +450,41 @@ export function runClaudePreToolCwdHook(
   }
   if (!isRecord(parsed)) return null;
 
-  // Built-in Bash tool only; never touch MCP tools or file/edit tools.
-  if (parsed.tool_name !== 'Bash') return null;
+  if (typeof parsed.tool_name !== 'string') return null;
+  const toolName = parsed.tool_name;
+  if (!(CLAUDE_PRETOOL_CWD_HOOK_MATCHERS as readonly string[]).includes(toolName)) return null;
   const toolInput = parsed.tool_input;
-  if (!isRecord(toolInput) || typeof toolInput.command !== 'string') return null;
-  const command = toolInput.command;
+  if (!isRecord(toolInput)) return null;
 
   const boundProjectPath = resolveBoundProjectPath(options);
   if (!boundProjectPath || !validatePathSecurity(boundProjectPath).valid) return null;
 
   const cwd = options.cwd ?? process.cwd();
   if (boundProjectPath === cwd) return null; // already aligned; nothing to do
+
+  if (toolName !== 'Bash') {
+    if (mode === 'warn') {
+      return renderClaudePreToolWarn(toolName, boundProjectPath);
+    }
+
+    const result = rewriteClaudeFileToolInput(toolName, toolInput, boundProjectPath);
+    if ('denied' in result) {
+      return renderClaudePreToolDeny(result.denied);
+    }
+    if (!result.changed) return null;
+
+    return `${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        permissionDecisionReason: `AgenticOS aligned ${toolName} paths to the bound project ${boundProjectPath}.`,
+        updatedInput: result.updatedInput,
+      },
+    })}\n`;
+  }
+
+  if (typeof toolInput.command !== 'string') return null;
+  const command = toolInput.command;
 
   // Conservative: leave commands that already manage their own directory alone.
   if (/^\s*cd(\s|$)/.test(command)) return null;
@@ -395,8 +518,12 @@ export function hasClaudePreToolCwdHook(settings: unknown): boolean {
   if (!isRecord(hooks)) return false;
   const preToolUse = hooks.PreToolUse;
   if (!Array.isArray(preToolUse)) return false;
+  return (CLAUDE_PRETOOL_CWD_HOOK_MATCHERS as readonly string[]).every((matcher) => hasClaudePreToolCwdHookEntry(preToolUse, matcher));
+}
+
+function hasClaudePreToolCwdHookEntry(preToolUse: unknown[], matcher: string): boolean {
   return preToolUse.some((entry) => {
-    if (!isRecord(entry) || entry.matcher !== CLAUDE_PRETOOL_CWD_HOOK_MATCHER) return false;
+    if (!isRecord(entry) || entry.matcher !== matcher) return false;
     const nestedHooks = entry.hooks;
     if (!Array.isArray(nestedHooks)) return false;
     return nestedHooks.some((hook) => isRecord(hook)
@@ -415,11 +542,11 @@ export function inspectClaudePreToolCwdHook(settingsContent: string | null): Cla
     return hasClaudePreToolCwdHook(parsed)
       ? {
         status: 'configured',
-        detail: 'Detected the opt-in PreToolUse Bash cwd-alignment hook (activate with AGENTICOS_CLAUDE_PRETOOL_CWD=warn|rewrite).',
+        detail: 'Detected the opt-in PreToolUse cwd-alignment hooks (activate with AGENTICOS_CLAUDE_PRETOOL_CWD=warn|rewrite).',
       }
       : {
         status: 'unset',
-        detail: 'Claude Code settings exist but the opt-in PreToolUse Bash cwd-alignment hook is missing.',
+        detail: 'Claude Code settings exist but one or more opt-in PreToolUse cwd-alignment hooks are missing.',
       };
   } catch {
     return { status: 'unavailable', detail: 'Claude Code settings could not be parsed as JSON.' };
@@ -449,23 +576,25 @@ export function mergeClaudePreToolCwdHook(settingsContent: string | null): Claud
     throw new Error('Claude Code settings hooks.PreToolUse must be an array.');
   }
 
-  const entry = {
-    matcher: CLAUDE_PRETOOL_CWD_HOOK_MATCHER,
-    hooks: [
-      {
-        type: 'command',
-        command: CLAUDE_PRETOOL_CWD_HOOK_COMMAND,
-        shell: 'bash',
-        timeout: 5,
-      },
-    ],
-  };
+  const entries = CLAUDE_PRETOOL_CWD_HOOK_MATCHERS
+    .filter((matcher) => !hasClaudePreToolCwdHookEntry(preToolUse, matcher))
+    .map((matcher) => ({
+      matcher,
+      hooks: [
+        {
+          type: 'command',
+          command: CLAUDE_PRETOOL_CWD_HOOK_COMMAND,
+          shell: 'bash',
+          timeout: 5,
+        },
+      ],
+    }));
 
   const next = {
     ...parsed,
     hooks: {
       ...hooks,
-      PreToolUse: [...preToolUse, entry],
+      PreToolUse: [...preToolUse, ...entries],
     },
   };
 

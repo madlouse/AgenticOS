@@ -526,7 +526,7 @@ describe('bootstrap cli', () => {
     expect(harness.files.has('/Users/tester/.claude/settings.json')).toBe(false);
     expect(harness.stdout.some((line) => line.includes('claude-pwd-hook'))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('add agenticos_switch and agenticos_switch_out PostToolUse cwd guidance hooks'))).toBe(true);
-    expect(harness.stdout.some((line) => line.includes('claude-pretool-cwd-hook: add the opt-in PreToolUse Bash'))).toBe(true);
+    expect(harness.stdout.some((line) => line.includes('claude-pretool-cwd-hook: add the opt-in PreToolUse cwd-alignment hooks'))).toBe(true);
   });
 
   it('adds Claude cwd guidance hook during apply when requested', () => {
@@ -544,10 +544,19 @@ describe('bootstrap cli', () => {
     expect(settings.hooks.PostToolUse[1].matcher).toBe('mcp__agenticos__agenticos_switch_out');
     expect(settings.hooks.PostToolUse[0].hooks[0].command).toBe('agenticos-claude-pwd-hook');
     expect(harness.stdout.some((line) => line.includes('OK claude-pwd-hook'))).toBe(true);
-    // #603 follow-up: the opt-in PreToolUse Bash cwd hook is registered alongside.
-    expect(settings.hooks.PreToolUse).toHaveLength(1);
-    expect(settings.hooks.PreToolUse[0].matcher).toBe('Bash');
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe('agenticos-claude-pretool-cwd');
+    // #603 follow-up: the opt-in PreToolUse cwd hook is registered alongside.
+    expect(settings.hooks.PreToolUse.map((entry: { matcher: string }) => entry.matcher)).toEqual([
+      'Bash',
+      'Read',
+      'Write',
+      'Edit',
+      'MultiEdit',
+      'Glob',
+      'Grep',
+    ]);
+    expect(settings.hooks.PreToolUse.every((entry: { hooks: { command: string }[] }) => (
+      entry.hooks[0].command === 'agenticos-claude-pretool-cwd'
+    ))).toBe(true);
     expect(harness.stdout.some((line) => line.includes('OK claude-pretool-cwd-hook'))).toBe(true);
   });
 
@@ -557,6 +566,12 @@ describe('bootstrap cli', () => {
       hooks: {
         PreToolUse: [
           { matcher: 'Bash', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+          { matcher: 'Read', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+          { matcher: 'Write', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+          { matcher: 'Edit', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+          { matcher: 'MultiEdit', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+          { matcher: 'Glob', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
+          { matcher: 'Grep', hooks: [{ type: 'command', command: 'agenticos-claude-pretool-cwd', shell: 'bash', timeout: 5 }] },
         ],
       },
     }));
