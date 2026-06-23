@@ -36,6 +36,7 @@
     "agenticos_branch_bootstrap",
     "agenticos_issue_start",
     "agenticos_recall",
+    "agenticos_evolution_timeline",
     "agenticos_pr_scope_check",
     "agenticos_health",
     "agenticos_canonical_sync",
@@ -51,5 +52,5 @@
     "agenticos_enforce_git_policy",
     "agenticos_worktree_cleanup"
   ],
-  "toolCount": 39
+  "toolCount": 40
 }

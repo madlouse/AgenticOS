@@ -37,6 +37,10 @@ export interface EvolutionLogAppendResult {
   appendedCount: number;
 }
 
+export interface EvolutionTimelineOptions {
+  limit?: number;
+}
+
 export const EVOLUTION_LOG_DIRNAME = 'evolution-log';
 
 export function getEvolutionLogDir(statePath: string): string {
@@ -130,6 +134,51 @@ export async function readEvolutionLog(statePath: string): Promise<EvolutionLogE
     }
   }
   return entries;
+}
+
+function entryTimestamp(entry: EvolutionLogEntry): number {
+  const parsed = Date.parse(entry.at ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function compareTimelineEntries(a: EvolutionLogEntry, b: EvolutionLogEntry): number {
+  return entryTimestamp(a) - entryTimestamp(b) || a.id.localeCompare(b.id);
+}
+
+export async function readEvolutionTimeline(statePath: string, options: EvolutionTimelineOptions = {}): Promise<EvolutionLogEntry[]> {
+  const entries = (await readEvolutionLog(statePath)).slice().sort(compareTimelineEntries);
+  const limit = Number.isFinite(options.limit) && options.limit && options.limit > 0
+    ? Math.floor(options.limit)
+    : null;
+  return limit ? entries.slice(-limit) : entries;
+}
+
+function renderEntryRefs(refs: EvolutionLogEntry['refs']): string {
+  const rendered: string[] = [];
+  if (refs?.issue) rendered.push(`issue ${refs.issue}`);
+  if (refs?.pr) rendered.push(`PR ${refs.pr}`);
+  if (refs?.knowledge && refs.knowledge.length > 0) {
+    rendered.push(`knowledge ${refs.knowledge.map((item) => `\`${item}\``).join(', ')}`);
+  }
+  return rendered.length > 0 ? rendered.join(' · ') : 'none';
+}
+
+export function renderEvolutionTimelineMarkdown(
+  entries: EvolutionLogEntry[],
+  heading = 'Project evolution timeline',
+): string {
+  if (entries.length === 0) {
+    return `### ${heading}\n\n_No evolution-log entries found._`;
+  }
+
+  const lines = [`### ${heading} (${entries.length})`, ''];
+  for (const entry of entries) {
+    lines.push(`- ${entry.at || 'unknown time'} · **[${entry.kind}]** ${entry.summary || entry.id}`);
+    if (entry.rationale) lines.push(`  - rationale: ${entry.rationale}`);
+    lines.push(`  - ref: \`${entry.id}\``);
+    lines.push(`  - refs: ${renderEntryRefs(entry.refs)}`);
+  }
+  return lines.join('\n');
 }
 
 export async function appendEvolutionEntries(args: {
