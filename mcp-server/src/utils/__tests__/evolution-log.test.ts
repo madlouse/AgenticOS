@@ -14,6 +14,8 @@ import {
   deriveIssueRefFromBranch,
   evolutionEntryId,
   getEvolutionLogDir,
+  readEvolutionTimeline,
+  renderEvolutionTimelineMarkdown,
 } from '../evolution-log.js';
 
 let contextDir: string;
@@ -88,6 +90,63 @@ describe('appendEvolutionEntries', () => {
     await appendEvolutionEntries({ statePath, now: NOW, entries: [{ kind: 'decision', summary: 'x' }] });
     const files = await readdir(getEvolutionLogDir(statePath));
     expect(files).toEqual(['2026-06.yaml']);
+  });
+});
+
+describe('readEvolutionTimeline / renderEvolutionTimelineMarkdown (#584)', () => {
+  it('renders typed evolution entries chronologically with rationale and refs', async () => {
+    await mkdir(getEvolutionLogDir(statePath), { recursive: true });
+    await writeFile(join(getEvolutionLogDir(statePath), '2026-06.yaml'), yaml.stringify({
+      version: '1.0.0',
+      entries: [
+        {
+          id: 'evo-new',
+          at: '2026-06-12T12:00:00.000Z',
+          kind: 'knowledge_ref',
+          summary: 'Promoted the recall dogfooding note',
+          rationale: 'Agents need a durable pointer to the distilled lesson.',
+          refs: { issue: '#582', pr: '#600', knowledge: ['standards/knowledge/context-recall-dogfooding-and-restraint-2026-06-13.md'] },
+        },
+        {
+          id: 'evo-old',
+          at: '2026-06-10T12:00:00.000Z',
+          kind: 'decision',
+          summary: 'Use the evolution log as the shared L2 source',
+          rationale: 'Human and machine views must not diverge.',
+          refs: { issue: '#580' },
+        },
+      ],
+    }), 'utf-8');
+
+    const timeline = await readEvolutionTimeline(statePath);
+    expect(timeline.map((entry) => entry.id)).toEqual(['evo-old', 'evo-new']);
+
+    const markdown = renderEvolutionTimelineMarkdown(timeline);
+    expect(markdown).toContain('### Project evolution timeline (2)');
+    expect(markdown.indexOf('evo-old')).toBeLessThan(markdown.indexOf('evo-new'));
+    expect(markdown).toContain('**[decision]** Use the evolution log as the shared L2 source');
+    expect(markdown).toContain('rationale: Human and machine views must not diverge.');
+    expect(markdown).toContain('refs: issue #580');
+    expect(markdown).toContain('refs: issue #582 · PR #600 · knowledge `standards/knowledge/context-recall-dogfooding-and-restraint-2026-06-13.md`');
+  });
+
+  it('limits to the latest entries while preserving chronological order', async () => {
+    await mkdir(getEvolutionLogDir(statePath), { recursive: true });
+    await writeFile(join(getEvolutionLogDir(statePath), '2026-06.yaml'), yaml.stringify({
+      version: '1.0.0',
+      entries: [
+        { id: 'evo-1', at: '2026-06-01T00:00:00.000Z', kind: 'decision', summary: 'one' },
+        { id: 'evo-2', at: '2026-06-02T00:00:00.000Z', kind: 'case', summary: 'two' },
+        { id: 'evo-3', at: '2026-06-03T00:00:00.000Z', kind: 'knowledge_ref', summary: 'three' },
+      ],
+    }), 'utf-8');
+
+    const timeline = await readEvolutionTimeline(statePath, { limit: 2 });
+    expect(timeline.map((entry) => entry.id)).toEqual(['evo-2', 'evo-3']);
+  });
+
+  it('renders an empty timeline without inventing a second source', () => {
+    expect(renderEvolutionTimelineMarkdown([])).toContain('No evolution-log entries found');
   });
 });
 

@@ -528,6 +528,32 @@ Show the status of the current session project, or an explicit project when prov
 
 Call this first at session start to verify project alignment before meaningful work.
 
+### agenticos_recall
+Recall issue- or query-related prior context from the project's evolution log and knowledge filenames.
+
+**Parameters**:
+- `project` (optional) - Project ID, name, or path. Defaults to the current session project.
+- `project_path` (optional) - Absolute managed checkout path. Use the issue worktree path when recalling from an isolated worktree.
+- `issue_id` (optional) - Issue identifier used for lineage matches.
+- `query` (optional) - Free-text query used for deterministic keyword matching.
+- `limit` (optional) - Maximum number of returned candidates.
+- `format` (optional) - `markdown` or `json`.
+
+**Returns**: Related evolution-log entries and knowledge references.
+
+### agenticos_evolution_timeline
+Render the project's human-readable evolution timeline from the same git-tracked L2 evolution log that `agenticos_recall` reads.
+
+**Parameters**:
+- `project` (optional) - Project ID, name, or path. Defaults to the current session project.
+- `project_path` (optional) - Absolute managed checkout path. Use the issue worktree path when reading timeline state from an isolated worktree.
+- `limit` (optional) - Show only the latest N entries while preserving chronological order.
+- `format` (optional) - `markdown` or `json`.
+
+**Returns**: Chronological typed entries (`decision`, `case`, `knowledge_ref`) with rationale, entry id, and issue/PR/knowledge refs.
+
+This is a view over `.context/evolution-log/*.yaml` or the project's configured context directory, not a second timeline store.
+
 ### agenticos_issue_bootstrap
 Record canonical issue-start evidence for the current issue after the intended issue worktree is active and the normal startup load has completed.
 

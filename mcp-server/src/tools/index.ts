@@ -9,6 +9,7 @@ export { runIssueBootstrap } from './issue-bootstrap.js';
 export { runBranchBootstrap } from './branch-bootstrap.js';
 export { runIssueStart } from './issue-start.js';
 export { runRecall } from './recall.js';
+export { runEvolutionTimeline } from './evolution-timeline.js';
 export { runPrScopeCheck } from './pr-scope-check.js';
 export { runHealth } from './health.js';
 export { runCanonicalSync } from './canonical-sync.js';
