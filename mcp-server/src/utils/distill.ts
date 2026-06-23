@@ -7,7 +7,7 @@ import { STOP_HOOK_MIGRATION_BULLETS } from './stop-hook-guidance.js';
  * Current template version. Increment when templates change.
  * Used for auto-upgrade on project switch.
  */
-export const CURRENT_TEMPLATE_VERSION = 17;
+export const CURRENT_TEMPLATE_VERSION = 18;
 
 /** Version marker format in generated files */
 const VERSION_MARKER = `<!-- agenticos-template: v${CURRENT_TEMPLATE_VERSION} -->`;
@@ -83,7 +83,10 @@ export const PROJECT_SWITCH_ROUTING_CONTENT = `When the operator asks to switch,
 1. If AgenticOS MCP tools are not visible yet, first use deferred tool discovery for AgenticOS MCP tools; in Codex-like clients, use \`tool_search\` before shell directory search.
 2. If \`agenticos_switch\` is available, call it before running shell commands to locate project directories.
 3. Use the returned project path / filesystem workdir as the explicit working directory for subsequent shell commands.
-4. Fall back to shell directory search only when AgenticOS MCP is unavailable or \`agenticos_switch\` cannot resolve the requested project.` as const;
+4. Treat \`agenticos_switch\` as a logical AgenticOS binding: it carries project identity, injected markdown startup surfaces, and explicit workdir guidance; it does not mutate the parent shell cwd or reload native runtime config that the agent loaded from its launch root.
+5. For full native runtime activation, launch or relaunch the agent rooted at the returned project path so adapter files, commands, subagents, hooks, permissions, and settings come from that project.
+6. Claude Code can load switched-project markdown memory without changing cwd by starting with \`CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir <project>\`, but this loads markdown memory only, not \`.claude/commands\`, \`.claude/agents\`, hooks, permissions, or settings.
+7. Fall back to shell directory search only when AgenticOS MCP is unavailable or \`agenticos_switch\` cannot resolve the requested project.` as const;
 
 export const LIFECYCLE_IMPACT_GATE_TITLE = 'Lifecycle Impact Gate';
 export const LIFECYCLE_IMPACT_GATE_CONTENT = `For any change that touches setup, runtime config, storage, service wiring, generated templates, install scripts, local services, external integrations, or operator workflows, define lifecycle impact before implementation:

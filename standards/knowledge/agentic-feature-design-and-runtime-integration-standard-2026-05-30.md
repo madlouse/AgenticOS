@@ -113,6 +113,37 @@ These changes require lifecycle impact analysis. Normal upgrades must not
 silently rewrite user runtime config, persisted state, credentials, or
 user-customized Skills.
 
+## Project Switch Native Context Boundary
+
+`agenticos_switch` is the canonical way to bind the AgenticOS session to a
+project and receive project context plus explicit workdir guidance. It is not a
+native runtime reload primitive.
+
+The switch carries:
+
+- AgenticOS project identity and session binding.
+- Loaded project context surfaces such as project metadata, quick-start, state,
+  and adapter markdown returned or injected by the MCP workflow.
+- Structured `project_workdir` / `explicit_workdir` guidance for clients that
+  support per-call working directories.
+
+The switch does not carry:
+
+- A persistent mutation of the parent shell cwd.
+- Launch-root native adapter auto-load behavior such as Codex `AGENTS.md`,
+  Gemini `GEMINI.md`, or Claude Code `CLAUDE.md` discovery outside the context
+  explicitly returned by AgenticOS.
+- Claude Code native runtime config under `.claude/commands`, `.claude/agents`,
+  hooks, permissions, or settings.
+
+For Claude Code, `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude
+--add-dir <project>` can load switched-project markdown memory without changing
+cwd. That covers `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md`, and
+`CLAUDE.local.md`; it still does not activate `.claude/commands`,
+`.claude/agents`, hooks, permissions, or settings. When those native runtime
+surfaces matter, launch or relaunch the agent rooted at the AgenticOS project
+path.
+
 ## MCP And Skills Activation Validation
 
 After an AgenticOS upgrade that is expected to change agent behavior, the
