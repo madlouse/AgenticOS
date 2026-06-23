@@ -1,5 +1,6 @@
 import { readdir } from 'fs/promises';
 import { readEvolutionLog, type EvolutionLogEntry } from './evolution-log.js';
+import { readKnowledgeDocumentLifecycles, type KnowledgeDocumentLifecycle, type KnowledgeLifecycleStatus } from './knowledge-lifecycle.js';
 
 /**
  * Context Recall v1 (#582 / L3) — the read half of the write-heavy/read-light loop.
@@ -12,9 +13,9 @@ import { readEvolutionLog, type EvolutionLogEntry } from './evolution-log.js';
  *   2. keyword/substring overlap — CJK-aware (ASCII tokens, CJK bigrams) so a
  *      Chinese query matches Chinese summaries and an English query matches
  *      English knowledge filenames.
- *   3. recency — evolution entries carry a reliable `at`; a mild boost + final
- *      tie-break. Knowledge freshness is deferred (mtime resets on clone; the
- *      accurate signal arrives with #581/#583).
+ *   3. recency/lifecycle — evolution entries carry a reliable `at`; knowledge
+ *      docs may carry #581 lifecycle frontmatter that annotates or down-weights
+ *      stale, superseded, or expired docs without requiring an external service.
  */
 
 export interface RecallCandidate {
@@ -23,6 +24,7 @@ export interface RecallCandidate {
   summary: string;
   score: number;
   signals: string[];
+  lifecycle_status?: KnowledgeLifecycleStatus;
 }
 
 export interface RecallInput {
@@ -110,6 +112,23 @@ function entryAtMs(entry: EvolutionLogEntry): number {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+function knowledgeLifecycleSignal(doc: KnowledgeDocumentLifecycle | undefined): string | null {
+  if (!doc || doc.status === 'current') return null;
+  if (doc.status === 'stale') {
+    const missing = doc.missing_fields.length > 0 ? ` missing ${doc.missing_fields.join(', ')}` : '';
+    return `lifecycle: stale${missing}`;
+  }
+  if (doc.status === 'superseded') {
+    return `lifecycle: superseded by ${doc.superseded_by.join(', ')}`;
+  }
+  return `lifecycle: ${doc.status}`;
+}
+
+function knowledgeLifecyclePenalty(doc: KnowledgeDocumentLifecycle | undefined): number {
+  if (!doc) return 0;
+  return doc.status === 'expired' || doc.status === 'superseded' ? 0.5 : 0;
+}
+
 export async function recallContext(input: RecallInput): Promise<RecallCandidate[]> {
   const now = input.now ?? new Date();
   const limit = input.limit && input.limit > 0 ? input.limit : DEFAULT_LIMIT;
@@ -161,16 +180,24 @@ export async function recallContext(input: RecallInput): Promise<RecallCandidate
   } catch {
     knowledgeFiles = [];
   }
+  const knowledgeLifecycleByPath = new Map(
+    (await readKnowledgeDocumentLifecycles(input.knowledgeDir, now)).map((doc) => [doc.path, doc]),
+  );
   for (const file of knowledgeFiles) {
     const title = knowledgeTitleFromFilename(file);
     const matched = matchTerms(queryTerms, title);
     if (matched.length === 0) continue;
+    const lifecycle = knowledgeLifecycleByPath.get(file);
+    const signals = [`keyword: ${matched.slice(0, 4).join(', ')}`];
+    const lifecycleSignal = knowledgeLifecycleSignal(lifecycle);
+    if (lifecycleSignal) signals.push(lifecycleSignal);
     candidates.push({
       kind: 'knowledge',
       ref: `${knowledgeDisplayDir}${file}`,
       summary: title,
-      score: matched.length,
-      signals: [`keyword: ${matched.slice(0, 4).join(', ')}`],
+      score: Math.max(0.1, matched.length - knowledgeLifecyclePenalty(lifecycle)),
+      signals,
+      ...(lifecycle ? { lifecycle_status: lifecycle.status } : {}),
       _at: 0,
     });
   }

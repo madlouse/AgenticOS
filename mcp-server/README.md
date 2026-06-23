@@ -528,6 +528,12 @@ Show the status of the current session project, or an explicit project when prov
 
 Call this first at session start to verify project alignment before meaningful work.
 
+Knowledge-evolution health reads optional Markdown frontmatter on `knowledge/*.md`
+documents. Supported lifecycle fields are `owner`, `valid_until`,
+`supersedes`, and `confidence` (`high`, `medium`, or `low`). Documents without
+these fields remain readable for backward compatibility, but health reports them
+as stale; expired or superseded docs are also surfaced as lifecycle warnings.
+
 ### agenticos_recall
 Recall issue- or query-related prior context from the project's evolution log and knowledge filenames.
 
@@ -540,6 +546,10 @@ Recall issue- or query-related prior context from the project's evolution log an
 - `format` (optional) - `markdown` or `json`.
 
 **Returns**: Related evolution-log entries and knowledge references.
+
+Knowledge references include lifecycle signals when a matching document is
+stale, expired, or superseded. Expired/superseded docs are down-weighted but
+still visible so agents can see why a result should be treated carefully.
 
 ### agenticos_evolution_timeline
 Render the project's human-readable evolution timeline from the same git-tracked L2 evolution log that `agenticos_recall` reads.

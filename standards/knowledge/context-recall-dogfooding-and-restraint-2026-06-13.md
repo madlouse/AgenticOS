@@ -55,14 +55,17 @@ speculative features. Shipping thin surfaced it immediately.
 
 ## Deferred on purpose (revisit when data warrants)
 
-- **G3 per-doc lifecycle fields + back-fill (#581)** — recall uses git-log
-  recency, so it does not depend on this; back-filling 112 docs is high-cost,
-  low-immediate-value. Add a `superseded` field when the first real
-  "knowledge replaced" case appears.
+- **G3 per-doc lifecycle back-fill (#581)** — the field contract now exists
+  (`owner`, `valid_until`, `supersedes`, `confidence`), health reports
+  per-document stale/superseded/expired status, and recall annotates or
+  down-weights stale lifecycle matches. Bulk back-fill remains judgment work:
+  agents should update lifecycle fields when touching a document instead of
+  pretending the system can decide obsolescence automatically.
 - **GBrain semantic recall (#583)** — gate on the v1 recall *citation rate*; a
   vector store before the corpus has accumulated is premature.
-- **Full human timeline (#584)** — the recall markdown output already serves the
-  human read; productize only if someone is actually using it.
+- **Full human timeline (#584)** — now productized as
+  `agenticos_evolution_timeline`, a human-readable view over the same L2
+  evolution log used by recall.
 - **Event-driven auto-closing hooks (L4)** — the prompt-based guards may suffice;
   observe before adding heavy automation.
 
