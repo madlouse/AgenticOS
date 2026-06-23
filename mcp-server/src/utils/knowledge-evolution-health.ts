@@ -8,6 +8,11 @@ import { CURRENT_TEMPLATE_VERSION, extractTemplateVersion } from './distill.js';
 import { getRuntimeCaptureConversationDir } from './record-capture.js';
 import { loadRegistry } from './registry.js';
 import { summarizeDistillationLedger, type DistillationLedgerHealth } from './distillation-ledger.js';
+import {
+  readKnowledgeDocumentLifecycles,
+  type KnowledgeDocumentLifecycle,
+  type KnowledgeLifecycleStatus,
+} from './knowledge-lifecycle.js';
 
 export interface KnowledgeEvolutionAdapterFreshness {
   path: string;
@@ -41,6 +46,13 @@ export interface KnowledgeEvolutionHealth {
     registry_path: string | null;
     project_path: string | null;
     summary: string;
+  };
+  knowledge_documents: {
+    status: 'PASS' | 'WARN';
+    summary: string;
+    total: number;
+    counts: Record<KnowledgeLifecycleStatus, number>;
+    documents: KnowledgeDocumentLifecycle[];
   };
   distillation_ledger: DistillationLedgerHealth;
   warnings: string[];
@@ -263,6 +275,29 @@ function addFreshnessWarnings(args: {
   }
 }
 
+function buildKnowledgeDocumentHealth(documents: KnowledgeDocumentLifecycle[]): KnowledgeEvolutionHealth['knowledge_documents'] {
+  const counts: Record<KnowledgeLifecycleStatus, number> = {
+    current: 0,
+    stale: 0,
+    superseded: 0,
+    expired: 0,
+  };
+  for (const doc of documents) counts[doc.status] += 1;
+  const warningCount = counts.stale + counts.superseded + counts.expired;
+  const summary = documents.length === 0
+    ? 'No knowledge documents found.'
+    : warningCount > 0
+      ? `Knowledge documents: ${counts.current} current, ${counts.stale} stale, ${counts.superseded} superseded, ${counts.expired} expired.`
+      : `Knowledge documents: ${counts.current} current.`;
+  return {
+    status: warningCount > 0 ? 'WARN' : 'PASS',
+    summary,
+    total: documents.length,
+    counts,
+    documents,
+  };
+}
+
 export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArgs): Promise<KnowledgeEvolutionHealth> {
   const now = args.now ?? new Date();
   const staleAfterDays = args.staleAfterDays ?? DEFAULT_STALE_AFTER_DAYS;
@@ -278,6 +313,9 @@ export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArg
   ]);
   const latestKnowledge = await latestTrackedFileMtime(contextPaths?.knowledgeDir ?? null);
   const latestTask = await latestTrackedFileMtime(contextPaths?.tasksDir ?? null);
+  const knowledgeDocuments = buildKnowledgeDocumentHealth(
+    await readKnowledgeDocumentLifecycles(contextPaths?.knowledgeDir ?? null, now),
+  );
   const adapterTemplateFreshness = {
     expected_version: CURRENT_TEMPLATE_VERSION,
     adapters: await inspectAdapters(projectPath),
@@ -308,11 +346,15 @@ export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArg
   }
   if (dirtyWorktree.status !== 'PASS') warnings.push(dirtyWorktree.summary);
   if (registryStateDrift.status === 'WARN') warnings.push(registryStateDrift.summary);
+  if (knowledgeDocuments.status === 'WARN') warnings.push(knowledgeDocuments.summary);
   warnings.push(...distillationLedger.warnings);
 
   const recoveryActions = warnings.length > 0
     ? [
         'run agenticos_record or agenticos_task_* to refresh task/knowledge continuity',
+        ...(knowledgeDocuments.status === 'WARN'
+          ? ['review knowledge document lifecycle fields: owner, valid_until, supersedes, confidence']
+          : []),
         ...(distillationLedger.status === 'WARN'
           ? ['promote, convert, supersede, or explicitly ignore stale captured ledger entries']
           : []),
@@ -333,6 +375,7 @@ export async function assessKnowledgeEvolutionHealth(args: KnowledgeEvolutionArg
     adapter_template_freshness: adapterTemplateFreshness,
     dirty_worktree: dirtyWorktree,
     registry_state_drift: registryStateDrift,
+    knowledge_documents: knowledgeDocuments,
     distillation_ledger: distillationLedger,
     warnings,
     recovery_actions: recoveryActions,
@@ -350,6 +393,7 @@ export function buildKnowledgeEvolutionStatusLines(assessment: KnowledgeEvolutio
     `   Entry-state refresh: ${displayTimestamp(assessment.latest_entry_state_refresh_at)}`,
     `   Knowledge update: ${displayTimestamp(assessment.latest_knowledge_update_at)}`,
     `   Task update: ${displayTimestamp(assessment.latest_task_update_at)}`,
+    `   ${assessment.knowledge_documents.summary}`,
     `   Dirty worktree: ${assessment.dirty_worktree.summary}`,
     `   Registry/state: ${assessment.registry_state_drift.summary}`,
     `   Distillation ledger: ${assessment.distillation_ledger.summary}`,

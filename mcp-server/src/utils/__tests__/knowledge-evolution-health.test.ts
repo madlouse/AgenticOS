@@ -20,6 +20,16 @@ async function touch(path: string, date: Date): Promise<void> {
   await utimes(path, date, date);
 }
 
+async function writeKnowledgeDoc(path: string, date: Date, frontmatter = `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes: []
+confidence: high
+`): Promise<void> {
+  await writeFile(path, `---\n${frontmatter.trim()}\n---\n# Knowledge\n`, 'utf-8');
+  await utimes(path, date, date);
+}
+
 async function writeRegistry(projectRoot: string, options: { activeProject?: string | null; path?: string } = {}): Promise<void> {
   await mkdir(join(home!, '.agent-workspace'), { recursive: true });
   await writeFile(join(home!, '.agent-workspace', 'registry.yaml'), yaml.stringify({
@@ -72,7 +82,7 @@ async function setupProject(options: {
     await touch(join(captureDir, '2026-05-20.md'), options.captureAt ?? recent);
   }
   if (options.knowledgeAt !== null) {
-    await touch(join(projectRoot, 'knowledge', 'summary.md'), options.knowledgeAt ?? recent);
+    await writeKnowledgeDoc(join(projectRoot, 'knowledge', 'summary.md'), options.knowledgeAt ?? recent);
   }
   if (options.taskAt !== null) {
     await touch(join(projectRoot, 'tasks', 'task.yaml'), options.taskAt ?? recent);
@@ -121,6 +131,8 @@ describe('knowledge evolution health', () => {
     expect(result.dirty_worktree.status).toBe('PASS');
     expect(result.registry_state_drift.status).toBe('PASS');
     expect(result.distillation_ledger.status).toBe('MISSING');
+    expect(result.knowledge_documents.status).toBe('PASS');
+    expect(result.knowledge_documents.counts.current).toBe(1);
     expect(result.adapter_template_freshness.adapters.every((adapter) => adapter.status === 'current')).toBe(true);
     expect(result.warnings).toEqual([]);
     expect(buildKnowledgeEvolutionStatusLines(result)[0]).toContain('Knowledge evolution: PASS');
@@ -244,6 +256,62 @@ describe('knowledge evolution health', () => {
     expect(result.latest_task_update_at).toBe(recent.toISOString());
     expect(result.adapter_template_freshness.adapters.find((adapter) => adapter.path.endsWith('AGENTS.md'))?.status).toBe('missing');
     expect(result.warnings).toContain(`${join(projectRoot, 'AGENTS.md')} adapter template is missing`);
+    expect(result.warnings).toContain('Knowledge documents: 0 current, 1 stale, 0 superseded, 0 expired.');
+  });
+
+  it('reports per-document lifecycle status for current, stale, superseded, and expired knowledge docs', async () => {
+    const projectRoot = await setupProject({ knowledgeAt: null });
+    await writeKnowledgeDoc(join(projectRoot, 'knowledge', 'current.md'), recent, `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes: []
+confidence: high
+`);
+    await writeKnowledgeDoc(join(projectRoot, 'knowledge', 'expired.md'), recent, `
+owner: docs-team
+valid_until: 2026-01-01
+supersedes: []
+confidence: medium
+`);
+    await writeKnowledgeDoc(join(projectRoot, 'knowledge', 'old.md'), recent, `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes: []
+confidence: low
+`);
+    await writeKnowledgeDoc(join(projectRoot, 'knowledge', 'new.md'), recent, `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes:
+  - old.md
+confidence: high
+`);
+    await writeFile(join(projectRoot, 'knowledge', 'legacy.md'), '# Missing lifecycle fields\n', 'utf-8');
+    await utimes(join(projectRoot, 'knowledge', 'legacy.md'), recent, recent);
+
+    const result = await assessKnowledgeEvolutionHealth({
+      projectPath: projectRoot,
+      repoSync: {
+        branch_line: '## main...origin/main',
+        branch_status: 'aligned',
+        dirty_paths: [],
+        runtime_dirty_paths: [],
+        source_dirty_paths: [],
+      },
+      now,
+    });
+
+    expect(result.status).toBe('WARN');
+    expect(result.knowledge_documents.counts).toEqual({
+      current: 2,
+      stale: 1,
+      superseded: 1,
+      expired: 1,
+    });
+    expect(result.knowledge_documents.documents.find((doc) => doc.path === 'old.md')?.superseded_by).toEqual(['new.md']);
+    expect(result.warnings).toContain('Knowledge documents: 2 current, 1 stale, 1 superseded, 1 expired.');
+    expect(result.recovery_actions).toContain('review knowledge document lifecycle fields: owner, valid_until, supersedes, confidence');
+    expect(buildKnowledgeEvolutionStatusLines(result)).toContain('   Knowledge documents: 2 current, 1 stale, 1 superseded, 1 expired.');
   });
 
   it('warns for dirty worktree summaries', async () => {

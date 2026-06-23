@@ -22,9 +22,12 @@ async function writeEvolutionMonth(month: string, entries: unknown[]): Promise<v
   await writeFile(join(dir, `${month}.yaml`), yaml.stringify({ version: '1.0.0', entries }), 'utf-8');
 }
 
-async function writeKnowledge(filename: string): Promise<void> {
+async function writeKnowledge(filename: string, frontmatter?: string): Promise<void> {
   await mkdir(knowledgeDir, { recursive: true });
-  await writeFile(join(knowledgeDir, filename), '# doc\n', 'utf-8');
+  const body = frontmatter
+    ? `---\n${frontmatter.trim()}\n---\n# doc\n`
+    : '# doc\n';
+  await writeFile(join(knowledgeDir, filename), body, 'utf-8');
 }
 
 beforeEach(async () => {
@@ -100,7 +103,12 @@ describe('recallContext', () => {
   });
 
   it('recalls knowledge docs by filename-derived title (keyword + area proximity)', async () => {
-    await writeKnowledge('m2-precision-sampling-2026-05-28.md');
+    await writeKnowledge('m2-precision-sampling-2026-05-28.md', `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes: []
+confidence: high
+`);
     await writeKnowledge('unrelated-topic.md');
 
     const result = await recallContext({ statePath, knowledgeDir, query: 'precision sampling', now: NOW });
@@ -108,6 +116,54 @@ describe('recallContext', () => {
     const knowledge = result.filter((c) => c.kind === 'knowledge');
     expect(knowledge).toHaveLength(1);
     expect(knowledge[0].ref).toBe('knowledge/m2-precision-sampling-2026-05-28.md');
+    expect(knowledge[0].lifecycle_status).toBe('current');
+  });
+
+  it('annotates and down-weights expired or superseded knowledge docs', async () => {
+    await writeKnowledge('current-sampling.md', `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes: []
+confidence: high
+`);
+    await writeKnowledge('expired-sampling.md', `
+owner: docs-team
+valid_until: 2026-01-01
+supersedes: []
+confidence: medium
+`);
+    await writeKnowledge('old-sampling.md', `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes: []
+confidence: low
+`);
+    await writeKnowledge('new-sampling.md', `
+owner: docs-team
+valid_until: 2026-12-31
+supersedes:
+  - old-sampling.md
+confidence: high
+`);
+
+    const result = await recallContext({ statePath, knowledgeDir, query: 'sampling', now: NOW, limit: 10 });
+    const byRef = Object.fromEntries(result.filter((c) => c.kind === 'knowledge').map((candidate) => [candidate.ref, candidate]));
+
+    expect(byRef['knowledge/expired-sampling.md'].lifecycle_status).toBe('expired');
+    expect(byRef['knowledge/expired-sampling.md'].signals).toContain('lifecycle: expired');
+    expect(byRef['knowledge/old-sampling.md'].lifecycle_status).toBe('superseded');
+    expect(byRef['knowledge/old-sampling.md'].signals).toContain('lifecycle: superseded by new-sampling.md');
+    expect(byRef['knowledge/current-sampling.md'].score).toBeGreaterThan(byRef['knowledge/expired-sampling.md'].score);
+  });
+
+  it('annotates legacy knowledge docs as stale without hiding them', async () => {
+    await writeKnowledge('legacy-sampling.md');
+
+    const result = await recallContext({ statePath, knowledgeDir, query: 'sampling', now: NOW });
+    const legacy = result.find((candidate) => candidate.ref === 'knowledge/legacy-sampling.md');
+
+    expect(legacy?.lifecycle_status).toBe('stale');
+    expect(legacy?.signals).toContain('lifecycle: stale missing owner, valid_until, supersedes, confidence');
   });
 
   it('honors the limit and tie-breaks deterministically by recency then ref', async () => {
