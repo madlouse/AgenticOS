@@ -27,22 +27,24 @@ Release flow:
 3. Update `CHANGELOG.md`.
 4. Merge release PR.
 5. Tag `vX.Y.Z`.
-6. Release workflow builds, packs, and uploads `agenticos-mcp.tgz`.
-7. Homebrew formula is bumped automatically if `HOMEBREW_TAP_PAT` is present;
-   otherwise manual tap update is required.
-8. Local machine runs `brew update && brew upgrade agenticos`.
-9. Agent runtimes are restarted/reloaded and bootstrap verification runs.
+6. Release workflow preflight verifies `HOMEBREW_TAP_PAT` is configured.
+7. Release workflow builds, packs, and uploads `agenticos-mcp.tgz`.
+8. Homebrew formula is bumped automatically in the tap repository.
+9. Source-repo formula is synced back to `main`.
+10. Local machine runs `brew update && brew upgrade agenticos`.
+11. Agent runtimes are restarted/reloaded and bootstrap verification runs.
 
 Invariants:
 
 - Homebrew installs binaries only; it does not silently mutate user agent config.
 - Release artifact version and formula version must match.
 - Activation Skill updates require bootstrap apply/verify and agent restart.
-- Missing tap token must be visible before release is considered complete.
+- Missing tap token fails the release preflight before build or GitHub Release
+  publication.
 
 Failure modes:
 
-- GitHub release exists but tap formula remains old.
+- Tap push fails because the configured token lacks write permission.
 - Local Homebrew cache is stale.
 - Installed binary is new but agent session still holds old MCP process.
 - Skill/applicator versions remain stale after package upgrade.
@@ -57,14 +59,15 @@ Failure modes:
 | Bootstrap verification | `bootstrap-cli.ts`, tests | Validates runtime activation. |
 | Release process | `standards/.context/release-process.md` | Operator flow and PAT note. |
 
-Issue cluster: 39 release/Homebrew issues. Open gaps are `#547` and `#522`.
+Issue cluster: 39 release/Homebrew issues. `#522` adds the fail-closed
+Homebrew tap token preflight.
 
-Status: operational but credential-sensitive. `v0.4.37` was released and
-installed locally, but the release workflow failed at GitHub Release creation
-with REST 401, requiring manual release and tap recovery.
+Status: operational and fail-closed for missing Homebrew tap credentials. The
+next tag push is the live validation that the configured secret can write to the
+tap repository.
 
 ## Gaps
 
-- `#522`: add release workflow early-fail guard for missing Homebrew tap PAT.
-- `#547`: fix GitHub Release token validation and sync source-repo formula drift
-  after manual release recovery.
+- If the next tag reaches the tap update step and the push is rejected, open a
+  follow-up issue with the exact GitHub Actions failure and token permission
+  diagnosis.

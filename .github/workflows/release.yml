@@ -18,7 +18,36 @@ env:
   HOMEBREW_TAP: madlouse/homebrew-agenticos
 
 jobs:
+  release-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify Homebrew tap PAT
+        env:
+          HOMEBREW_TAP_PAT: ${{ secrets.HOMEBREW_TAP_PAT }}
+        run: |
+          if [ -z "${HOMEBREW_TAP_PAT:-}" ]; then
+            {
+              echo "## Release blocked: HOMEBREW_TAP_PAT is not configured"
+              echo
+              echo "The release workflow fails before building or publishing a GitHub Release because the Homebrew tap cannot be bumped automatically."
+              echo
+              echo "Operator checklist:"
+              echo "1. Create a fine-grained PAT scoped to ${{ env.HOMEBREW_TAP }} with Contents: read/write and Metadata: read, or a classic PAT with equivalent repository write access."
+              echo "2. Save it as the AgenticOS repository secret HOMEBREW_TAP_PAT under Settings -> Secrets and variables -> Actions."
+              echo "3. Verify the secret exists with: gh secret list --repo madlouse/AgenticOS | grep -E '^HOMEBREW_TAP_PAT[[:space:]]'"
+              echo "4. Re-run this tag workflow or push the next release tag."
+              echo
+              echo "Do not paste the PAT into issue comments, PRs, logs, or chat."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Missing HOMEBREW_TAP_PAT::Configure the repository secret before tagging a release so ${{ env.HOMEBREW_TAP }} can be bumped automatically. See standards/.context/release-process.md."
+            exit 1
+          fi
+
+          echo "HOMEBREW_TAP_PAT is configured; automated Homebrew tap bump is eligible."
+
   build-and-release:
+    needs: release-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -102,19 +131,16 @@ jobs:
             "https://github.com/madlouse/AgenticOS/releases/download/${{ github.ref_name }}/agenticos-mcp.tgz"
 
       - name: Verify Homebrew tap PAT
-        id: homebrew_pat
         env:
           HOMEBREW_TAP_PAT: ${{ secrets.HOMEBREW_TAP_PAT }}
         run: |
-          if [ -z "$HOMEBREW_TAP_PAT" ]; then
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Homebrew tap bump skipped::HOMEBREW_TAP_PAT is not configured. The GitHub release artifact is still published, but ${{ env.HOMEBREW_TAP }} must be updated manually. See standards/.context/release-process.md."
-          else
-            echo "available=true" >> "$GITHUB_OUTPUT"
+          if [ -z "${HOMEBREW_TAP_PAT:-}" ]; then
+            echo "::error title=Missing HOMEBREW_TAP_PAT::Release preflight should have blocked this run. Configure the repository secret before publishing releases."
+            exit 1
           fi
+          echo "HOMEBREW_TAP_PAT is configured for the tap update step."
 
       - name: Update Homebrew formula in tap repo
-        if: steps.homebrew_pat.outputs.available == 'true'
         env:
           HOMEBREW_TAP_PAT: ${{ secrets.HOMEBREW_TAP_PAT }}
         run: |
@@ -147,13 +173,6 @@ jobs:
           git commit -m "agenticos ${VERSION}"
           git push origin HEAD
 
-      - name: Report skipped Homebrew tap bump
-        if: steps.homebrew_pat.outputs.available != 'true'
-        run: |
-          echo "Skipped automated bump to ${{ env.HOMEBREW_TAP }} because HOMEBREW_TAP_PAT is unset or empty."
-          echo "Manual intervention required: update ${{ env.FORMULA_PATH }} in the tap repository after verifying the release artifact."
-          echo "The source-repo formula sync step below still runs when possible."
-
       - name: Sync formula to source repo
         run: |
           # After the tap repo is bumped above, sync the version back to source
@@ -182,7 +201,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify on Homebrew update failure
-        if: failure() && steps.homebrew_pat.outputs.available == 'true'
+        if: failure()
         run: |
           echo "Homebrew formula update failed for ${{ github.ref_name }}"
           echo "Manual intervention required in ${{ env.HOMEBREW_TAP }} repository"
