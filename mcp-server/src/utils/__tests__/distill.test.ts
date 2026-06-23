@@ -178,13 +178,14 @@ Existing adapter role content
 <!-- agenticos-section: canonical-policy -->
 ## Canonical Policy (Shared Across Agents)
 Old canonical policy
+- ${SHARED_POLICY_BULLETS[0]}
 <!-- /agenticos-section -->
 `;
 
     const templateContent = generateClaudeMd('Existing Project', '');
 
-    // Existing file has old canonical policy, new template has new
-    // The standard section should be replaced
+    // Existing file has old canonical policy, new template has new canonical
+    // policy. The standard section should be updated from template.
     expect(mergeSections(templateContent, existingContent)).toContain('This project has one canonical AgenticOS execution policy');
 
     // The non-standard section should be preserved
@@ -318,10 +319,11 @@ Old runtime notes
 
     const result = mergeSections(template, existing);
 
-    // Standard section should be replaced from template
+    // Standard sections should get the current template content without
+    // dropping existing project additions that were placed inside them.
     expect(result).toContain('This project has one canonical AgenticOS execution policy');
-    expect(result).not.toContain('Old policy content');
-    expect(result).not.toContain('Old runtime notes');
+    expect(result).toContain('Old policy content');
+    expect(result).toContain('Old runtime notes');
 
     // Non-standard section should be preserved
     expect(result).toContain('Custom Project Section');
@@ -348,7 +350,27 @@ Old policy content
     expect(result).toContain('# CLAUDE.md — Test');
   });
 
-  it('mergeSections replaces all standard sections', () => {
+  it('mergeSections does not duplicate matching template lines in standard sections', () => {
+    const template = generateClaudeMd('Test', '');
+    const existing = `<!-- agenticos-template: v13 -->
+# CLAUDE.md — Test
+
+<!-- agenticos-section: canonical-policy -->
+## Canonical Policy (Shared Across Agents)
+
+${SHARED_POLICY_BULLETS.map((bullet) => `- ${bullet}`).join('\n')}
+<!-- /agenticos-section -->
+`;
+
+    const result = mergeSections(template, existing);
+    const firstBullet = `- ${SHARED_POLICY_BULLETS[0]}`;
+    const escapedFirstBullet = firstBullet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    expect(result.match(new RegExp(escapedFirstBullet, 'g'))).toHaveLength(1);
+    expect(result).toContain('<!-- agenticos-template: v17 -->');
+  });
+
+  it('mergeSections updates all standard sections without dropping existing additions', () => {
     const template = generateClaudeMd('Test', '');
     const existing = `<!-- agenticos-template: v13 -->
 # CLAUDE.md — Test
@@ -371,11 +393,12 @@ Old recording
 
     const result = mergeSections(template, existing);
 
-    // All standard sections should be replaced
+    // All standard sections should receive current template content and keep
+    // existing additions because older files had no finer-grained anchors.
     expect(result).toContain('This project has one canonical AgenticOS execution policy');
-    expect(result).not.toContain('Old canonical');
-    expect(result).not.toContain('Old guardrail');
-    expect(result).not.toContain('Old recording');
+    expect(result).toContain('Old canonical');
+    expect(result).toContain('Old guardrail');
+    expect(result).toContain('Old recording');
   });
 
   it('mergeSections preserves non-standard sections from existing', () => {
@@ -483,6 +506,38 @@ More custom content
     }
   });
 
+  it('upgradeClaudeMd with file without markers preserves additions inside standard sections', async () => {
+    const customCanonicalLine = '- Legacy Project custom canonical rule must survive template upgrades';
+    const existingContent = `<!-- agenticos-template: v13 -->
+# CLAUDE.md — Legacy Project
+
+## Canonical Policy (Shared Across Agents)
+
+- ${SHARED_POLICY_BULLETS[0]}
+- Old generic canonical wording
+${customCanonicalLine}
+
+## Custom Operations
+
+- Keep this custom operation
+`;
+
+    const tempPath = join(tmpdir(), 'test-legacy-standard-addition-claude.md');
+    await writeFile(tempPath, existingContent, 'utf-8');
+
+    try {
+      const result = upgradeClaudeMd(tempPath, 'Legacy Project', '');
+
+      expect(result).toContain('This project has one canonical AgenticOS execution policy');
+      expect(result).toContain(customCanonicalLine);
+      expect(result).toContain('Custom Operations');
+      expect(result).toContain('Keep this custom operation');
+      expect(extractTemplateVersion(result)).toBe(17);
+    } finally {
+      await unlink(tempPath);
+    }
+  });
+
   it('upgradeAgentsMd preserves project-specific content', async () => {
     const existingContent = `<!-- agenticos-template: v13 -->
 # AGENTS.md — CLI Project
@@ -542,7 +597,7 @@ Legacy recording instructions
 
       expect(result).toContain('Custom Operations');
       expect(result).toContain('Keep this custom operation');
-      expect(result).not.toContain('Legacy recording instructions');
+      expect(result).toContain('Legacy recording instructions');
     } finally {
       await unlink(tempPath);
     }
@@ -586,7 +641,7 @@ Second body
 
 <!-- agenticos-section: canonical-policy -->
 ## Canonical Policy
-Old canonical
+- Project-specific AGENTS canonical addition
 <!-- /agenticos-section -->
 
 <!-- agenticos-section: custom-agent-content -->
@@ -603,7 +658,7 @@ Old canonical
       const result = upgradeAgentsMd(tempPath, 'Marked Project', '');
 
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
-      expect(result).not.toContain('Old canonical');
+      expect(result).toContain('Project-specific AGENTS canonical addition');
       expect(result).toContain('Custom Agent Content');
       expect(result).toContain('Agent bullet');
     } finally {
@@ -617,7 +672,7 @@ Old canonical
 
 <!-- agenticos-section: canonical-policy -->
 ## Canonical Policy
-Old canonical
+- Project-specific CLAUDE canonical addition
 <!-- /agenticos-section -->
 
 <!-- agenticos-section: custom-project-content -->
@@ -639,7 +694,7 @@ Old canonical
 
       // Should have new canonical policy
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
-      expect(result).not.toContain('Old canonical');
+      expect(result).toContain('Project-specific CLAUDE canonical addition');
 
       // Should preserve custom content
       expect(result).toContain('Custom Project Content');

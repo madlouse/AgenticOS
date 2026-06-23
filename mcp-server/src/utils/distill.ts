@@ -236,15 +236,16 @@ ${markedContent}
 
 /**
  * Section marker format for module-level merge.
- * Sections marked as "replace" get updated from template on upgrade.
- * Sections marked as "preserve" are kept from existing file on upgrade.
+ * Standard sections get updated from template on upgrade while keeping
+ * existing lines that are not already in the template.
+ * Project-specific sections are kept from the existing file on upgrade.
  */
 const SECTION_MARKER_PREFIX = '<!-- agenticos-section: ';
 const SECTION_MARKER_SUFFIX = ' -->';
 const SECTION_END_MARKER = '<!-- /agenticos-section -->';
 
 /**
- * Define which sections are standard (replace on upgrade) vs project-specific (preserve).
+ * Define which sections are standard merge targets vs project-specific preserves.
  * Standard sections: protocol-related, should be kept up-to-date with canonical policy.
  * Project-specific sections: domain knowledge, user entry contracts, project rules.
  */
@@ -263,6 +264,10 @@ export const STANDARD_SECTION_NAMES = [
 
 /** Additional standard sections for AGENTS.md only */
 const AGENTS_ONLY_STANDARD_SECTIONS = ['continuity-contract'] as const;
+const ALL_STANDARD_SECTION_NAMES = [
+  ...STANDARD_SECTION_NAMES,
+  ...AGENTS_ONLY_STANDARD_SECTIONS,
+] as const;
 
 /**
  * Map section names to human-readable titles for template generation.
@@ -281,6 +286,33 @@ const SECTION_TITLES: Record<string, string> = {
   'recording-protocol': 'MANDATORY: Recording Protocol',
   'session-start-protocol': 'Session Start Protocol',
 };
+
+const STANDARD_TITLE_ALIASES: Record<string, string[]> = {
+  'adapter-role': ['Adapter Role'],
+  'canonical-policy': ['Canonical Policy (Shared Across Agents)', 'Canonical Policy'],
+  'continuity-contract': ['Continuity Contract'],
+  'runtime-notes': ['Claude Runtime Notes', 'Codex / Generic Runtime Notes'],
+  'stop-hook': ['Stop-Hook (Optional)'],
+  'task-intake-rule': ['Task Intake Rule'],
+  'project-switch-routing': ['Project Switch Routing'],
+  'lifecycle-impact-gate': ['Lifecycle Impact Gate'],
+  'guardrail-protocol': ['Guardrail Protocol (MANDATORY)', 'Guardrail Protocol'],
+  'recording-protocol': ['MANDATORY: Recording Protocol', 'Recording Protocol (MANDATORY)', 'Recording Protocol'],
+  'session-start-protocol': ['Session Start Protocol'],
+};
+const STANDARD_SECTION_NAME_BY_TITLE = new Map(
+  Object.entries(STANDARD_TITLE_ALIASES).flatMap(([sectionName, titles]) =>
+    titles.map((title) => [title, sectionName] as const)
+  )
+);
+
+function isStandardSectionName(sectionName: string): boolean {
+  return (ALL_STANDARD_SECTION_NAMES as readonly string[]).includes(sectionName);
+}
+
+function isStandardSectionTitle(title: string): boolean {
+  return Object.values(STANDARD_TITLE_ALIASES).some((titles) => titles.includes(title));
+}
 
 /** Parse section markers from existing content */
 function parseSections(content: string): Map<string, { marker: string; title: string; content: string }> {
@@ -306,6 +338,74 @@ function parseSections(content: string): Map<string, { marker: string; title: st
 /** Wrap content with section markers for standard sections */
 function wrapStandardSection(sectionName: string, content: string): string {
   return `${SECTION_MARKER_PREFIX}${sectionName}${SECTION_MARKER_SUFFIX}\n${content}\n${SECTION_END_MARKER}`;
+}
+
+function normalizeMergeLine(line: string): string {
+  return line.trim();
+}
+
+function mergeStandardSectionContent(templateContent: string, existingContent: string): string {
+  const templateLines = templateContent.trimEnd().split('\n');
+  const existingLines = existingContent.trimEnd().split('\n');
+  const templateLineSet = new Set(templateLines.map(normalizeMergeLine).filter(Boolean));
+  const templateTitle = templateLines.find((line) => line.startsWith('## '))?.trim();
+
+  const additions: string[] = [];
+  for (const line of existingLines) {
+    const normalized = normalizeMergeLine(line);
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (line.startsWith('## ') && line.trim() === templateTitle) {
+      continue;
+    }
+
+    if (line.startsWith('## ') && isStandardSectionTitle(line.replace(/^## /, '').trim())) {
+      continue;
+    }
+
+    if (templateLineSet.has(normalized)) {
+      continue;
+    }
+
+    additions.push(line);
+  }
+
+  if (additions.length === 0) {
+    return templateContent;
+  }
+
+  return `${templateContent.trimEnd()}\n\n${additions.join('\n')}`;
+}
+
+function extractLegacyStandardAdditions(
+  title: string,
+  sectionLines: string[],
+  templateSections: Map<string, { marker: string; title: string; content: string }>,
+): string[] {
+  const sectionName = STANDARD_SECTION_NAME_BY_TITLE.get(title);
+  const templateSection = sectionName ? templateSections.get(sectionName) : undefined;
+  const templateLineSet = new Set(
+    (templateSection?.content || '')
+      .split('\n')
+      .map(normalizeMergeLine)
+      .filter(Boolean)
+  );
+
+  const additions: string[] = [];
+  for (const line of sectionLines.slice(1)) {
+    const normalized = normalizeMergeLine(line);
+    if (!normalized) {
+      continue;
+    }
+    if (templateLineSet.has(normalized)) {
+      continue;
+    }
+    additions.push(line);
+  }
+  return additions;
 }
 
 // ---------------------------------------------------------------------------
@@ -435,88 +535,58 @@ const PROJECT_SPECIFIC_TITLES = [
  * Sections that are NOT in STANDARD_SECTION_NAMES and match PROJECT_SPECIFIC_TITLES
  * should be preserved from existing content.
  */
-function extractProjectSpecificSections(existingContent: string): string[] {
+function extractProjectSpecificSections(existingContent: string, templateContent?: string): string[] {
   const preservedSections: string[] = [];
+  const templateSections = templateContent ? parseSections(templateContent) : new Map();
   const lines = existingContent.split('\n');
   let currentSection: string[] = [];
-  let inProjectSection = false;
 
-  for (const line of lines) {
-    // Check if this is a section header (## but not standard section)
-    const sectionMatch = line.match(/^## ([^`]+)$/);
-    if (sectionMatch) {
-      const title = sectionMatch[1].trim();
+  const flushCurrentSection = () => {
+    if (currentSection.length === 0) {
+      return;
+    }
 
-      // Check if this is a standard section (should be replaced)
-      const isStandard = STANDARD_SECTION_NAMES.some(name => {
-        // Map section names to possible titles
-        const standardTitles: Record<string, string[]> = {
-          'adapter-role': ['Adapter Role'],
-          'canonical-policy': ['Canonical Policy (Shared Across Agents)', 'Canonical Policy'],
-          'continuity-contract': ['Continuity Contract'],
-          'runtime-notes': ['Claude Runtime Notes', 'Codex / Generic Runtime Notes'],
-          'stop-hook': ['Stop-Hook (Optional)'],
-          'task-intake-rule': ['Task Intake Rule'],
-          'project-switch-routing': ['Project Switch Routing'],
-          'guardrail-protocol': ['Guardrail Protocol (MANDATORY)'],
-          'recording-protocol': ['MANDATORY: Recording Protocol', 'Recording Protocol (MANDATORY)'],
-          'session-start-protocol': ['Session Start Protocol'],
-        };
-        return standardTitles[name]?.includes(title);
-      });
+    const title = currentSection[0].match(/^## ([^`]+)$/)?.[1]?.trim() ?? '';
 
-      // Check if this is a known project-specific section (should be preserved)
+    if (isStandardSectionTitle(title)) {
+      const standardAdditions = extractLegacyStandardAdditions(title, currentSection, templateSections);
+      if (standardAdditions.length > 0) {
+        preservedSections.push([currentSection[0], '', ...standardAdditions].join('\n'));
+      }
+    } else {
       const isProjectSpecific = PROJECT_SPECIFIC_TITLES.some(
         psTitle => title.includes(psTitle) || psTitle.includes(title)
       );
+      const isLegacyProtocolTitle = title.includes('Guardrail Protocol') || title.includes('Recording Protocol');
 
-      if (isStandard) {
-        // Skip standard sections
-        inProjectSection = false;
-        if (currentSection.length > 0) {
-          preservedSections.push(currentSection.join('\n'));
-          currentSection = [];
-        }
-      } else if (isProjectSpecific) {
-        // Keep project-specific sections
-        inProjectSection = true;
-        if (currentSection.length > 0) {
-          preservedSections.push(currentSection.join('\n'));
-          currentSection = [];
-        }
-        currentSection.push(line);
-      } else {
-        // Unknown section - treat as project-specific for safety
-        if (!line.includes('Guardrail Protocol') && !line.includes('Recording Protocol')) {
-          inProjectSection = true;
-          if (currentSection.length > 0 && currentSection[currentSection.length - 1].startsWith('## ')) {
-            preservedSections.push(currentSection.join('\n'));
-            currentSection = [];
-          }
-          currentSection.push(line);
-        } else {
-          inProjectSection = false;
-          if (currentSection.length > 0) {
-            preservedSections.push(currentSection.join('\n'));
-            currentSection = [];
-          }
-        }
+      if (isProjectSpecific || !isLegacyProtocolTitle) {
+        // Unknown sections default to preserved so a new downstream section title
+        // cannot be lost merely because AgenticOS does not know its name yet.
+        preservedSections.push(currentSection.join('\n'));
       }
-    } else if (inProjectSection) {
+    }
+
+    currentSection = [];
+  };
+
+  for (const line of lines) {
+    const sectionMatch = line.match(/^## ([^`]+)$/);
+    if (sectionMatch) {
+      flushCurrentSection();
+      currentSection = [line];
+    } else if (currentSection.length > 0) {
       currentSection.push(line);
     }
   }
 
-  // Don't forget the last section
-  if (currentSection.length > 0) {
-    preservedSections.push(currentSection.join('\n'));
-  }
+  flushCurrentSection();
 
   return preservedSections;
 }
 
 /** Merge template and existing content at section level.
- * Standard sections are replaced from template.
+ * Standard sections are updated from template while preserving existing
+ * project customizations that were added inside those sections.
  * Project-specific sections are preserved from existing file.
  */
 export function mergeSections(
@@ -535,15 +605,17 @@ export function mergeSections(
   const resultLines: string[] = [];
   const processedSectionNames = new Set<string>();
 
-  // Process template sections: replace standard ones, keep project-specific
+  // Process template sections: merge standard ones, keep project-specific sections.
   const templateEntries = Array.from(templateSections.entries());
   for (const [sectionName, templateSection] of templateEntries) {
     const existingSection = existingSections.get(sectionName);
-    const isStandard = (STANDARD_SECTION_NAMES as readonly string[]).includes(sectionName);
+    const isStandard = isStandardSectionName(sectionName);
 
     if (isStandard) {
-      // Replace with template content
-      resultLines.push(wrapStandardSection(sectionName, templateSection.content));
+      const content = existingSection
+        ? mergeStandardSectionContent(templateSection.content, existingSection.content)
+        : templateSection.content;
+      resultLines.push(wrapStandardSection(sectionName, content));
       processedSectionNames.add(sectionName);
     } else if (existingSection) {
       // Preserve non-standard section from existing
@@ -606,11 +678,10 @@ export function upgradeClaudeMd(
 
   // No section markers - extract and preserve project-specific content
   if (existingContent) {
-    const preservedSections = extractProjectSpecificSections(existingContent);
+    const preservedSections = extractProjectSpecificSections(existingContent, templateContent);
 
     if (preservedSections.length > 0) {
       // Append preserved sections to template
-      const standardContent = templateContent.split('\n').slice(0, 20).join('\n'); // Header + standard sections
       return `${templateContent}\n\n---\n\n## Project-Specific Content (Preserved)\n\n${preservedSections.join('\n\n')}`;
     }
   }
@@ -648,7 +719,7 @@ export function upgradeAgentsMd(
 
   // No section markers - extract and preserve project-specific content
   if (existingContent) {
-    const preservedSections = extractProjectSpecificSections(existingContent);
+    const preservedSections = extractProjectSpecificSections(existingContent, templateContent);
 
     if (preservedSections.length > 0) {
       // Append preserved sections to template
