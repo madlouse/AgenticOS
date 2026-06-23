@@ -466,6 +466,13 @@ Use this when `agenticos_status` shows that no session project is bound or the b
 
 When working in an isolated issue worktree, pass `repo_path` so guardrail tools, record/save, and session binding all target the worktree instead of the canonical registry checkout.
 
+**Native runtime boundary**:
+
+- `agenticos_switch` is a logical AgenticOS project binding. It returns project identity, context surfaces, and explicit workdir fields; it cannot mutate the parent client cwd or force a long-lived agent to reload launch-root native config.
+- Codex/Gemini-style agents should use the returned `explicit_workdir` for tool calls or launch a new session rooted at the project when `AGENTS.md` / `GEMINI.md` auto-load behavior matters.
+- Claude Code can load switched-project markdown memory without changing cwd by launching with `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir <project>`. This loads `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md`, and `CLAUDE.local.md`.
+- Claude Code `--add-dir` does not load `.claude/commands`, `.claude/agents`, hooks, permissions, or settings. For that full native runtime, launch a Claude Code session rooted at the returned project path.
+
 The quick-start/state split is intentional:
 - `quick-start.md` is a concise entry surface
 - `state.yaml` is mutable operational state

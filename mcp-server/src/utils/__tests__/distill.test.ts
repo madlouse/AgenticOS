@@ -30,8 +30,8 @@ describe('distill templates', () => {
   it('generates AGENTS.md with the current template version and minimal required sections', () => {
     const content = generateAgentsMd('Demo Project', 'Test project');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(17);
-    expect(content).toContain('<!-- agenticos-template: v17 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(18);
+    expect(content).toContain('<!-- agenticos-template: v18 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(AGENTS_ADAPTER_LINES[0]);
     expect(content).toContain(AGENTS_ADAPTER_LINES[1]);
@@ -54,6 +54,11 @@ describe('distill templates', () => {
     expect(content).toContain('切换项目');
     expect(content).toContain('进入项目');
     expect(content).toContain('continue project');
+    expect(content).toContain('logical AgenticOS binding');
+    expect(content).toContain('does not mutate the parent shell cwd');
+    expect(content).toContain('full native runtime activation');
+    expect(content).toContain('CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir <project>');
+    expect(content).toContain('markdown memory only');
     expect(content).toContain('Fall back to shell directory search only when AgenticOS MCP is unavailable');
     expect(content).toContain(`## ${LIFECYCLE_IMPACT_GATE_TITLE}`);
     expect(content).toContain(LIFECYCLE_IMPACT_GATE_CONTENT);
@@ -84,8 +89,8 @@ describe('distill templates', () => {
   it('generates CLAUDE.md with minimal required sections', () => {
     const content = generateClaudeMd('Demo Project', 'Test project');
 
-    expect(CURRENT_TEMPLATE_VERSION).toBe(17);
-    expect(content).toContain('<!-- agenticos-template: v17 -->');
+    expect(CURRENT_TEMPLATE_VERSION).toBe(18);
+    expect(content).toContain('<!-- agenticos-template: v18 -->');
     expect(content).toContain('## Adapter Role');
     expect(content).toContain(CLAUDE_ADAPTER_LINES[0]);
     expect(content).toContain(CLAUDE_ADAPTER_LINES[1]);
@@ -106,6 +111,10 @@ describe('distill templates', () => {
     expect(content).toContain('tool_search');
     expect(content).toContain('switch project');
     expect(content).toContain('继续项目');
+    expect(content).toContain('logical AgenticOS binding');
+    expect(content).toContain('native runtime activation');
+    expect(content).toContain('CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir <project>');
+    expect(content).toContain('not `.claude/commands`, `.claude/agents`, hooks, permissions, or settings');
     expect(content).toContain(`## ${LIFECYCLE_IMPACT_GATE_TITLE}`);
     expect(content).toContain('Fresh install path');
     expect(content).toContain('Existing upgrade path');
@@ -237,7 +246,7 @@ Old guardrail text
       expect(result).toContain('1Password 是唯一事实源');
 
       // Should have the current template marker
-      expect(result).toContain('v17');
+      expect(result).toContain('v18');
     } finally {
       await unlink(tempPath);
     }
@@ -265,8 +274,8 @@ Stale policy body
       const result = upgradeClaudeMd(tempPath, 'Hermes', 'Hermes project');
 
       // The detector must now read it as current, not stale.
-      expect(extractTemplateVersion(result)).toBe(17);
-      expect(result).toContain('<!-- agenticos-template: v17 -->');
+      expect(extractTemplateVersion(result)).toBe(CURRENT_TEMPLATE_VERSION);
+      expect(result).toContain('<!-- agenticos-template: v18 -->');
       // Project-specific content is still preserved through the upgrade.
       expect(result).toContain('keep this project-specific note');
       // And it is genuinely different from the stale input (a real write happens).
@@ -345,8 +354,8 @@ Old policy content
 
     // Without the header the merged file carries no template marker, so the
     // detector reports it stale forever and adopt "upgrades" to still-stale content.
-    expect(result).toContain('<!-- agenticos-template: v17 -->');
-    expect(extractTemplateVersion(result)).toBe(17);
+    expect(result).toContain('<!-- agenticos-template: v18 -->');
+    expect(extractTemplateVersion(result)).toBe(CURRENT_TEMPLATE_VERSION);
     expect(result).toContain('# CLAUDE.md — Test');
   });
 
@@ -367,7 +376,7 @@ ${SHARED_POLICY_BULLETS.map((bullet) => `- ${bullet}`).join('\n')}
     const escapedFirstBullet = firstBullet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     expect(result.match(new RegExp(escapedFirstBullet, 'g'))).toHaveLength(1);
-    expect(result).toContain('<!-- agenticos-template: v17 -->');
+    expect(result).toContain('<!-- agenticos-template: v18 -->');
   });
 
   it('mergeSections updates all standard sections without dropping existing additions', () => {
@@ -462,7 +471,7 @@ describe('upgrade functions edge cases', () => {
     const result = upgradeClaudeMd(nonExistentPath, 'Test', 'Test desc');
 
     // Should generate template without errors
-    expect(result).toContain('<!-- agenticos-template: v17 -->');
+    expect(result).toContain('<!-- agenticos-template: v18 -->');
     expect(result).toContain('## Adapter Role');
   });
 
@@ -494,7 +503,7 @@ More custom content
       const result = upgradeClaudeMd(tempPath, 'Legacy Project', '');
 
       // Should have new template content
-      expect(result).toContain('v17');
+      expect(result).toContain('v18');
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
 
       // Should preserve custom sections
@@ -532,7 +541,7 @@ ${customCanonicalLine}
       expect(result).toContain(customCanonicalLine);
       expect(result).toContain('Custom Operations');
       expect(result).toContain('Keep this custom operation');
-      expect(extractTemplateVersion(result)).toBe(17);
+      expect(extractTemplateVersion(result)).toBe(CURRENT_TEMPLATE_VERSION);
     } finally {
       await unlink(tempPath);
     }
@@ -563,7 +572,7 @@ CLI adapter role
       const result = upgradeAgentsMd(tempPath, 'CLI Project', '');
 
       // Should have new template content
-      expect(result).toContain('v17');
+      expect(result).toContain('v18');
       expect(result).toContain('This project has one canonical AgenticOS execution policy');
 
       // Should preserve project-specific sections
@@ -631,7 +640,7 @@ Second body
     const nonExistentPath = join(tmpdir(), 'non-existent-agents-' + Date.now() + '.md');
     const result = upgradeAgentsMd(nonExistentPath, 'Test', 'Test desc');
 
-    expect(result).toContain('<!-- agenticos-template: v17 -->');
+    expect(result).toContain('<!-- agenticos-template: v18 -->');
     expect(result).toContain('## Project Switch Routing');
   });
 
